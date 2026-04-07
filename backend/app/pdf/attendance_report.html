@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page {
+            size: A4;
+            margin: 15mm;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+            color: #1a1a1a;
+        }
+        
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #1a3a6b;
+            padding-bottom: 10px;
+            margin-bottom: 16px;
+        }
+        
+        .school-name {
+            font-size: 20px;
+            font-weight: bold;
+            color: #1a3a6b;
+        }
+        
+        .report-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #1a3a6b;
+            margin-top: 6px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .meta {
+            font-size: 10px;
+            color: #666;
+            margin-top: 4px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th {
+            background: #1a3a6b;
+            color: white;
+            padding: 7px 8px;
+            text-align: left;
+            font-size: 10px;
+        }
+        
+        td {
+            padding: 6px 8px;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 10px;
+        }
+        
+        tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+        
+        .low {
+            background: #fff0f0 !important;
+            color: #c0392b;
+            font-weight: bold;
+        }
+        
+        .good {
+            color: #1a7a45;
+            font-weight: bold;
+        }
+        
+        .footer {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 9px;
+            color: #999;
+            border-top: 1px solid #eee;
+            padding-top: 8px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <div class="school-name">IQRA ENGLISH MEDIUM SCHOOL</div>
+        <div class="report-title">Monthly Attendance Report</div>
+        <div class="meta">Class {{ class_name }} · {{ month_name }} {{ year }} · Generated: {{ generated_date }}</div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Roll</th>
+                <th>Student Name</th>
+                <th>Working Days</th>
+                <th>Present</th>
+                <th>Absent</th>
+                <th>Late</th>
+                <th>Percentage</th>
+                <th>Remark</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in summary %}
+            <tr {% if s.low_attendance %}class="low" {% endif %}>
+                <td>{{ s.roll_number or '—' }}</td>
+                <td>{{ s.student_name }}</td>
+                <td>{{ s.total_working_days }}</td>
+                <td>{{ s.days_present }}</td>
+                <td>{{ s.days_absent }}</td>
+                <td>{{ s.days_late }}</td>
+                <td {% if not s.low_attendance %}class="good" {% endif %}>{{ s.percentage }}%</td>
+                <td>{% if s.low_attendance %}⚠ Low Attendance{% else %}Good{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="footer">
+        Iqra English Medium School · Monthly Attendance Report · {{ generated_date }}
+    </div>
+</body>
+
+</html>

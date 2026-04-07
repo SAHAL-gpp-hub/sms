@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page {
+            size: A4;
+            margin: 15mm;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+            color: #1a1a1a;
+        }
+        
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #1a3a6b;
+            padding-bottom: 10px;
+            margin-bottom: 16px;
+        }
+        
+        .school-name {
+            font-size: 20px;
+            font-weight: bold;
+            color: #1a3a6b;
+        }
+        
+        .report-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #c0392b;
+            margin-top: 6px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .meta {
+            font-size: 10px;
+            color: #666;
+            margin-top: 4px;
+        }
+        
+        .summary-box {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        
+        .sum-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            padding: 10px;
+            text-align: center;
+        }
+        
+        .sum-value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #c0392b;
+        }
+        
+        .sum-label {
+            font-size: 9px;
+            color: #666;
+            text-transform: uppercase;
+            margin-top: 2px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th {
+            background: #1a3a6b;
+            color: white;
+            padding: 7px 8px;
+            text-align: left;
+            font-size: 10px;
+        }
+        
+        td {
+            padding: 6px 8px;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 10px;
+        }
+        
+        tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+        
+        .balance {
+            color: #c0392b;
+            font-weight: bold;
+        }
+        
+        .footer {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 9px;
+            color: #999;
+            border-top: 1px solid #eee;
+            padding-top: 8px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <div class="school-name">IQRA ENGLISH MEDIUM SCHOOL</div>
+        <div class="report-title">Fee Defaulter Report</div>
+        <div class="meta">Academic Year: {{ academic_year }} · Generated: {{ generated_date }}</div>
+    </div>
+
+    <div class="summary-box">
+        <div class="sum-card">
+            <div class="sum-value">{{ defaulters|length }}</div>
+            <div class="sum-label">Total Defaulters</div>
+        </div>
+        <div class="sum-card">
+            <div class="sum-value">₹{{ "{:,.0f}".format(total_outstanding) }}</div>
+            <div class="sum-label">Total Outstanding</div>
+        </div>
+        <div class="sum-card">
+            <div class="sum-value">₹{{ "{:,.0f}".format(total_collected) }}</div>
+            <div class="sum-label">Total Collected</div>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Student Name</th>
+                <th>Class</th>
+                <th>Contact</th>
+                <th>Total Due</th>
+                <th>Paid</th>
+                <th>Balance</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for d in defaulters %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ d.student_name }}</td>
+                <td>{{ d.class_name }}</td>
+                <td>{{ d.contact }}</td>
+                <td>₹{{ "{:,.0f}".format(d.total_due) }}</td>
+                <td>₹{{ "{:,.0f}".format(d.total_paid) }}</td>
+                <td class="balance">₹{{ "{:,.0f}".format(d.balance) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="footer">
+        Iqra English Medium School · This is a computer-generated report · {{ generated_date }}
+    </div>
+</body>
+
+</html>
