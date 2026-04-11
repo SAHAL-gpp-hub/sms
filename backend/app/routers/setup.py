@@ -1,10 +1,17 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional
+from pydantic import BaseModel
 from app.core.database import get_db
 from app.models.base_models import AcademicYear, Class
 
 router = APIRouter(prefix="/api/v1/setup", tags=["Setup"])
+
+class ClassCreate(BaseModel):
+    name: Optional[str] = None
+    standard: Optional[int] = None
+    division: str = "A"
+    academic_year_id: int
 
 @router.post("/seed")
 def seed_data(db: Session = Depends(get_db)):
@@ -39,16 +46,37 @@ def get_classes(
     academic_year_id: Optional[int] = Query(None),
     db: Session = Depends(get_db)
 ):
-    # If no year specified, use current year
     if academic_year_id:
         classes = db.query(Class).filter_by(academic_year_id=academic_year_id).all()
     else:
-        current_year = db.query(AcademicYear).filter_by(is_current=True).first()
-        if current_year:
-            classes = db.query(Class).filter_by(academic_year_id=current_year.id).all()
-        else:
-            classes = db.query(Class).all()
+        classes = db.query(Class).all()   # ← was filtering by current year
     return [{"id": c.id, "name": c.name, "division": c.division, "academic_year_id": c.academic_year_id} for c in classes]
+
+@router.post("/classes", status_code=201)
+def create_class(data: ClassCreate, db: Session = Depends(get_db)):
+    class_name = data.name or str(data.standard)
+    # Check for duplicate
+    existing = db.query(Class).filter_by(
+        name=class_name,
+        division=data.division,
+        academic_year_id=data.academic_year_id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Class with this name, division and academic year already exists")
+    cls = Class(name=class_name, division=data.division, academic_year_id=data.academic_year_id)
+    db.add(cls)
+    db.commit()
+    db.refresh(cls)
+    return {"id": cls.id, "name": cls.name, "division": cls.division, "academic_year_id": cls.academic_year_id}
+
+@router.delete("/classes/{class_id}")
+def delete_class(class_id: int, db: Session = Depends(get_db)):
+    cls = db.query(Class).filter_by(id=class_id).first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+    db.delete(cls)
+    db.commit()
+    return {"message": "Deleted"}
 
 @router.get("/academic-years")
 def get_academic_years(db: Session = Depends(get_db)):

@@ -91,11 +91,14 @@ export default function StudentList() {
             </button>
           )}
 
-          <Link
-            to="/students/new"
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition"
-          >
-            + Add Student
+          <Link to="/students/new">
+            <button
+              type="button"
+              data-testid="add-student"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition"
+            >
+              + Add Student
+            </button>
           </Link>
         </div>
       </div>

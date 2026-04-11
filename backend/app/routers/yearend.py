@@ -58,3 +58,17 @@ def download_tc(
         media_type="application/pdf",
         headers={"Content-Disposition": f"inline; filename=TC_{student_id}.pdf"}
     )
+
+@router.get("/current-year")
+def get_current_year(db: Session = Depends(get_db)):
+    from app.models.base_models import AcademicYear
+    year = db.query(AcademicYear).filter_by(is_current=True).first()
+    if not year:
+        raise HTTPException(status_code=404, detail="No current academic year set")
+    return {"id": year.id, "label": year.label, "is_current": year.is_current}
+
+@router.get("/years")
+def get_all_years(db: Session = Depends(get_db)):
+    from app.models.base_models import AcademicYear
+    years = db.query(AcademicYear).order_by(AcademicYear.id.desc()).all()
+    return [{"id": y.id, "label": y.label, "is_current": y.is_current} for y in years]

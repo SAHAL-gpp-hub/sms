@@ -1,11 +1,11 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional
 from datetime import date
 from decimal import Decimal
 
 class FeeHeadCreate(BaseModel):
     name: str
-    frequency: str  # Monthly / Termly / One-Time / Annual
+    frequency: str
     description: Optional[str] = None
 
 class FeeHeadOut(BaseModel):
@@ -22,6 +22,13 @@ class FeeStructureCreate(BaseModel):
     amount: Decimal
     due_date: Optional[date] = None
     academic_year_id: int
+
+    @field_validator("amount")
+    @classmethod
+    def validate_amount(cls, v):
+        if v <= 0:
+            raise ValueError("Fee amount must be greater than 0")
+        return v
 
 class FeeStructureOut(BaseModel):
     id: int
@@ -46,8 +53,15 @@ class PaymentCreate(BaseModel):
     student_fee_id: int
     amount_paid: Decimal
     payment_date: date
-    mode: str  # Cash / Cheque / DD / UPI
+    mode: str
     collected_by: Optional[str] = None
+
+    @field_validator("amount_paid")
+    @classmethod
+    def validate_amount(cls, v):
+        if v <= 0:
+            raise ValueError("Payment amount must be greater than 0")
+        return v
 
 class PaymentOut(BaseModel):
     id: int

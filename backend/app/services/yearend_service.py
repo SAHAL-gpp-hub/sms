@@ -1,6 +1,8 @@
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from app.models.base_models import Student, Class, AcademicYear
 from datetime import date
+from fastapi import HTTPException
 
 CLASS_ORDER = ["Nursery", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
@@ -14,19 +16,19 @@ def get_next_class_name(current_name: str) -> str | None:
     return None
 
 def bulk_promote_students(db: Session, class_id: int, new_academic_year_id: int):
-    students = db.query(Student).filter_by(
-        class_id=class_id, status="Active"
-    ).all()
-
     current_class = db.query(Class).filter_by(id=class_id).first()
     if not current_class:
         return {"error": "Class not found", "promoted": 0}
 
     next_class_name = get_next_class_name(current_class.name)
     if not next_class_name:
-        return {"error": f"No class after Std {current_class.name}", "promoted": 0}
+        # Std 10 has no next class — return error
+        return {"error": f"No class after Std {current_class.name}. Students in Std 10 should be issued Transfer Certificates.", "promoted": 0}
 
-    # Find or create next class in new academic year
+    students = db.query(Student).filter_by(
+        class_id=class_id, status="Active"
+    ).all()
+
     next_class = db.query(Class).filter_by(
         name=next_class_name,
         division=current_class.division,
@@ -58,6 +60,11 @@ def bulk_promote_students(db: Session, class_id: int, new_academic_year_id: int)
     }
 
 def create_academic_year(db: Session, label: str, start_date: str, end_date: str):
+    # Check if label already exists
+    existing = db.query(AcademicYear).filter_by(label=label).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Academic year '{label}' already exists")
+
     # Unset current year
     db.query(AcademicYear).filter_by(is_current=True).update({"is_current": False})
     db.commit()
@@ -69,14 +76,20 @@ def create_academic_year(db: Session, label: str, start_date: str, end_date: str
         is_current=True
     )
     db.add(new_year)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Academic year '{label}' already exists")
     db.refresh(new_year)
 
     # Create classes for new year
     from app.services.marks_service import GSEB_SUBJECTS
     class_names = list(GSEB_SUBJECTS.keys())
     for name in class_names:
-        db.add(Class(name=name, division="A", academic_year_id=new_year.id))
+        existing_cls = db.query(Class).filter_by(name=name, academic_year_id=new_year.id).first()
+        if not existing_cls:
+            db.add(Class(name=name, division="A", academic_year_id=new_year.id))
     db.commit()
 
     return new_year
@@ -98,7 +111,6 @@ def get_tc_data(db: Session, student_id: int, reason: str, conduct: str):
     cls = db.query(Class).filter_by(id=student.class_id).first()
     year = db.query(AcademicYear).filter_by(id=student.academic_year_id).first()
 
-    # TC number
     tc_count = db.query(Student).filter(
         Student.status == "TC Issued"
     ).count()

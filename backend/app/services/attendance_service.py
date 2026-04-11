@@ -83,9 +83,8 @@ def get_monthly_summary(db: Session, class_id: int, year: int, month: int):
             "days_present": present,
             "days_absent": absent,
             "days_late": late,
-            "percentage": percentage,
-            "low_attendance": percentage < 75
-        })
+            "attendance_percentage": percentage,
+            "is_low_attendance": percentage < 75        })
 
     results.sort(key=lambda x: x["roll_number"] or 9999)
     return results

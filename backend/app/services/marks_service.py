@@ -3,8 +3,7 @@ from app.models.base_models import Subject, Exam, Mark, Student, Class
 from app.schemas.marks import SubjectCreate, ExamCreate, MarkEntry
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
-
-# ── GSEB Grading ──────────────────────────────────────────
+from fastapi import HTTPException
 
 GSEB_GRADES = [
     (91, 100, "A1", Decimal("10.0"), "Outstanding"),
@@ -27,8 +26,6 @@ def get_grade(percentage: Decimal):
 def percentage_to_cgpa(percentage: Decimal) -> Decimal:
     _, gp, _ = get_grade(percentage)
     return gp
-
-# ── Pre-loaded GSEB Subject Sets ──────────────────────────
 
 GSEB_SUBJECTS = {
     "Nursery": [("English", 100, 0), ("Hindi", 100, 0), ("Mathematics", 100, 0), ("Drawing", 100, 0)],
@@ -68,8 +65,6 @@ def seed_subjects(db: Session, class_id: int):
     db.commit()
     return count
 
-# ── Subjects ──────────────────────────────────────────────
-
 def get_subjects(db: Session, class_id: int):
     return db.query(Subject).filter_by(class_id=class_id).all()
 
@@ -86,8 +81,6 @@ def delete_subject(db: Session, subject_id: int):
         db.delete(s)
         db.commit()
     return s
-
-# ── Exams ─────────────────────────────────────────────────
 
 def get_exams(db: Session, class_id: int = None, academic_year_id: int = None):
     q = db.query(Exam)
@@ -111,10 +104,23 @@ def delete_exam(db: Session, exam_id: int):
         db.commit()
     return e
 
-# ── Marks ─────────────────────────────────────────────────
-
 def bulk_save_marks(db: Session, entries: list[MarkEntry]):
     for entry in entries:
+        # Validate marks don't exceed subject max
+        if not entry.is_absent and entry.theory_marks is not None:
+            subject = db.query(Subject).filter_by(id=entry.subject_id).first()
+            if subject:
+                if entry.theory_marks > subject.max_theory:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"Theory marks {entry.theory_marks} exceed max {subject.max_theory} for subject {subject.name}"
+                    )
+                if entry.practical_marks and subject.max_practical > 0 and entry.practical_marks > subject.max_practical:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"Practical marks {entry.practical_marks} exceed max {subject.max_practical}"
+                    )
+
         existing = db.query(Mark).filter_by(
             student_id=entry.student_id,
             subject_id=entry.subject_id,
@@ -130,7 +136,7 @@ def bulk_save_marks(db: Session, entries: list[MarkEntry]):
     return {"saved": len(entries)}
 
 def get_marks(db: Session, exam_id: int, class_id: int):
-    students = db.query(Student).filter_by(class_id=class_id).all()
+    students = db.query(Student).filter_by(class_id=class_id).filter(Student.status == "Active").all()
     subjects = db.query(Subject).filter_by(class_id=class_id).all()
     marks = db.query(Mark).filter_by(exam_id=exam_id).all()
 
@@ -149,10 +155,8 @@ def get_marks(db: Session, exam_id: int, class_id: int):
         result.append(row)
     return {"students": result, "subjects": [{"id": s.id, "name": s.name, "max_theory": s.max_theory, "max_practical": s.max_practical} for s in subjects]}
 
-# ── Results ───────────────────────────────────────────────
-
 def get_class_results(db: Session, exam_id: int, class_id: int):
-    students = db.query(Student).filter_by(class_id=class_id).all()
+    students = db.query(Student).filter_by(class_id=class_id).filter(Student.status == "Active").all()
     subjects = db.query(Subject).filter_by(class_id=class_id).all()
     marks = db.query(Mark).filter_by(exam_id=exam_id).all()
     mark_map = {(m.student_id, m.subject_id): m for m in marks}
@@ -215,7 +219,6 @@ def get_class_results(db: Session, exam_id: int, class_id: int):
             "result": result_str,
         })
 
-    # Assign class rank by percentage
     results.sort(key=lambda x: x["percentage"], reverse=True)
     for i, r in enumerate(results):
         r["class_rank"] = i + 1

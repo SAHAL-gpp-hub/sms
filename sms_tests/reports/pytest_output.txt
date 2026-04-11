@@ -11,7 +11,7 @@ collecting ... collected 134 items
 tests/test_attendance.py::TestDailyAttendance::test_roster_shows_only_active_students PASSED [  0%]
 tests/test_attendance.py::TestDailyAttendance::test_removed_student_not_on_roster PASSED [  1%]
 tests/test_attendance.py::TestDailyAttendance::test_mark_all_present PASSED [  2%]
-tests/test_attendance.py::TestDailyAttendance::test_mark_all_absent SKIPPED [  2%]
+tests/test_attendance.py::TestDailyAttendance::test_mark_all_absent PASSED [  2%]
 tests/test_attendance.py::TestDailyAttendance::test_mixed_status_palt PASSED [  3%]
 tests/test_attendance.py::TestDailyAttendance::test_save_attendance_past_date PASSED [  4%]
 tests/test_attendance.py::TestDailyAttendance::test_save_attendance_future_date PASSED [  5%]
@@ -19,44 +19,43 @@ tests/test_attendance.py::TestDailyAttendance::test_attendance_prefilled_on_revi
 tests/test_attendance.py::TestDailyAttendance::test_update_attendance_no_duplicates PASSED [  6%]
 tests/test_attendance.py::TestDailyAttendance::test_empty_class_shows_empty_state PASSED [  7%]
 tests/test_attendance.py::TestMonthlySummary::test_no_attendance_shows_zero PASSED [  8%]
-tests/test_attendance.py::TestMonthlySummary::test_100_percent_attendance FAILED [  8%]
+tests/test_attendance.py::TestMonthlySummary::test_100_percent_attendance PASSED [  8%]
 tests/test_attendance.py::TestMonthlySummary::test_75_percent_boundary_not_highlighted PASSED [  9%]
 tests/test_attendance.py::TestMonthlySummary::test_below_75_percent_highlighted PASSED [ 10%]
 tests/test_attendance.py::TestMonthlySummary::test_sundays_excluded_from_working_days PASSED [ 11%]
 tests/test_attendance.py::TestMonthlySummary::test_february_calculated_correctly PASSED [ 11%]
 tests/test_fees.py::TestFeeStructure::test_load_gseb_fee_heads PASSED    [ 12%]
 tests/test_fees.py::TestFeeStructure::test_load_gseb_heads_twice_no_duplicates PASSED [ 13%]
-tests/test_fees.py::TestFeeStructure::test_add_fee_amount_zero_rejected FAILED [ 14%]
-tests/test_fees.py::TestFeeStructure::test_add_fee_negative_amount_rejected FAILED [ 14%]
+tests/test_fees.py::TestFeeStructure::test_add_fee_amount_zero_rejected PASSED [ 14%]
+tests/test_fees.py::TestFeeStructure::test_add_fee_negative_amount_rejected PASSED [ 14%]
 tests/test_fees.py::TestFeeStructure::test_add_fee_large_amount PASSED   [ 15%]
-tests/test_fees.py::TestFeeStructure::test_remove_fee_from_structure FAILED [ 16%]
+tests/test_fees.py::TestFeeStructure::test_remove_fee_from_structure PASSED [ 16%]
 tests/test_fees.py::TestFeeStructure::test_assign_fees_to_class_no_duplicates PASSED [ 17%]
 tests/test_fees.py::TestFeeStructure::test_assign_fees_class_zero_students PASSED [ 17%]
-tests/test_fees.py::TestPayments::test_payment_exact_balance_zeroes_out SKIPPED [ 18%]
+tests/test_fees.py::TestPayments::test_payment_exact_balance_zeroes_out PASSED [ 18%]
 tests/test_fees.py::TestPayments::test_payment_zero_rejected PASSED      [ 19%]
 tests/test_fees.py::TestPayments::test_payment_negative_rejected PASSED  [ 20%]
-tests/test_fees.py::TestPayments::test_two_payments_same_fee_head SKIPPED [ 20%]
-tests/test_fees.py::TestPayments::test_receipt_generated_per_mode[Cash] SKIPPED [ 21%]
-tests/test_fees.py::TestPayments::test_receipt_generated_per_mode[UPI] SKIPPED [ 22%]
-tests/test_fees.py::TestPayments::test_receipt_numbers_sequential_unique SKIPPED [ 23%]
-tests/test_fees.py::TestPayments::test_overpayment_behavior SKIPPED (No
-fees assigned)                                                           [ 23%]
-tests/test_fees.py::TestDefaulters::test_fully_paid_student_not_in_defaulters FAILED [ 24%]
-tests/test_fees.py::TestDefaulters::test_partial_payment_appears_in_defaulters FAILED [ 25%]
-tests/test_fees.py::TestDefaulters::test_zero_fees_student_not_in_defaulters FAILED [ 26%]
+tests/test_fees.py::TestPayments::test_two_payments_same_fee_head PASSED [ 20%]
+tests/test_fees.py::TestPayments::test_receipt_generated_per_mode[Cash] PASSED [ 21%]
+tests/test_fees.py::TestPayments::test_receipt_generated_per_mode[UPI] PASSED [ 22%]
+tests/test_fees.py::TestPayments::test_receipt_numbers_sequential_unique PASSED [ 23%]
+tests/test_fees.py::TestPayments::test_overpayment_behavior PASSED       [ 23%]
+tests/test_fees.py::TestDefaulters::test_fully_paid_student_not_in_defaulters PASSED [ 24%]
+tests/test_fees.py::TestDefaulters::test_partial_payment_appears_in_defaulters PASSED [ 25%]
+tests/test_fees.py::TestDefaulters::test_zero_fees_student_not_in_defaulters PASSED [ 26%]
 tests/test_fees.py::TestDefaulters::test_filter_defaulters_by_class PASSED [ 26%]
-tests/test_fees.py::TestDefaulters::test_tiny_balance_still_in_defaulters FAILED [ 27%]
-tests/test_marks.py::TestMarksGrid::test_load_gseb_subjects_std1 FAILED  [ 28%]
+tests/test_fees.py::TestDefaulters::test_tiny_balance_still_in_defaulters PASSED [ 27%]
+tests/test_marks.py::TestMarksGrid::test_load_gseb_subjects_std1 PASSED  [ 28%]
 tests/test_marks.py::TestMarksGrid::test_load_gseb_subjects_std10 PASSED [ 29%]
 tests/test_marks.py::TestMarksGrid::test_load_subjects_twice_no_duplicates PASSED [ 29%]
 tests/test_marks.py::TestMarksGrid::test_marks_entry_zero PASSED         [ 30%]
 tests/test_marks.py::TestMarksGrid::test_marks_entry_max PASSED          [ 31%]
-tests/test_marks.py::TestMarksGrid::test_marks_entry_exceeds_max_rejected FAILED [ 32%]
+tests/test_marks.py::TestMarksGrid::test_marks_entry_exceeds_max_rejected PASSED [ 32%]
 tests/test_marks.py::TestMarksGrid::test_marks_entry_decimal PASSED      [ 32%]
-tests/test_marks.py::TestMarksGrid::test_mark_student_absent FAILED      [ 33%]
-tests/test_marks.py::TestMarksGrid::test_marks_persist_after_save FAILED [ 34%]
-tests/test_marks.py::TestMarksGrid::test_marks_update_correctly FAILED   [ 35%]
-tests/test_marks.py::TestMarksGrid::test_removed_student_not_in_marks_grid FAILED [ 35%]
+tests/test_marks.py::TestMarksGrid::test_mark_student_absent PASSED      [ 33%]
+tests/test_marks.py::TestMarksGrid::test_marks_persist_after_save PASSED [ 34%]
+tests/test_marks.py::TestMarksGrid::test_marks_update_correctly PASSED   [ 35%]
+tests/test_marks.py::TestMarksGrid::test_removed_student_not_in_marks_grid PASSED [ 35%]
 tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[95-100-A1-10.0] PASSED [ 36%]
 tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[85-100-A2-9.0] PASSED [ 37%]
 tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[75-100-B1-8.0] PASSED [ 38%]
@@ -90,15 +89,15 @@ tests/test_reports_tc_system.py::TestTransferCertificate::test_tc_number_unique 
 tests/test_reports_tc_system.py::TestTransferCertificate::test_tc_issue_date_is_today PASSED [ 58%]
 tests/test_reports_tc_system.py::TestTransferCertificate::test_tc_no_gr_number_shows_dash PASSED [ 59%]
 tests/test_reports_tc_system.py::TestTransferCertificate::test_tc_removed_student_still_works PASSED [ 60%]
-tests/test_reports_tc_system.py::TestYearEnd::test_create_new_academic_year FAILED [ 61%]
+tests/test_reports_tc_system.py::TestYearEnd::test_create_new_academic_year PASSED [ 61%]
 tests/test_reports_tc_system.py::TestYearEnd::test_old_year_not_current_after_new_one PASSED [ 61%]
 tests/test_reports_tc_system.py::TestYearEnd::test_classes_auto_created_for_new_year PASSED [ 62%]
 tests/test_reports_tc_system.py::TestYearEnd::test_add_class_division PASSED [ 63%]
 tests/test_reports_tc_system.py::TestYearEnd::test_add_duplicate_class_division_prevented PASSED [ 64%]
 tests/test_reports_tc_system.py::TestYearEnd::test_promote_class1_to_class2 PASSED [ 64%]
-tests/test_reports_tc_system.py::TestYearEnd::test_promote_class10_shows_error FAILED [ 65%]
+tests/test_reports_tc_system.py::TestYearEnd::test_promote_class10_shows_error PASSED [ 65%]
 tests/test_reports_tc_system.py::TestYearEnd::test_promote_empty_class_shows_zero PASSED [ 66%]
-tests/test_reports_tc_system.py::TestSystemIntegration::test_full_student_lifecycle FAILED [ 67%]
+tests/test_reports_tc_system.py::TestSystemIntegration::test_full_student_lifecycle PASSED [ 67%]
 tests/test_reports_tc_system.py::TestSystemIntegration::test_api_docs_endpoint PASSED [ 67%]
 tests/test_reports_tc_system.py::TestSystemIntegration::test_openapi_schema PASSED [ 68%]
 tests/test_reports_tc_system.py::TestSystemIntegration::test_no_500_errors_on_common_endpoints PASSED [ 69%]
@@ -107,25 +106,25 @@ tests/test_reports_tc_system.py::TestSystemUI::test_browser_back_button PASSED [
 tests/test_reports_tc_system.py::TestSystemUI::test_direct_url_access PASSED [ 71%]
 tests/test_reports_tc_system.py::TestSystemUI::test_page_refresh_stays_on_same_page PASSED [ 72%]
 tests/test_reports_tc_system.py::TestSystemUI::test_dashboard_student_count_updates PASSED [ 73%]
-tests/test_students.py::TestStudentCRUD::test_add_student_all_fields FAILED [ 73%]
+tests/test_students.py::TestStudentCRUD::test_add_student_all_fields PASSED [ 73%]
 tests/test_students.py::TestStudentCRUD::test_add_student_only_required_fields PASSED [ 74%]
-tests/test_students.py::TestStudentCRUD::test_add_student_gujarati_name FAILED [ 75%]
+tests/test_students.py::TestStudentCRUD::test_add_student_gujarati_name PASSED [ 75%]
 tests/test_students.py::TestStudentCRUD::test_add_two_students_same_name PASSED [ 76%]
 tests/test_students.py::TestStudentCRUD::test_add_10_plus_students_same_class PASSED [ 76%]
 tests/test_students.py::TestStudentCRUD::test_edit_student_change_class PASSED [ 77%]
-tests/test_students.py::TestStudentCRUD::test_edit_student_contact_validation_still_works FAILED [ 78%]
-tests/test_students.py::TestStudentCRUD::test_remove_student FAILED      [ 79%]
+tests/test_students.py::TestStudentCRUD::test_edit_student_contact_validation_still_works PASSED [ 78%]
+tests/test_students.py::TestStudentCRUD::test_remove_student PASSED      [ 79%]
 tests/test_students.py::TestStudentCRUD::test_removed_student_not_in_defaulters PASSED [ 79%]
 tests/test_students.py::TestStudentCRUD::test_removed_student_not_in_attendance_roster PASSED [ 80%]
-tests/test_students.py::TestStudentCRUD::test_removed_student_not_in_marks_grid FAILED [ 81%]
+tests/test_students.py::TestStudentCRUD::test_removed_student_not_in_marks_grid PASSED [ 81%]
 tests/test_students.py::TestStudentCRUD::test_tc_still_works_for_removed_student PASSED [ 82%]
-tests/test_students.py::TestStudentValidation::test_invalid_contact_number[0123456789-starts with 0] FAILED [ 82%]
+tests/test_students.py::TestStudentValidation::test_invalid_contact_number[0123456789-starts with 0] PASSED [ 82%]
 tests/test_students.py::TestStudentValidation::test_invalid_contact_number[123456789-9 digits] PASSED [ 83%]
 tests/test_students.py::TestStudentValidation::test_invalid_contact_number[12345678901-11 digits] PASSED [ 84%]
 tests/test_students.py::TestStudentValidation::test_invalid_contact_number[abcdefghij-non-numeric] PASSED [ 85%]
-tests/test_students.py::TestStudentValidation::test_invalid_roll_number[0-zero] FAILED [ 85%]
-tests/test_students.py::TestStudentValidation::test_invalid_roll_number[-1-negative] FAILED [ 86%]
-tests/test_students.py::TestStudentValidation::test_future_date_of_birth FAILED [ 87%]
+tests/test_students.py::TestStudentValidation::test_invalid_roll_number[0-zero] PASSED [ 85%]
+tests/test_students.py::TestStudentValidation::test_invalid_roll_number[-1-negative] PASSED [ 86%]
+tests/test_students.py::TestStudentValidation::test_future_date_of_birth PASSED [ 87%]
 tests/test_students.py::TestStudentValidation::test_today_date_of_birth PASSED [ 88%]
 tests/test_students.py::TestStudentValidation::test_same_class_same_roll_number_prevented PASSED [ 88%]
 tests/test_students.py::TestStudentValidation::test_student_very_long_name PASSED [ 89%]
@@ -133,251 +132,18 @@ tests/test_students.py::TestStudentValidation::test_no_gr_number PASSED  [ 90%]
 tests/test_students.py::TestStudentValidation::test_no_roll_number PASSED [ 91%]
 tests/test_students.py::TestStudentValidation::test_aadhar_boundary_digits[12345678901-11] PASSED [ 91%]
 tests/test_students.py::TestStudentValidation::test_aadhar_boundary_digits[1234567890123-13] PASSED [ 92%]
-tests/test_students.py::TestStudentSearchFilter::test_search_by_partial_name FAILED [ 93%]
+tests/test_students.py::TestStudentSearchFilter::test_search_by_partial_name PASSED [ 93%]
 tests/test_students.py::TestStudentSearchFilter::test_search_by_contact_number PASSED [ 94%]
 tests/test_students.py::TestStudentSearchFilter::test_search_by_gr_number PASSED [ 94%]
 tests/test_students.py::TestStudentSearchFilter::test_search_case_insensitive PASSED [ 95%]
 tests/test_students.py::TestStudentSearchFilter::test_filter_by_class PASSED [ 96%]
 tests/test_students.py::TestStudentSearchFilter::test_filter_class_plus_search PASSED [ 97%]
 tests/test_students.py::TestStudentUI::test_student_list_page_loads PASSED [ 97%]
-tests/test_students.py::TestStudentUI::test_add_student_form_opens FAILED [ 98%]
+tests/test_students.py::TestStudentUI::test_add_student_form_opens PASSED [ 98%]
 tests/test_students.py::TestStudentUI::test_search_ui_filters_students PASSED [ 99%]
-tests/test_students.py::TestStudentUI::test_invalid_contact_shows_error_ui SKIPPED exceeded.
-Call log:
-  - waiting for locator("button:has-
-text('Add'), button:has-text('New Student')"))                           [100%]
+tests/test_students.py::TestStudentUI::test_invalid_contact_shows_error_ui PASSED [100%]
 
-=================================== FAILURES ===================================
-________________ TestMonthlySummary.test_100_percent_attendance ________________
-tests/test_attendance.py:165: in test_100_percent_attendance
-    assert pct > 0, "Should have positive attendance"
-E   AssertionError: Should have positive attendance
-E   assert 0 > 0
-______________ TestFeeStructure.test_add_fee_amount_zero_rejected ______________
-tests/test_fees.py:40: in test_add_fee_amount_zero_rejected
-    assert r.status_code in (400, 422), "Fee of 0 should be rejected"
-E   AssertionError: Fee of 0 should be rejected
-E   assert 201 in (400, 422)
-E    +  where 201 = <Response [201 Created]>.status_code
-____________ TestFeeStructure.test_add_fee_negative_amount_rejected ____________
-tests/test_fees.py:46: in test_add_fee_negative_amount_rejected
-    assert r.status_code in (400, 422), "Negative fee should be rejected"
-E   AssertionError: Negative fee should be rejected
-E   assert 201 in (400, 422)
-E    +  where 201 = <Response [201 Created]>.status_code
-_______________ TestFeeStructure.test_remove_fee_from_structure ________________
-tests/test_fees.py:64: in test_remove_fee_from_structure
-    assert r2.status_code == 404
-E   assert 405 == 404
-E    +  where 405 = <Response [405 Method Not Allowed]>.status_code
-___________ TestDefaulters.test_fully_paid_student_not_in_defaulters ___________
-tests/test_fees.py:237: in test_fully_paid_student_not_in_defaulters
-    fee = self._get_fee(api, sid)
-E   AttributeError: 'TestDefaulters' object has no attribute '_get_fee'
-__________ TestDefaulters.test_partial_payment_appears_in_defaulters ___________
-tests/test_fees.py:253: in test_partial_payment_appears_in_defaulters
-    fee = self._get_fee(api, sid)
-E   AttributeError: 'TestDefaulters' object has no attribute '_get_fee'
-___________ TestDefaulters.test_zero_fees_student_not_in_defaulters ____________
-tests/test_fees.py:265: in test_zero_fees_student_not_in_defaulters
-    sid, _ = create_student(class_id=99)  # class with no fee structure
-conftest.py:202: in _create
-    assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: Internal Server Error
-E   assert 500 in (200, 201)
-E    +  where 500 = <Response [500 Internal Server Error]>.status_code
-_____________ TestDefaulters.test_tiny_balance_still_in_defaulters _____________
-tests/test_fees.py:284: in test_tiny_balance_still_in_defaulters
-    fee = self._get_fee(api, sid)
-E   AttributeError: 'TestDefaulters' object has no attribute '_get_fee'
-__________________ TestMarksGrid.test_load_gseb_subjects_std1 __________________
-tests/test_marks.py:21: in test_load_gseb_subjects_std1
-    assert r.status_code in (200, 201), r.text
-E   AssertionError: {"detail":"Method Not Allowed"}
-E   assert 405 in (200, 201)
-E    +  where 405 = <Response [405 Method Not Allowed]>.status_code
-_____________ TestMarksGrid.test_marks_entry_exceeds_max_rejected ______________
-tests/test_marks.py:75: in test_marks_entry_exceeds_max_rejected
-    assert r.status_code in (400, 422), "Marks above max should be rejected"
-E   AssertionError: Marks above max should be rejected
-E   assert 200 in (400, 422)
-E    +  where 200 = <Response [200 OK]>.status_code
-____________________ TestMarksGrid.test_mark_student_absent ____________________
-tests/test_marks.py:95: in test_mark_student_absent
-    assert data.get("is_absent") == True
-E   AssertionError: assert None == True
-E    +  where None = <built-in method get of dict object at 0x107dd8d80>('is_absent')
-E    +    where <built-in method get of dict object at 0x107dd8d80> = {'saved': 1}.get
-_________________ TestMarksGrid.test_marks_persist_after_save __________________
-tests/test_marks.py:106: in test_marks_persist_after_save
-    assert r.status_code == 200
-E   assert 404 == 200
-E    +  where 404 = <Response [404 Not Found]>.status_code
-__________________ TestMarksGrid.test_marks_update_correctly ___________________
-tests/test_marks.py:121: in test_marks_update_correctly
-    assert r2.status_code in (200, 201), r2.text
-E   AssertionError: {"detail":"Not Found"}
-E   assert 404 in (200, 201)
-E    +  where 404 = <Response [404 Not Found]>.status_code
-_____________ TestMarksGrid.test_removed_student_not_in_marks_grid _____________
-tests/test_marks.py:129: in test_removed_student_not_in_marks_grid
-    grid_ids = [s["student_id"] for s in r.json()]
-E   TypeError: string indices must be integers, not 'str'
-__________________ TestYearEnd.test_create_new_academic_year ___________________
-tests/test_reports_tc_system.py:151: in test_create_new_academic_year
-    assert r.status_code in (200, 201), r.text
-E   AssertionError: Internal Server Error
-E   assert 500 in (200, 201)
-E    +  where 500 = <Response [500 Internal Server Error]>.status_code
-_________________ TestYearEnd.test_promote_class10_shows_error _________________
-tests/test_reports_tc_system.py:204: in test_promote_class10_shows_error
-    assert r.status_code in (400, 422), "Promoting Std 10 should return error"
-E   AssertionError: Promoting Std 10 should return error
-E   assert 200 in (400, 422)
-E    +  where 200 = <Response [200 OK]>.status_code
-______________ TestSystemIntegration.test_full_student_lifecycle _______________
-tests/test_reports_tc_system.py:237: in test_full_student_lifecycle
-    assert r3.status_code in (200, 201), "Attendance marking failed"
-E   AssertionError: Attendance marking failed
-E   assert 422 in (200, 201)
-E    +  where 422 = <Response [422 Unprocessable Entity]>.status_code
-_________________ TestStudentCRUD.test_add_student_all_fields __________________
-tests/test_students.py:24: in test_add_student_all_fields
-    assert data["first_name"] == payload["first_name"]
-E   KeyError: 'first_name'
-________________ TestStudentCRUD.test_add_student_gujarati_name ________________
-tests/test_students.py:44: in test_add_student_gujarati_name
-    assert data.get("first_name_gujarati") == "ગુજરાતી"
-E   AssertionError: assert None == 'ગુજરાતી'
-E    +  where None = <built-in method get of dict object at 0x108426680>('first_name_gujarati')
-E    +    where <built-in method get of dict object at 0x108426680> = {'academic_year_id': 1, 'address': 'H.No. 63, Talwar Marg, Mangalore 081843', 'admission_date': '2023-06-01', 'category': None, ...}.get
-_______ TestStudentCRUD.test_edit_student_contact_validation_still_works _______
-tests/test_students.py:84: in test_edit_student_contact_validation_still_works
-    assert r.status_code in (400, 422), "Short contact should fail on edit too"
-E   AssertionError: Short contact should fail on edit too
-E   assert 200 in (400, 422)
-E    +  where 200 = <Response [200 OK]>.status_code
-_____________________ TestStudentCRUD.test_remove_student ______________________
-tests/test_students.py:92: in test_remove_student
-    assert r2.status_code == 404
-E   assert 200 == 404
-E    +  where 200 = <Response [200 OK]>.status_code
-____________ TestStudentCRUD.test_removed_student_not_in_marks_grid ____________
-tests/test_students.py:115: in test_removed_student_not_in_marks_grid
-    grid_ids = [s["student_id"] for s in r.json()]
-E   TypeError: string indices must be integers, not 'str'
-_ TestStudentValidation.test_invalid_contact_number[0123456789-starts with 0] __
-tests/test_students.py:144: in test_invalid_contact_number
-    assert r.status_code in (400, 422), f"Should reject contact '{contact}' ({reason})"
-E   AssertionError: Should reject contact '0123456789' (starts with 0)
-E   assert 201 in (400, 422)
-E    +  where 201 = <Response [201 Created]>.status_code
-____________ TestStudentValidation.test_invalid_roll_number[0-zero] ____________
-tests/test_students.py:153: in test_invalid_roll_number
-    assert r.status_code in (400, 422), f"Should reject roll number {roll} ({reason})"
-E   AssertionError: Should reject roll number 0 (zero)
-E   assert 201 in (400, 422)
-E    +  where 201 = <Response [201 Created]>.status_code
-_________ TestStudentValidation.test_invalid_roll_number[-1-negative] __________
-tests/test_students.py:153: in test_invalid_roll_number
-    assert r.status_code in (400, 422), f"Should reject roll number {roll} ({reason})"
-E   AssertionError: Should reject roll number -1 (negative)
-E   assert 201 in (400, 422)
-E    +  where 201 = <Response [201 Created]>.status_code
-_______________ TestStudentValidation.test_future_date_of_birth ________________
-tests/test_students.py:159: in test_future_date_of_birth
-    assert r.status_code in (400, 422), "Future DOB should be rejected"
-E   AssertionError: Future DOB should be rejected
-E   assert 201 in (400, 422)
-E    +  where 201 = <Response [201 Created]>.status_code
-_____________ TestStudentSearchFilter.test_search_by_partial_name ______________
-tests/test_students.py:232: in test_search_by_partial_name
-    names = [s["first_name"].lower() for s in r.json()]
-E   KeyError: 'first_name'
-__________________ TestStudentUI.test_add_student_form_opens ___________________
-tests/test_students.py:296: in test_add_student_form_opens
-    page.click("button:has-text('Add'), button:has-text('New Student'), [data-testid='add-student']")
-venv/lib/python3.13/site-packages/playwright/sync_api/_generated.py:9909: in click
-    self._sync(
-venv/lib/python3.13/site-packages/playwright/_impl/_page.py:827: in click
-    return await self._main_frame.click(**locals_to_params(locals()))
-venv/lib/python3.13/site-packages/playwright/_impl/_frame.py:488: in click
-    await self._channel.send("click", locals_to_params(locals()))
-venv/lib/python3.13/site-packages/playwright/_impl/_connection.py:61: in send
-    return await self._connection.wrap_api_call(
-venv/lib/python3.13/site-packages/playwright/_impl/_connection.py:528: in wrap_api_call
-    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
-E   playwright._impl._errors.TimeoutError: Page.click: Timeout 10000ms exceeded.
-E   Call log:
-E     - waiting for locator("button:has-text('Add'), button:has-text('New Student'), [data-testid='add-student']")
 --------------------------------- JSON report ----------------------------------
 report saved to: reports/report.json
 - Generated html report: file:///Users/mohammad/school-sms/sms_tests/reports/report.html -
-=========================== short test summary info ============================
-FAILED tests/test_attendance.py::TestMonthlySummary::test_100_percent_attendance - AssertionError: Should have positive attendance
-assert 0 > 0
-FAILED tests/test_fees.py::TestFeeStructure::test_add_fee_amount_zero_rejected - AssertionError: Fee of 0 should be rejected
-assert 201 in (400, 422)
- +  where 201 = <Response [201 Created]>.status_code
-FAILED tests/test_fees.py::TestFeeStructure::test_add_fee_negative_amount_rejected - AssertionError: Negative fee should be rejected
-assert 201 in (400, 422)
- +  where 201 = <Response [201 Created]>.status_code
-FAILED tests/test_fees.py::TestFeeStructure::test_remove_fee_from_structure - assert 405 == 404
- +  where 405 = <Response [405 Method Not Allowed]>.status_code
-FAILED tests/test_fees.py::TestDefaulters::test_fully_paid_student_not_in_defaulters - AttributeError: 'TestDefaulters' object has no attribute '_get_fee'
-FAILED tests/test_fees.py::TestDefaulters::test_partial_payment_appears_in_defaulters - AttributeError: 'TestDefaulters' object has no attribute '_get_fee'
-FAILED tests/test_fees.py::TestDefaulters::test_zero_fees_student_not_in_defaulters - AssertionError: Student creation failed: Internal Server Error
-assert 500 in (200, 201)
- +  where 500 = <Response [500 Internal Server Error]>.status_code
-FAILED tests/test_fees.py::TestDefaulters::test_tiny_balance_still_in_defaulters - AttributeError: 'TestDefaulters' object has no attribute '_get_fee'
-FAILED tests/test_marks.py::TestMarksGrid::test_load_gseb_subjects_std1 - AssertionError: {"detail":"Method Not Allowed"}
-assert 405 in (200, 201)
- +  where 405 = <Response [405 Method Not Allowed]>.status_code
-FAILED tests/test_marks.py::TestMarksGrid::test_marks_entry_exceeds_max_rejected - AssertionError: Marks above max should be rejected
-assert 200 in (400, 422)
- +  where 200 = <Response [200 OK]>.status_code
-FAILED tests/test_marks.py::TestMarksGrid::test_mark_student_absent - AssertionError: assert None == True
- +  where None = <built-in method get of dict object at 0x107dd8d80>('is_absent')
- +    where <built-in method get of dict object at 0x107dd8d80> = {'saved': 1}.get
-FAILED tests/test_marks.py::TestMarksGrid::test_marks_persist_after_save - assert 404 == 200
- +  where 404 = <Response [404 Not Found]>.status_code
-FAILED tests/test_marks.py::TestMarksGrid::test_marks_update_correctly - AssertionError: {"detail":"Not Found"}
-assert 404 in (200, 201)
- +  where 404 = <Response [404 Not Found]>.status_code
-FAILED tests/test_marks.py::TestMarksGrid::test_removed_student_not_in_marks_grid - TypeError: string indices must be integers, not 'str'
-FAILED tests/test_reports_tc_system.py::TestYearEnd::test_create_new_academic_year - AssertionError: Internal Server Error
-assert 500 in (200, 201)
- +  where 500 = <Response [500 Internal Server Error]>.status_code
-FAILED tests/test_reports_tc_system.py::TestYearEnd::test_promote_class10_shows_error - AssertionError: Promoting Std 10 should return error
-assert 200 in (400, 422)
- +  where 200 = <Response [200 OK]>.status_code
-FAILED tests/test_reports_tc_system.py::TestSystemIntegration::test_full_student_lifecycle - AssertionError: Attendance marking failed
-assert 422 in (200, 201)
- +  where 422 = <Response [422 Unprocessable Entity]>.status_code
-FAILED tests/test_students.py::TestStudentCRUD::test_add_student_all_fields - KeyError: 'first_name'
-FAILED tests/test_students.py::TestStudentCRUD::test_add_student_gujarati_name - AssertionError: assert None == 'ગુજરાતી'
- +  where None = <built-in method get of dict object at 0x108426680>('first_name_gujarati')
- +    where <built-in method get of dict object at 0x108426680> = {'academic_year_id': 1, 'address': 'H.No. 63, Talwar Marg, Mangalore 081843', 'admission_date': '2023-06-01', 'category': None, ...}.get
-FAILED tests/test_students.py::TestStudentCRUD::test_edit_student_contact_validation_still_works - AssertionError: Short contact should fail on edit too
-assert 200 in (400, 422)
- +  where 200 = <Response [200 OK]>.status_code
-FAILED tests/test_students.py::TestStudentCRUD::test_remove_student - assert 200 == 404
- +  where 200 = <Response [200 OK]>.status_code
-FAILED tests/test_students.py::TestStudentCRUD::test_removed_student_not_in_marks_grid - TypeError: string indices must be integers, not 'str'
-FAILED tests/test_students.py::TestStudentValidation::test_invalid_contact_number[0123456789-starts with 0] - AssertionError: Should reject contact '0123456789' (starts with 0)
-assert 201 in (400, 422)
- +  where 201 = <Response [201 Created]>.status_code
-FAILED tests/test_students.py::TestStudentValidation::test_invalid_roll_number[0-zero] - AssertionError: Should reject roll number 0 (zero)
-assert 201 in (400, 422)
- +  where 201 = <Response [201 Created]>.status_code
-FAILED tests/test_students.py::TestStudentValidation::test_invalid_roll_number[-1-negative] - AssertionError: Should reject roll number -1 (negative)
-assert 201 in (400, 422)
- +  where 201 = <Response [201 Created]>.status_code
-FAILED tests/test_students.py::TestStudentValidation::test_future_date_of_birth - AssertionError: Future DOB should be rejected
-assert 201 in (400, 422)
- +  where 201 = <Response [201 Created]>.status_code
-FAILED tests/test_students.py::TestStudentSearchFilter::test_search_by_partial_name - KeyError: 'first_name'
-FAILED tests/test_students.py::TestStudentUI::test_add_student_form_opens - playwright._impl._errors.TimeoutError: Page.click: Timeout 10000ms exceeded.
-Call log:
-  - waiting for locator("button:has-text('Add'), button:has-text('New Student'), [data-testid='add-student']")
-================== 28 failed, 98 passed, 8 skipped in 43.86s ===================
+============================= 134 passed in 15.78s =============================
