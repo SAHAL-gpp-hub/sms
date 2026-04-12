@@ -1,1 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+
+# Mac
+.DS_Store
+
+# Env
 .env
+
+# Tests
+sms_tests/venv/
