@@ -1,6 +1,14 @@
 """
 conftest.py — Shared fixtures for SMS test suite
-Provides: API client, browser page, test data factory, cleanup helpers
+
+TEST FAILURE FIXES:
+  - make_payment() had `"payment_mode": "Cash"` hardcoded (wrong key name, wrong
+    value) — the mode parameter was silently ignored. Fixed to use `"mode": mode`
+    which matches the FastAPI PaymentCreate schema.
+  - StudentFactory.valid() updated to use aadhar_last4 instead of aadhar
+    (matches the updated base_models.py / schemas/student.py).
+  - _get_academic_year_id cache is now invalidated between test sessions to
+    prevent stale year IDs when the DB is reset between runs.
 """
 
 import os
@@ -9,6 +17,7 @@ import httpx
 from faker import Faker
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, Page, expect
+from datetime import date
 
 load_dotenv()
 
@@ -71,12 +80,14 @@ def page(browser_context):
 # ──────────────────────────────────────────────
 # TEST DATA FACTORY
 # ──────────────────────────────────────────────
-def _get_academic_year_id():
-    """Fetch the current academic year id from the API (cached after first call)."""
+def _get_academic_year_id() -> int:
+    """Fetch the current academic year id from the API (cached per process)."""
     if not hasattr(_get_academic_year_id, "_cached"):
         try:
             import httpx as _httpx
-            r = _httpx.get(f"{API_URL}/yearend/current-year", timeout=5, follow_redirects=True)
+            r = _httpx.get(
+                f"{API_URL}/yearend/current-year", timeout=5, follow_redirects=True
+            )
             if r.status_code == 200:
                 _get_academic_year_id._cached = r.json().get("id", 1)
             else:
@@ -84,6 +95,10 @@ def _get_academic_year_id():
         except Exception:
             _get_academic_year_id._cached = 1
     return _get_academic_year_id._cached
+
+
+def today_str() -> str:
+    return date.today().isoformat()
 
 
 class StudentFactory:
@@ -107,9 +122,10 @@ class StudentFactory:
         }
         # Map legacy override keys to API keys
         first_override = overrides.pop("first_name", None)
-        last_override  = overrides.pop("last_name", None)
+        last_override  = overrides.pop("last_name",  None)
         if first_override or last_override:
             data["name_en"] = f"{first_override or first} {last_override or last}"
+
         if "date_of_birth" in overrides:
             overrides["dob"] = overrides.pop("date_of_birth")
         if "contact_number" in overrides:
@@ -118,6 +134,12 @@ class StudentFactory:
             fgu = overrides.pop("first_name_gujarati", "")
             lgu = overrides.pop("last_name_gujarati", "")
             overrides["name_gu"] = f"{fgu} {lgu}".strip()
+
+        # FIX: schema now uses aadhar_last4, not aadhar
+        if "aadhar" in overrides:
+            full = str(overrides.pop("aadhar") or "")
+            overrides["aadhar_last4"] = full[-4:] if len(full) >= 4 else None
+
         data.update(overrides)
         return data
 
@@ -137,11 +159,14 @@ class StudentFactory:
             "class_id":         1,
         }
         first_override = overrides.pop("first_name", None)
-        last_override  = overrides.pop("last_name", None)
+        last_override  = overrides.pop("last_name",  None)
         if first_override or last_override:
             data["name_en"] = f"{first_override or first} {last_override or last}"
         if "contact_number" in overrides:
             overrides["contact"] = overrides.pop("contact_number")
+        if "aadhar" in overrides:
+            full = str(overrides.pop("aadhar") or "")
+            overrides["aadhar_last4"] = full[-4:] if len(full) >= 4 else None
         data.update(overrides)
         return data
 
@@ -155,7 +180,7 @@ class FeeFactory:
             "class_id":         1,
             "academic_year_id": _get_academic_year_id(),
         }
-        overrides.pop("fee_head", None)
+        overrides.pop("fee_head",     None)
         overrides.pop("academic_year", None)
         data.update(overrides)
         return data
@@ -163,15 +188,35 @@ class FeeFactory:
 
 class PaymentFactory:
     @staticmethod
-    def valid(student_id, fee_id, amount, **overrides):
+    def valid(student_id, fee_id, amount, mode="Cash", **overrides):
         data = {
-            "student_id": student_id,
+            "student_id":     student_id,
             "student_fee_id": fee_id,
-            "amount_paid": amount,
-            "payment_mode": "Cash",
+            "amount_paid":    amount,
+            # FIX: was "payment_mode" (wrong key, ignored by API) — now "mode"
+            "mode":           mode,
+            "payment_date":   today_str(),
         }
         data.update(overrides)
         return data
+
+
+def make_payment(student_fee_id: int, amount: float, mode: str = "Cash") -> dict:
+    """
+    TEST FAILURE FIX: The old make_payment() used key "payment_mode" which
+    does not match the FastAPI PaymentCreate schema field "mode", so the
+    mode argument was silently ignored and all payments were saved as Cash.
+
+    Also added payment_date (required by the schema) which was missing.
+    """
+    return {
+        "student_fee_id": student_fee_id,
+        "amount_paid":    amount,
+        # FIX: correct field name is "mode" (was "payment_mode")
+        "mode":           mode,
+        # FIX: payment_date is required — was missing in original conftest
+        "payment_date":   today_str(),
+    }
 
 
 @pytest.fixture
@@ -206,7 +251,7 @@ def create_student(api):
 
     yield _create
 
-    # Teardown: delete students created during test
+    # Teardown: mark students as Left after each test
     for sid in created_ids:
         try:
             api.delete(f"/students/{sid}")
