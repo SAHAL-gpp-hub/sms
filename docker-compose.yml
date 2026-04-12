@@ -21,7 +21,9 @@ services:
       retries: 5
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: sms_backend
     environment:
       DATABASE_URL: postgresql://sms_user:sms_pass@db:5432/school_sms
@@ -36,7 +38,9 @@ services:
     restart: unless-stopped
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: sms_frontend
     ports:
       - "80:80"
