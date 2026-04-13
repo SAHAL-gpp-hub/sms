@@ -11,7 +11,7 @@ collecting ... collected 135 items
 tests/test_attendance.py::TestDailyAttendance::test_roster_shows_only_active_students FAILED [  0%]
 tests/test_attendance.py::TestDailyAttendance::test_removed_student_not_on_roster FAILED [  1%]
 tests/test_attendance.py::TestDailyAttendance::test_mark_all_present FAILED [  2%]
-tests/test_attendance.py::TestDailyAttendance::test_mark_all_absent FAILED [  2%]
+tests/test_attendance.py::TestDailyAttendance::test_mark_all_absent SKIPPED [  2%]
 tests/test_attendance.py::TestDailyAttendance::test_mixed_status_palt FAILED [  3%]
 tests/test_attendance.py::TestDailyAttendance::test_save_attendance_past_date FAILED [  4%]
 tests/test_attendance.py::TestDailyAttendance::test_save_attendance_future_date FAILED [  5%]
@@ -24,13 +24,13 @@ tests/test_attendance.py::TestMonthlySummary::test_75_percent_boundary_not_highl
 tests/test_attendance.py::TestMonthlySummary::test_below_75_percent_highlighted FAILED [ 10%]
 tests/test_attendance.py::TestMonthlySummary::test_sundays_excluded_from_working_days PASSED [ 11%]
 tests/test_attendance.py::TestMonthlySummary::test_february_calculated_correctly PASSED [ 11%]
-tests/test_fees.py::TestFeeStructure::test_load_gseb_fee_heads FAILED    [ 12%]
-tests/test_fees.py::TestFeeStructure::test_load_gseb_heads_twice_no_duplicates FAILED [ 13%]
-tests/test_fees.py::TestFeeStructure::test_add_fee_amount_zero_rejected FAILED [ 14%]
-tests/test_fees.py::TestFeeStructure::test_add_fee_negative_amount_rejected FAILED [ 14%]
+tests/test_fees.py::TestFeeStructure::test_load_gseb_fee_heads PASSED    [ 12%]
+tests/test_fees.py::TestFeeStructure::test_load_gseb_heads_twice_no_duplicates PASSED [ 13%]
+tests/test_fees.py::TestFeeStructure::test_add_fee_amount_zero_rejected PASSED [ 14%]
+tests/test_fees.py::TestFeeStructure::test_add_fee_negative_amount_rejected PASSED [ 14%]
 tests/test_fees.py::TestFeeStructure::test_add_fee_large_amount FAILED   [ 15%]
 tests/test_fees.py::TestFeeStructure::test_remove_fee_from_structure FAILED [ 16%]
-tests/test_fees.py::TestFeeStructure::test_assign_fees_to_class_no_duplicates FAILED [ 17%]
+tests/test_fees.py::TestFeeStructure::test_assign_fees_to_class_no_duplicates PASSED [ 17%]
 tests/test_fees.py::TestFeeStructure::test_assign_fees_class_zero_students PASSED [ 17%]
 tests/test_fees.py::TestPayments::test_payment_exact_balance_zeroes_out SKIPPED [ 18%]
 tests/test_fees.py::TestPayments::test_payment_zero_rejected FAILED      [ 19%]
@@ -43,11 +43,11 @@ tests/test_fees.py::TestPayments::test_overpayment_behavior SKIPPED      [ 23%]
 tests/test_fees.py::TestDefaulters::test_fully_paid_student_not_in_defaulters SKIPPED [ 24%]
 tests/test_fees.py::TestDefaulters::test_partial_payment_appears_in_defaulters SKIPPED [ 25%]
 tests/test_fees.py::TestDefaulters::test_zero_fees_student_not_in_defaulters FAILED [ 25%]
-tests/test_fees.py::TestDefaulters::test_filter_defaulters_by_class FAILED [ 26%]
+tests/test_fees.py::TestDefaulters::test_filter_defaulters_by_class PASSED [ 26%]
 tests/test_fees.py::TestDefaulters::test_tiny_balance_still_in_defaulters SKIPPED [ 27%]
-tests/test_marks.py::TestMarksGrid::test_load_gseb_subjects_std1 FAILED  [ 28%]
-tests/test_marks.py::TestMarksGrid::test_load_gseb_subjects_std10 FAILED [ 28%]
-tests/test_marks.py::TestMarksGrid::test_load_subjects_twice_no_duplicates FAILED [ 29%]
+tests/test_marks.py::TestMarksGrid::test_load_gseb_subjects_std1 SKIPPED [ 28%]
+tests/test_marks.py::TestMarksGrid::test_load_gseb_subjects_std10 SKIPPED [ 28%]
+tests/test_marks.py::TestMarksGrid::test_load_subjects_twice_no_duplicates SKIPPED [ 29%]
 tests/test_marks.py::TestMarksGrid::test_marks_entry_zero FAILED         [ 30%]
 tests/test_marks.py::TestMarksGrid::test_marks_entry_max FAILED          [ 31%]
 tests/test_marks.py::TestMarksGrid::test_marks_entry_exceeds_max_rejected FAILED [ 31%]
@@ -78,7 +78,7 @@ tests/test_marks.py::TestResultsPDF::test_results_sorted_by_rank PASSED  [ 49%]
 tests/test_marks.py::TestResultsPDF::test_results_page_empty_class PASSED [ 50%]
 tests/test_reports_tc_system.py::TestReportPDFs::test_fee_defaulter_report_with_defaulters PASSED [ 51%]
 tests/test_reports_tc_system.py::TestReportPDFs::test_fee_defaulter_report_no_defaulters PASSED [ 51%]
-tests/test_reports_tc_system.py::TestReportPDFs::test_fee_defaulter_report_school_name FAILED [ 52%]
+tests/test_reports_tc_system.py::TestReportPDFs::test_fee_defaulter_report_school_name PASSED [ 52%]
 tests/test_reports_tc_system.py::TestReportPDFs::test_attendance_report_with_data PASSED [ 53%]
 tests/test_reports_tc_system.py::TestReportPDFs::test_attendance_report_empty_class PASSED [ 54%]
 tests/test_reports_tc_system.py::TestReportPDFs::test_class_result_report_pdf PASSED [ 54%]
@@ -90,15 +90,15 @@ tests/test_reports_tc_system.py::TestTransferCertificate::test_tc_number_unique 
 tests/test_reports_tc_system.py::TestTransferCertificate::test_tc_issue_date_is_today FAILED [ 59%]
 tests/test_reports_tc_system.py::TestTransferCertificate::test_tc_no_gr_number_shows_dash SKIPPED [ 60%]
 tests/test_reports_tc_system.py::TestTransferCertificate::test_tc_removed_student_still_works FAILED [ 60%]
-tests/test_reports_tc_system.py::TestYearEnd::test_create_new_academic_year FAILED [ 61%]
+tests/test_reports_tc_system.py::TestYearEnd::test_create_new_academic_year PASSED [ 61%]
 tests/test_reports_tc_system.py::TestYearEnd::test_old_year_not_current_after_new_one PASSED [ 62%]
-tests/test_reports_tc_system.py::TestYearEnd::test_classes_auto_created_for_new_year FAILED [ 62%]
-tests/test_reports_tc_system.py::TestYearEnd::test_add_class_division SKIPPED [ 63%]
+tests/test_reports_tc_system.py::TestYearEnd::test_classes_auto_created_for_new_year PASSED [ 62%]
+tests/test_reports_tc_system.py::TestYearEnd::test_add_class_division PASSED [ 63%]
 tests/test_reports_tc_system.py::TestYearEnd::test_add_duplicate_class_division_prevented PASSED [ 64%]
-tests/test_reports_tc_system.py::TestYearEnd::test_promote_class1_to_class2 FAILED [ 65%]
-tests/test_reports_tc_system.py::TestYearEnd::test_promote_class10_shows_error FAILED [ 65%]
+tests/test_reports_tc_system.py::TestYearEnd::test_promote_class1_to_class2 PASSED [ 65%]
+tests/test_reports_tc_system.py::TestYearEnd::test_promote_class10_shows_error PASSED [ 65%]
 tests/test_reports_tc_system.py::TestYearEnd::test_promote_empty_class_shows_zero PASSED [ 66%]
-tests/test_reports_tc_system.py::TestSystemIntegration::test_full_student_lifecycle FAILED [ 67%]
+tests/test_reports_tc_system.py::TestSystemIntegration::test_full_student_lifecycle PASSED [ 67%]
 tests/test_reports_tc_system.py::TestSystemIntegration::test_api_docs_endpoint PASSED [ 68%]
 tests/test_reports_tc_system.py::TestSystemIntegration::test_openapi_schema PASSED [ 68%]
 tests/test_reports_tc_system.py::TestSystemIntegration::test_no_500_errors_on_common_endpoints PASSED [ 69%]
@@ -106,39 +106,39 @@ tests/test_reports_tc_system.py::TestSystemUI::test_dashboard_loads PASSED [ 70%
 tests/test_reports_tc_system.py::TestSystemUI::test_browser_back_button PASSED [ 71%]
 tests/test_reports_tc_system.py::TestSystemUI::test_direct_url_access PASSED [ 71%]
 tests/test_reports_tc_system.py::TestSystemUI::test_page_refresh_stays_on_same_page PASSED [ 72%]
-tests/test_reports_tc_system.py::TestSystemUI::test_dashboard_student_count_updates SKIPPED [ 73%]
-tests/test_students.py::TestStudentCRUD::test_add_student_all_fields FAILED [ 74%]
-tests/test_students.py::TestStudentCRUD::test_add_student_only_required_fields FAILED [ 74%]
-tests/test_students.py::TestStudentCRUD::test_add_student_gujarati_name FAILED [ 75%]
-tests/test_students.py::TestStudentCRUD::test_add_two_students_same_name FAILED [ 76%]
-tests/test_students.py::TestStudentCRUD::test_add_10_plus_students_same_class FAILED [ 77%]
-tests/test_students.py::TestStudentCRUD::test_edit_student_change_class FAILED [ 77%]
-tests/test_students.py::TestStudentCRUD::test_edit_student_contact_validation_still_works FAILED [ 78%]
-tests/test_students.py::TestStudentCRUD::test_remove_student FAILED      [ 79%]
-tests/test_students.py::TestStudentCRUD::test_removed_student_not_in_defaulters FAILED [ 80%]
-tests/test_students.py::TestStudentCRUD::test_removed_student_not_in_attendance_roster FAILED [ 80%]
-tests/test_students.py::TestStudentCRUD::test_removed_student_not_in_marks_grid FAILED [ 81%]
-tests/test_students.py::TestStudentCRUD::test_tc_still_works_for_removed_student FAILED [ 82%]
-tests/test_students.py::TestStudentValidation::test_invalid_contact_number[0123456789-starts with 0] FAILED [ 82%]
-tests/test_students.py::TestStudentValidation::test_invalid_contact_number[123456789-9 digits] FAILED [ 83%]
-tests/test_students.py::TestStudentValidation::test_invalid_contact_number[12345678901-11 digits] FAILED [ 84%]
-tests/test_students.py::TestStudentValidation::test_invalid_contact_number[abcdefghij-non-numeric] FAILED [ 85%]
-tests/test_students.py::TestStudentValidation::test_invalid_roll_number[0-zero] FAILED [ 85%]
-tests/test_students.py::TestStudentValidation::test_invalid_roll_number[-1-negative] FAILED [ 86%]
-tests/test_students.py::TestStudentValidation::test_future_date_of_birth FAILED [ 87%]
-tests/test_students.py::TestStudentValidation::test_today_date_of_birth FAILED [ 88%]
-tests/test_students.py::TestStudentValidation::test_same_class_same_roll_number_prevented FAILED [ 88%]
-tests/test_students.py::TestStudentValidation::test_student_very_long_name FAILED [ 89%]
-tests/test_students.py::TestStudentValidation::test_no_gr_number FAILED  [ 90%]
-tests/test_students.py::TestStudentValidation::test_no_roll_number FAILED [ 91%]
+tests/test_reports_tc_system.py::TestSystemUI::test_dashboard_student_count_updates PASSED [ 73%]
+tests/test_students.py::TestStudentCRUD::test_add_student_all_fields PASSED [ 74%]
+tests/test_students.py::TestStudentCRUD::test_add_student_only_required_fields PASSED [ 74%]
+tests/test_students.py::TestStudentCRUD::test_add_student_gujarati_name PASSED [ 75%]
+tests/test_students.py::TestStudentCRUD::test_add_two_students_same_name PASSED [ 76%]
+tests/test_students.py::TestStudentCRUD::test_add_10_plus_students_same_class PASSED [ 77%]
+tests/test_students.py::TestStudentCRUD::test_edit_student_change_class PASSED [ 77%]
+tests/test_students.py::TestStudentCRUD::test_edit_student_contact_validation_still_works PASSED [ 78%]
+tests/test_students.py::TestStudentCRUD::test_remove_student PASSED      [ 79%]
+tests/test_students.py::TestStudentCRUD::test_removed_student_not_in_defaulters PASSED [ 80%]
+tests/test_students.py::TestStudentCRUD::test_removed_student_not_in_attendance_roster PASSED [ 80%]
+tests/test_students.py::TestStudentCRUD::test_removed_student_not_in_marks_grid PASSED [ 81%]
+tests/test_students.py::TestStudentCRUD::test_tc_still_works_for_removed_student PASSED [ 82%]
+tests/test_students.py::TestStudentValidation::test_invalid_contact_number[0123456789-starts with 0] PASSED [ 82%]
+tests/test_students.py::TestStudentValidation::test_invalid_contact_number[123456789-9 digits] PASSED [ 83%]
+tests/test_students.py::TestStudentValidation::test_invalid_contact_number[12345678901-11 digits] PASSED [ 84%]
+tests/test_students.py::TestStudentValidation::test_invalid_contact_number[abcdefghij-non-numeric] PASSED [ 85%]
+tests/test_students.py::TestStudentValidation::test_invalid_roll_number[0-zero] PASSED [ 85%]
+tests/test_students.py::TestStudentValidation::test_invalid_roll_number[-1-negative] PASSED [ 86%]
+tests/test_students.py::TestStudentValidation::test_future_date_of_birth PASSED [ 87%]
+tests/test_students.py::TestStudentValidation::test_today_date_of_birth PASSED [ 88%]
+tests/test_students.py::TestStudentValidation::test_same_class_same_roll_number_prevented PASSED [ 88%]
+tests/test_students.py::TestStudentValidation::test_student_very_long_name PASSED [ 89%]
+tests/test_students.py::TestStudentValidation::test_no_gr_number PASSED  [ 90%]
+tests/test_students.py::TestStudentValidation::test_no_roll_number PASSED [ 91%]
 tests/test_students.py::TestStudentValidation::test_aadhar_boundary_digits[12345678901-11] PASSED [ 91%]
 tests/test_students.py::TestStudentValidation::test_aadhar_boundary_digits[1234567890123-13] PASSED [ 92%]
-tests/test_students.py::TestStudentSearchFilter::test_search_by_partial_name FAILED [ 93%]
-tests/test_students.py::TestStudentSearchFilter::test_search_by_contact_number FAILED [ 94%]
-tests/test_students.py::TestStudentSearchFilter::test_search_by_gr_number FAILED [ 94%]
-tests/test_students.py::TestStudentSearchFilter::test_search_case_insensitive FAILED [ 95%]
-tests/test_students.py::TestStudentSearchFilter::test_filter_by_class FAILED [ 96%]
-tests/test_students.py::TestStudentSearchFilter::test_filter_class_plus_search FAILED [ 97%]
+tests/test_students.py::TestStudentSearchFilter::test_search_by_partial_name PASSED [ 93%]
+tests/test_students.py::TestStudentSearchFilter::test_search_by_contact_number PASSED [ 94%]
+tests/test_students.py::TestStudentSearchFilter::test_search_by_gr_number PASSED [ 94%]
+tests/test_students.py::TestStudentSearchFilter::test_search_case_insensitive PASSED [ 95%]
+tests/test_students.py::TestStudentSearchFilter::test_filter_by_class PASSED [ 96%]
+tests/test_students.py::TestStudentSearchFilter::test_filter_class_plus_search PASSED [ 97%]
 tests/test_students.py::TestStudentUI::test_student_list_page_loads FAILED [ 97%]
 tests/test_students.py::TestStudentUI::test_add_student_form_opens PASSED [ 98%]
 tests/test_students.py::TestStudentUI::test_search_ui_filters_students PASSED [ 99%]
@@ -148,691 +148,404 @@ tests/test_students.py::TestStudentUI::test_invalid_contact_shows_error_ui PASSE
 __________ TestDailyAttendance.test_roster_shows_only_active_students __________
 tests/test_attendance.py:55: in test_roster_shows_only_active_students
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 ____________ TestDailyAttendance.test_removed_student_not_on_roster ____________
 tests/test_attendance.py:62: in test_removed_student_not_on_roster
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 __________________ TestDailyAttendance.test_mark_all_present ___________________
 tests/test_attendance.py:70: in test_mark_all_present
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-___________________ TestDailyAttendance.test_mark_all_absent ___________________
-tests/test_attendance.py:86: in test_mark_all_absent
-    {"student_id": s["student_id"], "status": "A", "date": past_date_str(10), "class_id": 1}
-E   TypeError: string indices must be integers, not 'str'
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 __________________ TestDailyAttendance.test_mixed_status_palt __________________
 tests/test_attendance.py:95: in test_mixed_status_palt
     sid, _ = create_student(class_id=2)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(2) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 ______________ TestDailyAttendance.test_save_attendance_past_date ______________
 tests/test_attendance.py:108: in test_save_attendance_past_date
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 _____________ TestDailyAttendance.test_save_attendance_future_date _____________
 tests/test_attendance.py:114: in test_save_attendance_future_date
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 ___________ TestDailyAttendance.test_attendance_prefilled_on_revisit ___________
 tests/test_attendance.py:121: in test_attendance_prefilled_on_revisit
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 ___________ TestDailyAttendance.test_update_attendance_no_duplicates ___________
 tests/test_attendance.py:133: in test_update_attendance_no_duplicates
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 _______________ TestMonthlySummary.test_no_attendance_shows_zero _______________
 tests/test_attendance.py:175: in test_no_attendance_shows_zero
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 ________________ TestMonthlySummary.test_100_percent_attendance ________________
 tests/test_attendance.py:186: in test_100_percent_attendance
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 _________ TestMonthlySummary.test_75_percent_boundary_not_highlighted __________
 tests/test_attendance.py:208: in test_75_percent_boundary_not_highlighted
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 _____________ TestMonthlySummary.test_below_75_percent_highlighted _____________
 tests/test_attendance.py:239: in test_below_75_percent_highlighted
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-__________________ TestFeeStructure.test_load_gseb_fee_heads ___________________
-tests/test_fees.py:32: in test_load_gseb_fee_heads
-    assert r.status_code in (200, 201), r.text
-E   AssertionError: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-__________ TestFeeStructure.test_load_gseb_heads_twice_no_duplicates ___________
-tests/test_fees.py:43: in test_load_gseb_heads_twice_no_duplicates
-    names = [h["name"] for h in heads]
-E   TypeError: string indices must be integers, not 'str'
-______________ TestFeeStructure.test_add_fee_amount_zero_rejected ______________
-tests/test_fees.py:49: in test_add_fee_amount_zero_rejected
-    assert r.status_code in (400, 422), "Fee of 0 should be rejected"
-E   AssertionError: Fee of 0 should be rejected
-E   assert 401 in (400, 422)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-____________ TestFeeStructure.test_add_fee_negative_amount_rejected ____________
-tests/test_fees.py:54: in test_add_fee_negative_amount_rejected
-    assert r.status_code in (400, 422), "Negative fee should be rejected"
-E   AssertionError: Negative fee should be rejected
-E   assert 401 in (400, 422)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 __________________ TestFeeStructure.test_add_fee_large_amount __________________
 tests/test_fees.py:59: in test_add_fee_large_amount
     assert r.status_code in (200, 201), r.text
-E   AssertionError: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Internal Server Error
+E   assert 500 in (200, 201)
+E    +  where 500 = <Response [500 Internal Server Error]>.status_code
 _______________ TestFeeStructure.test_remove_fee_from_structure ________________
 tests/test_fees.py:65: in test_remove_fee_from_structure
     assert r.status_code in (200, 201)
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-___________ TestFeeStructure.test_assign_fees_to_class_no_duplicates ___________
-tests/test_fees.py:76: in test_assign_fees_to_class_no_duplicates
-    assert r.status_code == 200
-E   assert 401 == 200
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   assert 500 in (200, 201)
+E    +  where 500 = <Response [500 Internal Server Error]>.status_code
 ___________________ TestPayments.test_payment_zero_rejected ____________________
 tests/test_fees.py:155: in test_payment_zero_rejected
     sid, _ = create_student()
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 _________________ TestPayments.test_payment_negative_rejected __________________
 tests/test_fees.py:160: in test_payment_negative_rejected
     sid, _ = create_student()
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 ___________ TestDefaulters.test_zero_fees_student_not_in_defaulters ____________
 tests/test_fees.py:315: in test_zero_fees_student_not_in_defaulters
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-________________ TestDefaulters.test_filter_defaulters_by_class ________________
-tests/test_fees.py:322: in test_filter_defaulters_by_class
-    assert r.status_code == 200
-E   assert 401 == 200
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-__________________ TestMarksGrid.test_load_gseb_subjects_std1 __________________
-tests/test_marks.py:58: in test_load_gseb_subjects_std1
-    std1 = next((c for c in classes if c["name"] == "1"), None)
-tests/test_marks.py:58: in <genexpr>
-    std1 = next((c for c in classes if c["name"] == "1"), None)
-E   TypeError: string indices must be integers, not 'str'
-_________________ TestMarksGrid.test_load_gseb_subjects_std10 __________________
-tests/test_marks.py:72: in test_load_gseb_subjects_std10
-    std10 = next((c for c in classes if c["name"] == "10"), None)
-tests/test_marks.py:72: in <genexpr>
-    std10 = next((c for c in classes if c["name"] == "10"), None)
-E   TypeError: string indices must be integers, not 'str'
-_____________ TestMarksGrid.test_load_subjects_twice_no_duplicates _____________
-tests/test_marks.py:88: in test_load_subjects_twice_no_duplicates
-    std5 = next((c for c in classes if c["name"] == "5"), None)
-tests/test_marks.py:88: in <genexpr>
-    std5 = next((c for c in classes if c["name"] == "5"), None)
-E   TypeError: string indices must be integers, not 'str'
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 _____________________ TestMarksGrid.test_marks_entry_zero ______________________
 tests/test_marks.py:100: in test_marks_entry_zero
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 ______________________ TestMarksGrid.test_marks_entry_max ______________________
 tests/test_marks.py:110: in test_marks_entry_max
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 _____________ TestMarksGrid.test_marks_entry_exceeds_max_rejected ______________
 tests/test_marks.py:120: in test_marks_entry_exceeds_max_rejected
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 ____________________ TestMarksGrid.test_marks_entry_decimal ____________________
 tests/test_marks.py:130: in test_marks_entry_decimal
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 ____________________ TestMarksGrid.test_mark_student_absent ____________________
 tests/test_marks.py:140: in test_mark_student_absent
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 _________________ TestMarksGrid.test_marks_persist_after_save __________________
 tests/test_marks.py:160: in test_marks_persist_after_save
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 __________________ TestMarksGrid.test_marks_update_correctly ___________________
 tests/test_marks.py:176: in test_marks_update_correctly
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 _____________ TestMarksGrid.test_removed_student_not_in_marks_grid _____________
 tests/test_marks.py:194: in test_removed_student_not_in_marks_grid
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 __________ TestGradeCalculation.test_grade_thresholds[95-100-A1-10.0] __________
 tests/test_marks.py:246: in test_grade_thresholds
     sid, exam_id, subjects = self._setup_student_with_marks(api, create_student, score)
 tests/test_marks.py:235: in _setup_student_with_marks
     sid, _ = create_student(class_id=class_id)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 __________ TestGradeCalculation.test_grade_thresholds[85-100-A2-9.0] ___________
 tests/test_marks.py:246: in test_grade_thresholds
     sid, exam_id, subjects = self._setup_student_with_marks(api, create_student, score)
 tests/test_marks.py:235: in _setup_student_with_marks
     sid, _ = create_student(class_id=class_id)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 __________ TestGradeCalculation.test_grade_thresholds[75-100-B1-8.0] ___________
 tests/test_marks.py:246: in test_grade_thresholds
     sid, exam_id, subjects = self._setup_student_with_marks(api, create_student, score)
 tests/test_marks.py:235: in _setup_student_with_marks
     sid, _ = create_student(class_id=class_id)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 __________ TestGradeCalculation.test_grade_thresholds[65-100-B2-7.0] ___________
 tests/test_marks.py:246: in test_grade_thresholds
     sid, exam_id, subjects = self._setup_student_with_marks(api, create_student, score)
 tests/test_marks.py:235: in _setup_student_with_marks
     sid, _ = create_student(class_id=class_id)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 __________ TestGradeCalculation.test_grade_thresholds[55-100-C1-6.0] ___________
 tests/test_marks.py:246: in test_grade_thresholds
     sid, exam_id, subjects = self._setup_student_with_marks(api, create_student, score)
 tests/test_marks.py:235: in _setup_student_with_marks
     sid, _ = create_student(class_id=class_id)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 __________ TestGradeCalculation.test_grade_thresholds[45-100-C2-5.0] ___________
 tests/test_marks.py:246: in test_grade_thresholds
     sid, exam_id, subjects = self._setup_student_with_marks(api, create_student, score)
 tests/test_marks.py:235: in _setup_student_with_marks
     sid, _ = create_student(class_id=class_id)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 ___________ TestGradeCalculation.test_grade_thresholds[35-100-D-4.0] ___________
 tests/test_marks.py:246: in test_grade_thresholds
     sid, exam_id, subjects = self._setup_student_with_marks(api, create_student, score)
 tests/test_marks.py:235: in _setup_student_with_marks
     sid, _ = create_student(class_id=class_id)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 ___________ TestGradeCalculation.test_grade_thresholds[33-100-D-4.0] ___________
 tests/test_marks.py:246: in test_grade_thresholds
     sid, exam_id, subjects = self._setup_student_with_marks(api, create_student, score)
 tests/test_marks.py:235: in _setup_student_with_marks
     sid, _ = create_student(class_id=class_id)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 ___________ TestGradeCalculation.test_grade_thresholds[32-100-E-0.0] ___________
 tests/test_marks.py:246: in test_grade_thresholds
     sid, exam_id, subjects = self._setup_student_with_marks(api, create_student, score)
 tests/test_marks.py:235: in _setup_student_with_marks
     sid, _ = create_student(class_id=class_id)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 ___________ TestGradeCalculation.test_grade_thresholds[30-100-E-0.0] ___________
 tests/test_marks.py:246: in test_grade_thresholds
     sid, exam_id, subjects = self._setup_student_with_marks(api, create_student, score)
 tests/test_marks.py:235: in _setup_student_with_marks
     sid, _ = create_student(class_id=class_id)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 __________ TestGradeCalculation.test_perfect_score_cgpa_is_exactly_10 __________
 tests/test_marks.py:266: in test_perfect_score_cgpa_is_exactly_10
     sid, exam_id, subjects = self._setup_student_with_marks(api, create_student, 100)
 tests/test_marks.py:235: in _setup_student_with_marks
     sid, _ = create_student(class_id=class_id)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 _____________ TestGradeCalculation.test_absent_subject_causes_fail _____________
 tests/test_marks.py:282: in test_absent_subject_causes_fail
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 _________________ TestGradeCalculation.test_pass_all_subjects __________________
 tests/test_marks.py:305: in test_pass_all_subjects
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 ___________ TestGradeCalculation.test_fail_one_subject_fails_overall ___________
 tests/test_marks.py:322: in test_fail_one_subject_fails_overall
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 ___________ TestGradeCalculation.test_class_rank_top_scorer_is_rank1 ___________
 tests/test_marks.py:342: in test_class_rank_top_scorer_is_rank1
     sid1, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 _____________ TestGradeCalculation.test_same_percentage_same_rank ______________
 tests/test_marks.py:361: in test_same_percentage_same_rank
     sid1, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 _________________ TestResultsPDF.test_marksheet_pdf_generates __________________
 tests/test_marks.py:391: in test_marksheet_pdf_generates
     sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-_____________ TestReportPDFs.test_fee_defaulter_report_school_name _____________
-tests/test_reports_tc_system.py:40: in test_fee_defaulter_report_school_name
-    assert r.status_code in (200, 404), f"Unexpected status: {r.status_code}"
-E   AssertionError: Unexpected status: 401
-E   assert 401 in (200, 404)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 ________________ TestTransferCertificate.test_tc_active_student ________________
 tests/test_reports_tc_system.py:73: in test_tc_active_student
     sid, student = create_student()
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 ____________ TestTransferCertificate.test_tc_already_issued_student ____________
 tests/test_reports_tc_system.py:79: in test_tc_already_issued_student
     sid, _ = create_student()
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 _________ TestTransferCertificate.test_tc_shows_correct_class_and_year _________
 tests/test_reports_tc_system.py:86: in test_tc_shows_correct_class_and_year
     sid, student = create_student(class_id=1)
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 ________________ TestTransferCertificate.test_tc_number_unique _________________
 tests/test_reports_tc_system.py:92: in test_tc_number_unique
     sid1, _ = create_student()
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 _____________ TestTransferCertificate.test_tc_issue_date_is_today ______________
 tests/test_reports_tc_system.py:104: in test_tc_issue_date_is_today
     sid, _ = create_student()
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 _________ TestTransferCertificate.test_tc_removed_student_still_works __________
 tests/test_reports_tc_system.py:122: in test_tc_removed_student_still_works
     sid, _ = create_student()
-conftest.py:247: in _create
+conftest.py:364: in _create
     assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-__________________ TestYearEnd.test_create_new_academic_year ___________________
-tests/test_reports_tc_system.py:145: in test_create_new_academic_year
-    assert r.status_code in (200, 201), r.text
-E   AssertionError: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-______________ TestYearEnd.test_classes_auto_created_for_new_year ______________
-tests/test_reports_tc_system.py:159: in test_classes_auto_created_for_new_year
-    assert r.status_code == 200
-E   assert 401 == 200
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-__________________ TestYearEnd.test_promote_class1_to_class2 ___________________
-tests/test_reports_tc_system.py:198: in test_promote_class1_to_class2
-    cls1 = next((c for c in classes if c["name"] == "1"), None)
-tests/test_reports_tc_system.py:198: in <genexpr>
-    cls1 = next((c for c in classes if c["name"] == "1"), None)
-E   TypeError: string indices must be integers, not 'str'
-_________________ TestYearEnd.test_promote_class10_shows_error _________________
-tests/test_reports_tc_system.py:212: in test_promote_class10_shows_error
-    cls10 = next((c for c in classes if c["name"] == "10"), None)
-tests/test_reports_tc_system.py:212: in <genexpr>
-    cls10 = next((c for c in classes if c["name"] == "10"), None)
-E   TypeError: string indices must be integers, not 'str'
-______________ TestSystemIntegration.test_full_student_lifecycle _______________
-tests/test_reports_tc_system.py:241: in test_full_student_lifecycle
-    assert r.status_code in (200, 201), "Student creation failed"
-E   AssertionError: Student creation failed
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-_________________ TestStudentCRUD.test_add_student_all_fields __________________
-tests/test_students.py:22: in test_add_student_all_fields
-    assert r.status_code in (200, 201), r.text
-E   AssertionError: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-____________ TestStudentCRUD.test_add_student_only_required_fields _____________
-tests/test_students.py:32: in test_add_student_only_required_fields
-    assert r.status_code in (200, 201), r.text
-E   AssertionError: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-________________ TestStudentCRUD.test_add_student_gujarati_name ________________
-tests/test_students.py:40: in test_add_student_gujarati_name
-    assert r.status_code in (200, 201), r.text
-E   AssertionError: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-_______________ TestStudentCRUD.test_add_two_students_same_name ________________
-tests/test_students.py:52: in test_add_two_students_same_name
-    assert r1.status_code in (200, 201)
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-_____________ TestStudentCRUD.test_add_10_plus_students_same_class _____________
-tests/test_students.py:65: in test_add_10_plus_students_same_class
-    assert r.status_code in (200, 201), f"Failed on student {i}: {r.text}"
-E   AssertionError: Failed on student 0: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-________________ TestStudentCRUD.test_edit_student_change_class ________________
-tests/test_students.py:77: in test_edit_student_change_class
-    sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
-    assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-_______ TestStudentCRUD.test_edit_student_contact_validation_still_works _______
-tests/test_students.py:84: in test_edit_student_contact_validation_still_works
-    sid, _ = create_student()
-conftest.py:247: in _create
-    assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-_____________________ TestStudentCRUD.test_remove_student ______________________
-tests/test_students.py:90: in test_remove_student
-    sid, _ = create_student()
-conftest.py:247: in _create
-    assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-____________ TestStudentCRUD.test_removed_student_not_in_defaulters ____________
-tests/test_students.py:101: in test_removed_student_not_in_defaulters
-    sid, _ = create_student()
-conftest.py:247: in _create
-    assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-________ TestStudentCRUD.test_removed_student_not_in_attendance_roster _________
-tests/test_students.py:109: in test_removed_student_not_in_attendance_roster
-    sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
-    assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-____________ TestStudentCRUD.test_removed_student_not_in_marks_grid ____________
-tests/test_students.py:117: in test_removed_student_not_in_marks_grid
-    sid, _ = create_student(class_id=1)
-conftest.py:247: in _create
-    assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-___________ TestStudentCRUD.test_tc_still_works_for_removed_student ____________
-tests/test_students.py:131: in test_tc_still_works_for_removed_student
-    sid, _ = create_student()
-conftest.py:247: in _create
-    assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-_ TestStudentValidation.test_invalid_contact_number[0123456789-starts with 0] __
-tests/test_students.py:155: in test_invalid_contact_number
-    assert r.status_code in (400, 422), f"Should reject contact '{contact}' ({reason})"
-E   AssertionError: Should reject contact '0123456789' (starts with 0)
-E   assert 401 in (400, 422)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-____ TestStudentValidation.test_invalid_contact_number[123456789-9 digits] _____
-tests/test_students.py:155: in test_invalid_contact_number
-    assert r.status_code in (400, 422), f"Should reject contact '{contact}' ({reason})"
-E   AssertionError: Should reject contact '123456789' (9 digits)
-E   assert 401 in (400, 422)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-___ TestStudentValidation.test_invalid_contact_number[12345678901-11 digits] ___
-tests/test_students.py:155: in test_invalid_contact_number
-    assert r.status_code in (400, 422), f"Should reject contact '{contact}' ({reason})"
-E   AssertionError: Should reject contact '12345678901' (11 digits)
-E   assert 401 in (400, 422)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-__ TestStudentValidation.test_invalid_contact_number[abcdefghij-non-numeric] ___
-tests/test_students.py:155: in test_invalid_contact_number
-    assert r.status_code in (400, 422), f"Should reject contact '{contact}' ({reason})"
-E   AssertionError: Should reject contact 'abcdefghij' (non-numeric)
-E   assert 401 in (400, 422)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-____________ TestStudentValidation.test_invalid_roll_number[0-zero] ____________
-tests/test_students.py:165: in test_invalid_roll_number
-    assert r.status_code in (400, 422), f"Should reject roll number {roll} ({reason})"
-E   AssertionError: Should reject roll number 0 (zero)
-E   assert 401 in (400, 422)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-_________ TestStudentValidation.test_invalid_roll_number[-1-negative] __________
-tests/test_students.py:165: in test_invalid_roll_number
-    assert r.status_code in (400, 422), f"Should reject roll number {roll} ({reason})"
-E   AssertionError: Should reject roll number -1 (negative)
-E   assert 401 in (400, 422)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-_______________ TestStudentValidation.test_future_date_of_birth ________________
-tests/test_students.py:172: in test_future_date_of_birth
-    assert r.status_code in (400, 422), "Future DOB should be rejected"
-E   AssertionError: Future DOB should be rejected
-E   assert 401 in (400, 422)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-________________ TestStudentValidation.test_today_date_of_birth ________________
-tests/test_students.py:180: in test_today_date_of_birth
-    assert r.status_code in (200, 201), "Today's DOB should be accepted"
-E   AssertionError: Today's DOB should be accepted
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-_______ TestStudentValidation.test_same_class_same_roll_number_prevented _______
-tests/test_students.py:186: in test_same_class_same_roll_number_prevented
-    sid1, _ = create_student(class_id=1, roll_number=99)
-conftest.py:247: in _create
-    assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-______________ TestStudentValidation.test_student_very_long_name _______________
-tests/test_students.py:200: in test_student_very_long_name
-    assert r.status_code in (200, 201), f"Long name should save: {r.text}"
-E   AssertionError: Long name should save: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-___________________ TestStudentValidation.test_no_gr_number ____________________
-tests/test_students.py:208: in test_no_gr_number
-    assert r.status_code in (200, 201), r.text
-E   AssertionError: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-__________________ TestStudentValidation.test_no_roll_number ___________________
-tests/test_students.py:216: in test_no_roll_number
-    assert r.status_code in (200, 201), r.text
-E   AssertionError: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-_____________ TestStudentSearchFilter.test_search_by_partial_name ______________
-tests/test_students.py:246: in test_search_by_partial_name
-    assert r.status_code in (200, 201)
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-____________ TestStudentSearchFilter.test_search_by_contact_number _____________
-tests/test_students.py:258: in test_search_by_contact_number
-    sid, _ = create_student()
-conftest.py:247: in _create
-    assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-_______________ TestStudentSearchFilter.test_search_by_gr_number _______________
-tests/test_students.py:269: in test_search_by_gr_number
-    sid, _ = create_student(gr_number=gr)
-conftest.py:247: in _create
-    assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-_____________ TestStudentSearchFilter.test_search_case_insensitive _____________
-tests/test_students.py:280: in test_search_case_insensitive
-    assert r.status_code in (200, 201)
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-_________________ TestStudentSearchFilter.test_filter_by_class _________________
-tests/test_students.py:291: in test_filter_by_class
-    sid, _ = create_student(class_id=3)
-conftest.py:247: in _create
-    assert r.status_code in (200, 201), f"Student creation failed: {r.text}"
-E   AssertionError: Student creation failed: {"detail":"Not authenticated"}
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
-____________ TestStudentSearchFilter.test_filter_class_plus_search _____________
-tests/test_students.py:302: in test_filter_class_plus_search
-    assert r.status_code in (200, 201)
-E   assert 401 in (200, 201)
-E    +  where 401 = <Response [401 Unauthorized]>.status_code
+E   AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+E   assert 400 in (200, 201)
+E    +  where 400 = <Response [400 Bad Request]>.status_code
 __________________ TestStudentUI.test_student_list_page_loads __________________
 tests/test_students.py:325: in test_student_list_page_loads
     page.wait_for_selector("table, [data-testid='student-list'], .student-list", timeout=8000)
@@ -853,267 +566,150 @@ E     - waiting for locator("table, [data-testid='student-list'], .student-list"
 report saved to: reports/report.json
 - Generated html report: file:///Users/mohammad/school-sms/sms_tests/reports/report.html -
 =========================== short test summary info ============================
-FAILED tests/test_attendance.py::TestDailyAttendance::test_roster_shows_only_active_students - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_attendance.py::TestDailyAttendance::test_removed_student_not_on_roster - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_attendance.py::TestDailyAttendance::test_mark_all_present - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_attendance.py::TestDailyAttendance::test_mark_all_absent - TypeError: string indices must be integers, not 'str'
-FAILED tests/test_attendance.py::TestDailyAttendance::test_mixed_status_palt - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_attendance.py::TestDailyAttendance::test_save_attendance_past_date - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_attendance.py::TestDailyAttendance::test_save_attendance_future_date - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_attendance.py::TestDailyAttendance::test_attendance_prefilled_on_revisit - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_attendance.py::TestDailyAttendance::test_update_attendance_no_duplicates - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_attendance.py::TestMonthlySummary::test_no_attendance_shows_zero - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_attendance.py::TestMonthlySummary::test_100_percent_attendance - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_attendance.py::TestMonthlySummary::test_75_percent_boundary_not_highlighted - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_attendance.py::TestMonthlySummary::test_below_75_percent_highlighted - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_fees.py::TestFeeStructure::test_load_gseb_fee_heads - AssertionError: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_fees.py::TestFeeStructure::test_load_gseb_heads_twice_no_duplicates - TypeError: string indices must be integers, not 'str'
-FAILED tests/test_fees.py::TestFeeStructure::test_add_fee_amount_zero_rejected - AssertionError: Fee of 0 should be rejected
-assert 401 in (400, 422)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_fees.py::TestFeeStructure::test_add_fee_negative_amount_rejected - AssertionError: Negative fee should be rejected
-assert 401 in (400, 422)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_fees.py::TestFeeStructure::test_add_fee_large_amount - AssertionError: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_fees.py::TestFeeStructure::test_remove_fee_from_structure - assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_fees.py::TestFeeStructure::test_assign_fees_to_class_no_duplicates - assert 401 == 200
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_fees.py::TestPayments::test_payment_zero_rejected - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_fees.py::TestPayments::test_payment_negative_rejected - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_fees.py::TestDefaulters::test_zero_fees_student_not_in_defaulters - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_fees.py::TestDefaulters::test_filter_defaulters_by_class - assert 401 == 200
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestMarksGrid::test_load_gseb_subjects_std1 - TypeError: string indices must be integers, not 'str'
-FAILED tests/test_marks.py::TestMarksGrid::test_load_gseb_subjects_std10 - TypeError: string indices must be integers, not 'str'
-FAILED tests/test_marks.py::TestMarksGrid::test_load_subjects_twice_no_duplicates - TypeError: string indices must be integers, not 'str'
-FAILED tests/test_marks.py::TestMarksGrid::test_marks_entry_zero - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestMarksGrid::test_marks_entry_max - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestMarksGrid::test_marks_entry_exceeds_max_rejected - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestMarksGrid::test_marks_entry_decimal - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestMarksGrid::test_mark_student_absent - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestMarksGrid::test_marks_persist_after_save - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestMarksGrid::test_marks_update_correctly - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestMarksGrid::test_removed_student_not_in_marks_grid - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[95-100-A1-10.0] - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[85-100-A2-9.0] - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[75-100-B1-8.0] - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[65-100-B2-7.0] - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[55-100-C1-6.0] - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[45-100-C2-5.0] - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[35-100-D-4.0] - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[33-100-D-4.0] - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[32-100-E-0.0] - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[30-100-E-0.0] - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestGradeCalculation::test_perfect_score_cgpa_is_exactly_10 - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestGradeCalculation::test_absent_subject_causes_fail - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestGradeCalculation::test_pass_all_subjects - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestGradeCalculation::test_fail_one_subject_fails_overall - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestGradeCalculation::test_class_rank_top_scorer_is_rank1 - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestGradeCalculation::test_same_percentage_same_rank - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_marks.py::TestResultsPDF::test_marksheet_pdf_generates - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_reports_tc_system.py::TestReportPDFs::test_fee_defaulter_report_school_name - AssertionError: Unexpected status: 401
-assert 401 in (200, 404)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_reports_tc_system.py::TestTransferCertificate::test_tc_active_student - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_reports_tc_system.py::TestTransferCertificate::test_tc_already_issued_student - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_reports_tc_system.py::TestTransferCertificate::test_tc_shows_correct_class_and_year - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_reports_tc_system.py::TestTransferCertificate::test_tc_number_unique - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_reports_tc_system.py::TestTransferCertificate::test_tc_issue_date_is_today - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_reports_tc_system.py::TestTransferCertificate::test_tc_removed_student_still_works - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_reports_tc_system.py::TestYearEnd::test_create_new_academic_year - AssertionError: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_reports_tc_system.py::TestYearEnd::test_classes_auto_created_for_new_year - assert 401 == 200
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_reports_tc_system.py::TestYearEnd::test_promote_class1_to_class2 - TypeError: string indices must be integers, not 'str'
-FAILED tests/test_reports_tc_system.py::TestYearEnd::test_promote_class10_shows_error - TypeError: string indices must be integers, not 'str'
-FAILED tests/test_reports_tc_system.py::TestSystemIntegration::test_full_student_lifecycle - AssertionError: Student creation failed
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentCRUD::test_add_student_all_fields - AssertionError: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentCRUD::test_add_student_only_required_fields - AssertionError: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentCRUD::test_add_student_gujarati_name - AssertionError: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentCRUD::test_add_two_students_same_name - assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentCRUD::test_add_10_plus_students_same_class - AssertionError: Failed on student 0: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentCRUD::test_edit_student_change_class - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentCRUD::test_edit_student_contact_validation_still_works - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentCRUD::test_remove_student - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentCRUD::test_removed_student_not_in_defaulters - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentCRUD::test_removed_student_not_in_attendance_roster - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentCRUD::test_removed_student_not_in_marks_grid - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentCRUD::test_tc_still_works_for_removed_student - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentValidation::test_invalid_contact_number[0123456789-starts with 0] - AssertionError: Should reject contact '0123456789' (starts with 0)
-assert 401 in (400, 422)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentValidation::test_invalid_contact_number[123456789-9 digits] - AssertionError: Should reject contact '123456789' (9 digits)
-assert 401 in (400, 422)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentValidation::test_invalid_contact_number[12345678901-11 digits] - AssertionError: Should reject contact '12345678901' (11 digits)
-assert 401 in (400, 422)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentValidation::test_invalid_contact_number[abcdefghij-non-numeric] - AssertionError: Should reject contact 'abcdefghij' (non-numeric)
-assert 401 in (400, 422)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentValidation::test_invalid_roll_number[0-zero] - AssertionError: Should reject roll number 0 (zero)
-assert 401 in (400, 422)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentValidation::test_invalid_roll_number[-1-negative] - AssertionError: Should reject roll number -1 (negative)
-assert 401 in (400, 422)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentValidation::test_future_date_of_birth - AssertionError: Future DOB should be rejected
-assert 401 in (400, 422)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentValidation::test_today_date_of_birth - AssertionError: Today's DOB should be accepted
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentValidation::test_same_class_same_roll_number_prevented - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentValidation::test_student_very_long_name - AssertionError: Long name should save: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentValidation::test_no_gr_number - AssertionError: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentValidation::test_no_roll_number - AssertionError: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentSearchFilter::test_search_by_partial_name - assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentSearchFilter::test_search_by_contact_number - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentSearchFilter::test_search_by_gr_number - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentSearchFilter::test_search_case_insensitive - assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentSearchFilter::test_filter_by_class - AssertionError: Student creation failed: {"detail":"Not authenticated"}
-assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
-FAILED tests/test_students.py::TestStudentSearchFilter::test_filter_class_plus_search - assert 401 in (200, 201)
- +  where 401 = <Response [401 Unauthorized]>.status_code
+FAILED tests/test_attendance.py::TestDailyAttendance::test_roster_shows_only_active_students - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_attendance.py::TestDailyAttendance::test_removed_student_not_on_roster - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_attendance.py::TestDailyAttendance::test_mark_all_present - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_attendance.py::TestDailyAttendance::test_mixed_status_palt - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(2) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_attendance.py::TestDailyAttendance::test_save_attendance_past_date - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_attendance.py::TestDailyAttendance::test_save_attendance_future_date - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_attendance.py::TestDailyAttendance::test_attendance_prefilled_on_revisit - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_attendance.py::TestDailyAttendance::test_update_attendance_no_duplicates - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_attendance.py::TestMonthlySummary::test_no_attendance_shows_zero - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_attendance.py::TestMonthlySummary::test_100_percent_attendance - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_attendance.py::TestMonthlySummary::test_75_percent_boundary_not_highlighted - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_attendance.py::TestMonthlySummary::test_below_75_percent_highlighted - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_fees.py::TestFeeStructure::test_add_fee_large_amount - AssertionError: Internal Server Error
+assert 500 in (200, 201)
+ +  where 500 = <Response [500 Internal Server Error]>.status_code
+FAILED tests/test_fees.py::TestFeeStructure::test_remove_fee_from_structure - assert 500 in (200, 201)
+ +  where 500 = <Response [500 Internal Server Error]>.status_code
+FAILED tests/test_fees.py::TestPayments::test_payment_zero_rejected - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_fees.py::TestPayments::test_payment_negative_rejected - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_fees.py::TestDefaulters::test_zero_fees_student_not_in_defaulters - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestMarksGrid::test_marks_entry_zero - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestMarksGrid::test_marks_entry_max - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestMarksGrid::test_marks_entry_exceeds_max_rejected - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestMarksGrid::test_marks_entry_decimal - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestMarksGrid::test_mark_student_absent - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestMarksGrid::test_marks_persist_after_save - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestMarksGrid::test_marks_update_correctly - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestMarksGrid::test_removed_student_not_in_marks_grid - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[95-100-A1-10.0] - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[85-100-A2-9.0] - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[75-100-B1-8.0] - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[65-100-B2-7.0] - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[55-100-C1-6.0] - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[45-100-C2-5.0] - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[35-100-D-4.0] - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[33-100-D-4.0] - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[32-100-E-0.0] - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[30-100-E-0.0] - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestGradeCalculation::test_perfect_score_cgpa_is_exactly_10 - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestGradeCalculation::test_absent_subject_causes_fail - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestGradeCalculation::test_pass_all_subjects - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestGradeCalculation::test_fail_one_subject_fails_overall - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestGradeCalculation::test_class_rank_top_scorer_is_rank1 - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestGradeCalculation::test_same_percentage_same_rank - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_marks.py::TestResultsPDF::test_marksheet_pdf_generates - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_reports_tc_system.py::TestTransferCertificate::test_tc_active_student - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_reports_tc_system.py::TestTransferCertificate::test_tc_already_issued_student - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_reports_tc_system.py::TestTransferCertificate::test_tc_shows_correct_class_and_year - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_reports_tc_system.py::TestTransferCertificate::test_tc_number_unique - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_reports_tc_system.py::TestTransferCertificate::test_tc_issue_date_is_today - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
+FAILED tests/test_reports_tc_system.py::TestTransferCertificate::test_tc_removed_student_still_works - AssertionError: Student creation failed: {"detail":"insert or update on table \"students\" violates foreign key constraint \"students_class_id_fkey\"\nDETAIL:  Key (class_id)=(1) is not present in table \"classes\".\n"}
+assert 400 in (200, 201)
+ +  where 400 = <Response [400 Bad Request]>.status_code
 FAILED tests/test_students.py::TestStudentUI::test_student_list_page_loads - playwright._impl._errors.TimeoutError: Page.wait_for_selector: Timeout 8000ms exceeded.
 Call log:
   - waiting for locator("table, [data-testid='student-list'], .student-list") to be visible
-================== 95 failed, 28 passed, 12 skipped in 20.76s ==================
+================== 49 failed, 72 passed, 14 skipped in 22.51s ==================

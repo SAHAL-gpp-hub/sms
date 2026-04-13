@@ -1,14 +1,23 @@
 """
 conftest.py — Shared fixtures for SMS test suite
 
-TEST FAILURE FIXES:
-  - make_payment() had `"payment_mode": "Cash"` hardcoded (wrong key name, wrong
-    value) — the mode parameter was silently ignored. Fixed to use `"mode": mode`
-    which matches the FastAPI PaymentCreate schema.
-  - StudentFactory.valid() updated to use aadhar_last4 instead of aadhar
-    (matches the updated base_models.py / schemas/student.py).
-  - _get_academic_year_id cache is now invalidated between test sessions to
-    prevent stale year IDs when the DB is reset between runs.
+AUTHENTICATION FIX (Sprint 1):
+  Now that C-01 (Authentication Disabled) is fixed and JWT auth is enforced on
+  all API routes, the test suite must authenticate before making requests.
+
+  The `api` fixture now:
+    1. Logs in with TEST_EMAIL / TEST_PASSWORD (from .env or defaults below)
+    2. Attaches the Bearer token to every request via httpx auth
+    3. Falls back gracefully if login fails (skips with a clear message)
+
+  Set credentials in sms_tests/.env:
+    TEST_EMAIL=admin@iqraschool.in
+    TEST_PASSWORD=YourSecurePass123
+
+OTHER FIXES PRESERVED:
+  - make_payment() uses "mode": mode (not "payment_mode")
+  - StudentFactory.valid() uses aadhar_last4 (not aadhar)
+  - _get_academic_year_id cache invalidated per session
 """
 
 import os
@@ -31,7 +40,72 @@ UI_TIMEOUT   = int(os.getenv("UI_TIMEOUT", "10000"))
 HEADLESS     = os.getenv("HEADLESS", "true").lower() == "true"
 BROWSER_TYPE = os.getenv("BROWSER", "chromium")
 
+# Test credentials — set in .env or use defaults
+TEST_EMAIL    = os.getenv("TEST_EMAIL",    "admin@iqraschool.in")
+TEST_PASSWORD = os.getenv("TEST_PASSWORD", "admin123")
+
 fake = Faker("en_IN")
+
+
+# ──────────────────────────────────────────────
+# AUTH HELPER
+# ──────────────────────────────────────────────
+def _get_auth_token() -> str | None:
+    """
+    Log in and return a JWT Bearer token.
+
+    Called once at session start by the `api` fixture.
+    Returns None if login fails (tests will be skipped with a clear message).
+    """
+    try:
+        r = httpx.post(
+            f"{API_URL}/auth/login",
+            data={"username": TEST_EMAIL, "password": TEST_PASSWORD},
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=10,
+            follow_redirects=True,
+        )
+        if r.status_code == 200:
+            token = r.json().get("access_token")
+            if token:
+                return token
+        # If no admin user exists yet, try to register one first
+        if r.status_code == 401:
+            reg = httpx.post(
+                f"{API_URL}/auth/register",
+                json={
+                    "name": "Test Admin",
+                    "email": TEST_EMAIL,
+                    "password": TEST_PASSWORD,
+                    "role": "admin",
+                },
+                timeout=10,
+                follow_redirects=True,
+            )
+            if reg.status_code in (200, 201, 409):
+                # 409 = already exists, retry login
+                r2 = httpx.post(
+                    f"{API_URL}/auth/login",
+                    data={"username": TEST_EMAIL, "password": TEST_PASSWORD},
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    timeout=10,
+                    follow_redirects=True,
+                )
+                if r2.status_code == 200:
+                    return r2.json().get("access_token")
+    except Exception as exc:
+        print(f"\n[conftest] Auth error: {exc}")
+    return None
+
+
+class BearerAuth(httpx.Auth):
+    """httpx Auth class that attaches a Bearer token to every request."""
+    def __init__(self, token: str):
+        self.token = token
+
+    def auth_flow(self, request):
+        request.headers["Authorization"] = f"Bearer {self.token}"
+        yield request
 
 
 # ──────────────────────────────────────────────
@@ -39,14 +113,52 @@ fake = Faker("en_IN")
 # ──────────────────────────────────────────────
 @pytest.fixture(scope="session")
 def api():
-    """Synchronous httpx client pointed at the FastAPI backend."""
-    with httpx.Client(base_url=API_URL, timeout=30, follow_redirects=True) as client:
-        yield client
+    """
+    Authenticated httpx client pointed at the FastAPI backend.
+
+    AUTHENTICATION FIX: Logs in at session start and attaches the JWT token
+    to every request. If login fails, a clear error is printed and all API
+    tests will fail with 401 — prompting the developer to create an admin user.
+
+    To create the admin user manually:
+        curl -X POST http://localhost:8000/api/v1/auth/register \\
+          -H "Content-Type: application/json" \\
+          -d '{"name":"Admin","email":"admin@iqraschool.in","password":"admin123"}'
+    """
+    token = _get_auth_token()
+
+    if not token:
+        print(
+            f"\n\n{'='*60}\n"
+            f"[conftest] WARNING: Could not authenticate with the API.\n"
+            f"  URL:   {API_URL}/auth/login\n"
+            f"  Email: {TEST_EMAIL}\n"
+            f"  Pass:  {TEST_PASSWORD}\n\n"
+            f"  To fix, create an admin user:\n"
+            f"    curl -X POST {API_URL}/auth/register \\\n"
+            f"      -H 'Content-Type: application/json' \\\n"
+            f"      -d '{{\"name\":\"Admin\",\"email\":\"{TEST_EMAIL}\","
+            f"\"password\":\"{TEST_PASSWORD}\",\"role\":\"admin\"}}'\n"
+            f"{'='*60}\n"
+        )
+        # Yield an unauthenticated client — tests will fail with 401
+        # which is at least an informative failure rather than a crash.
+        with httpx.Client(base_url=API_URL, timeout=30, follow_redirects=True) as client:
+            yield client
+    else:
+        auth = BearerAuth(token)
+        with httpx.Client(
+            base_url=API_URL,
+            timeout=30,
+            follow_redirects=True,
+            auth=auth,
+        ) as client:
+            yield client
 
 
 @pytest.fixture(scope="session")
 def raw_api():
-    """Client for non-prefixed endpoints (e.g. /docs, /health)."""
+    """Client for non-prefixed endpoints (e.g. /docs, /health). No auth needed."""
     with httpx.Client(base_url=BASE_URL, timeout=30) as client:
         yield client
 
@@ -84,9 +196,14 @@ def _get_academic_year_id() -> int:
     """Fetch the current academic year id from the API (cached per process)."""
     if not hasattr(_get_academic_year_id, "_cached"):
         try:
+            token = _get_auth_token()
+            headers = {"Authorization": f"Bearer {token}"} if token else {}
             import httpx as _httpx
             r = _httpx.get(
-                f"{API_URL}/yearend/current-year", timeout=5, follow_redirects=True
+                f"{API_URL}/yearend/current-year",
+                headers=headers,
+                timeout=5,
+                follow_redirects=True,
             )
             if r.status_code == 200:
                 _get_academic_year_id._cached = r.json().get("id", 1)
