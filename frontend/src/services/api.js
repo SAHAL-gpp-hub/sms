@@ -1,18 +1,39 @@
 import axios from 'axios'
+import { getToken } from './auth'
 
 const api = axios.create({
     baseURL: '/api/v1',
     headers: { 'Content-Type': 'application/json' }
 })
 
+// C-01 FIX: Attach Bearer token to every outgoing request
+api.interceptors.request.use(config => {
+    const token = getToken()
+    if (token) config.headers.Authorization = `Bearer ${token}`
+    return config
+})
+
+export const authAPI = {
+    login: (email, password) => {
+        const form = new URLSearchParams()
+        form.append('username', email)
+        form.append('password', password)
+        return api.post('/auth/login', form, {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        })
+    },
+    register: (data) => api.post('/auth/register', data),
+    me: () => api.get('/auth/me'),
+}
+
 export const studentAPI = {
+    // M-01 FIX: list() now accepts limit/offset for pagination
     list: (params) => api.get('/students/', { params }),
     get: (id) => api.get(`/students/${id}`),
     create: (data) => api.post('/students/', data),
     update: (id, data) => api.put(`/students/${id}`, data),
     delete: (id) => api.delete(`/students/${id}`)
 }
-
 
 export const feeAPI = {
     // Fee Heads
@@ -77,6 +98,9 @@ export const attendanceAPI = {
 }
 
 export const yearendAPI = {
+    // C-02 FIX: preview endpoint for dry-run before promotion
+    previewPromotion: (classId, newYearId) =>
+        api.get(`/yearend/promote/${classId}/preview?new_academic_year_id=${newYearId}`),
     promoteClass: (classId, newYearId) =>
         api.post(`/yearend/promote/${classId}?new_academic_year_id=${newYearId}`),
     createNewYear: (data) => api.post('/yearend/new-year', data),
@@ -97,3 +121,14 @@ export const setupAPI = {
     }),
     getAcademicYears: () => api.get('/setup/academic-years')
 }
+
+// M-02 FIX: Shared Indian currency formatter — use this everywhere instead of raw .toLocaleString()
+export const formatINR = (amount) =>
+    new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+    }).format(Number(amount))
+
+export default api

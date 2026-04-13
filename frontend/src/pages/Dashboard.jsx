@@ -1,24 +1,21 @@
 import { useState, useEffect } from 'react'
-import { attendanceAPI } from '../services/api'
+import { attendanceAPI, formatINR } from '../services/api'
 import { Link } from 'react-router-dom'
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
+  // C-09 FIX: Add explicit error state so admin sees a retry banner, not blank dashes
+  const [error, setError] = useState(null)
 
   useEffect(() => {
-    attendanceAPI.getDashboardStats().then(r => {
-      setStats(r.data)
-      setLoading(false)
-    }).catch(() => setLoading(false))
+    attendanceAPI.getDashboardStats()
+      .then(r => { setStats(r.data); setLoading(false) })
+      .catch(() => {
+        setError('Could not load dashboard data. Check backend connection.')
+        setLoading(false)
+      })
   }, [])
-
-  const fmt = (n) => {
-    if (n === undefined || n === null) return '—'
-    if (n >= 100000) return `₹${(n/100000).toFixed(1)}L`
-    if (n >= 1000) return `₹${(n/1000).toFixed(1)}K`
-    return `₹${n.toFixed(0)}`
-  }
 
   const statCards = [
     {
@@ -36,7 +33,8 @@ export default function Dashboard() {
     },
     {
       label: 'Collected This Month',
-      value: loading ? '...' : fmt(stats?.fees_this_month),
+      // M-02 FIX: Use formatINR instead of raw number / fmt()
+      value: loading ? '...' : formatINR(stats?.fees_this_month ?? 0),
       sub: 'Fee payments received',
       color: 'text-emerald-600',
       bg: 'bg-emerald-50',
@@ -49,7 +47,7 @@ export default function Dashboard() {
     },
     {
       label: 'Outstanding Dues',
-      value: loading ? '...' : fmt(stats?.total_outstanding),
+      value: loading ? '...' : formatINR(stats?.total_outstanding ?? 0),
       sub: 'Total pending fees',
       color: 'text-rose-600',
       bg: 'bg-rose-50',
@@ -74,6 +72,24 @@ export default function Dashboard() {
       )
     },
   ]
+
+  // C-09 FIX: Show retry banner when backend is unreachable
+  if (error) return (
+    <div>
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold text-slate-800">Dashboard</h1>
+      </div>
+      <div className="bg-rose-50 border border-rose-200 rounded-xl p-8 text-center">
+        <p className="text-rose-700 font-semibold mb-4">{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-rose-600 text-white rounded-lg text-sm font-medium hover:bg-rose-700"
+        >
+          Retry
+        </button>
+      </div>
+    </div>
+  )
 
   return (
     <div>
@@ -120,7 +136,8 @@ export default function Dashboard() {
                     <p className="text-xs font-mono text-blue-600">{p.receipt_number}</p>
                     <p className="text-xs text-slate-400 mt-0.5">{p.date} · {p.mode}</p>
                   </div>
-                  <p className="text-sm font-bold text-emerald-600">₹{p.amount.toLocaleString()}</p>
+                  {/* M-02 FIX: formatINR */}
+                  <p className="text-sm font-bold text-emerald-600">{formatINR(p.amount)}</p>
                 </div>
               ))}
             </div>

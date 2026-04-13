@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import students, setup, fees, marks, pdf, attendance, yearend
+from app.routers import students, setup, fees, marks, pdf, attendance, yearend, auth
+from app.routers.auth import get_current_user
 from app.core.database import engine, Base
 from app.models.base_models import *  # noqa
 
@@ -20,17 +21,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(students.router)
-app.include_router(setup.router)
-app.include_router(fees.router)
-app.include_router(marks.router)
-app.include_router(pdf.router)
-app.include_router(attendance.router)
-app.include_router(yearend.router)
+# C-01 FIX: Auth router included first (unprotected — needed for login/register)
+app.include_router(auth.router)
+
+# C-01 FIX: All other routers now require a valid JWT token
+app.include_router(students.router,   dependencies=[Depends(get_current_user)])
+app.include_router(setup.router,      dependencies=[Depends(get_current_user)])
+app.include_router(fees.router,       dependencies=[Depends(get_current_user)])
+app.include_router(marks.router,      dependencies=[Depends(get_current_user)])
+app.include_router(pdf.router,        dependencies=[Depends(get_current_user)])
+app.include_router(attendance.router, dependencies=[Depends(get_current_user)])
+app.include_router(yearend.router,    dependencies=[Depends(get_current_user)])
+
 
 @app.get("/")
 def root():
     return {"status": "SMS Backend is running ✅"}
+
 
 @app.get("/health")
 def health():

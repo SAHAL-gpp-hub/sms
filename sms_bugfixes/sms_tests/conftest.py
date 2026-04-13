@@ -2,12 +2,12 @@
 conftest.py — Shared fixtures for SMS test suite
 
 TEST FAILURE FIXES:
-  - make_payment() had `"payment_mode": "Cash"` hardcoded (wrong key name, wrong
+    - make_payment() had `"payment_mode": "Cash"` hardcoded (wrong key name, wrong
     value) — the mode parameter was silently ignored. Fixed to use `"mode": mode`
     which matches the FastAPI PaymentCreate schema.
-  - StudentFactory.valid() updated to use aadhar_last4 instead of aadhar
+    - StudentFactory.valid() updated to use aadhar_last4 instead of aadhar
     (matches the updated base_models.py / schemas/student.py).
-  - _get_academic_year_id cache is now invalidated between test sessions to
+    - _get_academic_year_id cache is now invalidated between test sessions to
     prevent stale year IDs when the DB is reset between runs.
 """
 
