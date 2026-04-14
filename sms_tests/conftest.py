@@ -1,23 +1,15 @@
 """
 conftest.py — Shared fixtures for SMS test suite
 
-AUTHENTICATION FIX (Sprint 1):
-  Now that C-01 (Authentication Disabled) is fixed and JWT auth is enforced on
-  all API routes, the test suite must authenticate before making requests.
-
-  The `api` fixture now:
-    1. Logs in with TEST_EMAIL / TEST_PASSWORD (from .env or defaults below)
-    2. Attaches the Bearer token to every request via httpx auth
-    3. Falls back gracefully if login fails (skips with a clear message)
-
-  Set credentials in sms_tests/.env:
-    TEST_EMAIL=admin@iqraschool.in
-    TEST_PASSWORD=YourSecurePass123
-
-OTHER FIXES PRESERVED:
-  - make_payment() uses "mode": mode (not "payment_mode")
-  - StudentFactory.valid() uses aadhar_last4 (not aadhar)
-  - _get_academic_year_id cache invalidated per session
+FIXES IN THIS VERSION:
+  1. AUTH: Logs in at session start, attaches Bearer token to all requests.
+  2. SEED: Calls /setup/seed at session start so classes 1-10 + academic year
+     exist before any test tries to create a student with class_id=1.
+  3. CLASS_ID RESOLUTION: Looks up actual DB ids for classes after seeding
+     instead of hardcoding integer 1, which may not match the DB sequence.
+  4. FEE FACTORY: Uses real seeded class id.
+  5. make_payment(): Uses correct "mode" key (not "payment_mode").
+  6. StudentFactory: Uses aadhar_last4 (not aadhar).
 """
 
 import os
@@ -25,7 +17,7 @@ import pytest
 import httpx
 from faker import Faker
 from dotenv import load_dotenv
-from playwright.sync_api import sync_playwright, Page, expect
+from playwright.sync_api import sync_playwright, Page
 from datetime import date
 
 load_dotenv()
@@ -40,66 +32,51 @@ UI_TIMEOUT   = int(os.getenv("UI_TIMEOUT", "10000"))
 HEADLESS     = os.getenv("HEADLESS", "true").lower() == "true"
 BROWSER_TYPE = os.getenv("BROWSER", "chromium")
 
-# Test credentials — set in .env or use defaults
 TEST_EMAIL    = os.getenv("TEST_EMAIL",    "admin@iqraschool.in")
 TEST_PASSWORD = os.getenv("TEST_PASSWORD", "admin123")
 
 fake = Faker("en_IN")
 
+# Session-level shared state populated by the `api` fixture
+_SESSION = {"token": None, "class_id": None, "class_id_2": None, "year_id": 1}
+
 
 # ──────────────────────────────────────────────
-# AUTH HELPER
+# AUTH HELPERS
 # ──────────────────────────────────────────────
 def _get_auth_token() -> str | None:
-    """
-    Log in and return a JWT Bearer token.
-
-    Called once at session start by the `api` fixture.
-    Returns None if login fails (tests will be skipped with a clear message).
-    """
+    """Login and return JWT. Auto-registers admin if not yet created."""
     try:
         r = httpx.post(
             f"{API_URL}/auth/login",
             data={"username": TEST_EMAIL, "password": TEST_PASSWORD},
             headers={"Content-Type": "application/x-www-form-urlencoded"},
-            timeout=10,
-            follow_redirects=True,
+            timeout=10, follow_redirects=True,
         )
         if r.status_code == 200:
-            token = r.json().get("access_token")
-            if token:
-                return token
-        # If no admin user exists yet, try to register one first
-        if r.status_code == 401:
-            reg = httpx.post(
-                f"{API_URL}/auth/register",
-                json={
-                    "name": "Test Admin",
-                    "email": TEST_EMAIL,
-                    "password": TEST_PASSWORD,
-                    "role": "admin",
-                },
-                timeout=10,
-                follow_redirects=True,
-            )
-            if reg.status_code in (200, 201, 409):
-                # 409 = already exists, retry login
-                r2 = httpx.post(
-                    f"{API_URL}/auth/login",
-                    data={"username": TEST_EMAIL, "password": TEST_PASSWORD},
-                    headers={"Content-Type": "application/x-www-form-urlencoded"},
-                    timeout=10,
-                    follow_redirects=True,
-                )
-                if r2.status_code == 200:
-                    return r2.json().get("access_token")
+            return r.json().get("access_token")
+
+        # Try registering then logging in
+        httpx.post(
+            f"{API_URL}/auth/register",
+            json={"name": "Test Admin", "email": TEST_EMAIL,
+                  "password": TEST_PASSWORD, "role": "admin"},
+            timeout=10, follow_redirects=True,
+        )
+        r2 = httpx.post(
+            f"{API_URL}/auth/login",
+            data={"username": TEST_EMAIL, "password": TEST_PASSWORD},
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=10, follow_redirects=True,
+        )
+        if r2.status_code == 200:
+            return r2.json().get("access_token")
     except Exception as exc:
         print(f"\n[conftest] Auth error: {exc}")
     return None
 
 
 class BearerAuth(httpx.Auth):
-    """httpx Auth class that attaches a Bearer token to every request."""
     def __init__(self, token: str):
         self.token = token
 
@@ -109,120 +86,173 @@ class BearerAuth(httpx.Auth):
 
 
 # ──────────────────────────────────────────────
+# DATABASE SEEDING
+# ──────────────────────────────────────────────
+def _seed_and_resolve(token: str) -> None:
+    """
+    Seed the database (creates academic year 2025-26 and classes Nursery–10),
+    then resolve the real DB primary key ids for classes "1" and "2".
+
+    The classes table uses a serial PK — after a database reset the ids may
+    start from any number, NOT necessarily 1. Hardcoding class_id=1 in tests
+    breaks as soon as the sequence has advanced. This function looks up the
+    actual ids after seeding.
+    """
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 1. Trigger seed endpoint
+    try:
+        r = httpx.post(
+            f"{API_URL}/setup/seed",
+            headers=headers, timeout=15, follow_redirects=True,
+        )
+        print(f"\n[conftest] /setup/seed → {r.status_code}")
+    except Exception as exc:
+        print(f"[conftest] seed request failed: {exc}")
+
+    # 2. Fetch classes to resolve real ids
+    try:
+        r = httpx.get(
+            f"{API_URL}/setup/classes",
+            headers=headers, timeout=10, follow_redirects=True,
+        )
+        if r.status_code == 200:
+            classes = r.json()
+            for c in classes:
+                if c.get("name") == "1" and _SESSION["class_id"] is None:
+                    _SESSION["class_id"] = c["id"]
+                if c.get("name") == "2" and _SESSION["class_id_2"] is None:
+                    _SESSION["class_id_2"] = c["id"]
+            # Fallback: use first class if "1" not found
+            if _SESSION["class_id"] is None and classes:
+                _SESSION["class_id"] = classes[0]["id"]
+            if _SESSION["class_id_2"] is None and len(classes) > 1:
+                _SESSION["class_id_2"] = classes[1]["id"]
+            print(
+                f"[conftest] resolved class_id={_SESSION['class_id']} "
+                f"class_id_2={_SESSION['class_id_2']}"
+            )
+    except Exception as exc:
+        print(f"[conftest] class fetch failed: {exc}")
+
+    # 3. Resolve current academic year id
+    try:
+        r = httpx.get(
+            f"{API_URL}/yearend/current-year",
+            headers=headers, timeout=10, follow_redirects=True,
+        )
+        if r.status_code == 200:
+            _SESSION["year_id"] = r.json().get("id", 1)
+            print(f"[conftest] academic_year_id={_SESSION['year_id']}")
+    except Exception as exc:
+        print(f"[conftest] year fetch failed: {exc}")
+
+
+# ──────────────────────────────────────────────
 # API CLIENT FIXTURE
 # ──────────────────────────────────────────────
 @pytest.fixture(scope="session")
 def api():
     """
-    Authenticated httpx client pointed at the FastAPI backend.
-
-    AUTHENTICATION FIX: Logs in at session start and attaches the JWT token
-    to every request. If login fails, a clear error is printed and all API
-    tests will fail with 401 — prompting the developer to create an admin user.
-
-    To create the admin user manually:
-        curl -X POST http://localhost:8000/api/v1/auth/register \\
-          -H "Content-Type: application/json" \\
-          -d '{"name":"Admin","email":"admin@iqraschool.in","password":"admin123"}'
+    Authenticated httpx client. At session start:
+      - Logs in (auto-registers admin if needed)
+      - Seeds the DB so classes/year exist
+      - Resolves real class ids into _SESSION
     """
     token = _get_auth_token()
 
     if not token:
         print(
-            f"\n\n{'='*60}\n"
-            f"[conftest] WARNING: Could not authenticate with the API.\n"
-            f"  URL:   {API_URL}/auth/login\n"
-            f"  Email: {TEST_EMAIL}\n"
-            f"  Pass:  {TEST_PASSWORD}\n\n"
-            f"  To fix, create an admin user:\n"
+            f"\n{'='*60}\n"
+            f"[conftest] WARNING: Could not authenticate.\n"
+            f"  URL:      {API_URL}/auth/login\n"
+            f"  Email:    {TEST_EMAIL}\n"
+            f"  Password: {TEST_PASSWORD}\n"
+            f"\n  To create an admin user manually:\n"
             f"    curl -X POST {API_URL}/auth/register \\\n"
             f"      -H 'Content-Type: application/json' \\\n"
             f"      -d '{{\"name\":\"Admin\",\"email\":\"{TEST_EMAIL}\","
             f"\"password\":\"{TEST_PASSWORD}\",\"role\":\"admin\"}}'\n"
             f"{'='*60}\n"
         )
-        # Yield an unauthenticated client — tests will fail with 401
-        # which is at least an informative failure rather than a crash.
         with httpx.Client(base_url=API_URL, timeout=30, follow_redirects=True) as client:
             yield client
-    else:
-        auth = BearerAuth(token)
-        with httpx.Client(
-            base_url=API_URL,
-            timeout=30,
-            follow_redirects=True,
-            auth=auth,
-        ) as client:
-            yield client
+        return
+
+    _SESSION["token"] = token
+    _seed_and_resolve(token)
+
+    with httpx.Client(
+        base_url=API_URL, timeout=30,
+        follow_redirects=True, auth=BearerAuth(token),
+    ) as client:
+        yield client
 
 
 @pytest.fixture(scope="session")
 def raw_api():
-    """Client for non-prefixed endpoints (e.g. /docs, /health). No auth needed."""
+    """Unauthenticated client for /docs, /health etc."""
     with httpx.Client(base_url=BASE_URL, timeout=30) as client:
         yield client
 
 
 # ──────────────────────────────────────────────
-# PLAYWRIGHT BROWSER FIXTURES
+# PLAYWRIGHT
 # ──────────────────────────────────────────────
 @pytest.fixture(scope="session")
 def browser_context():
     with sync_playwright() as p:
-        browser_launcher = getattr(p, BROWSER_TYPE)
-        browser = browser_launcher.launch(headless=HEADLESS)
-        context = browser.new_context(
+        launcher = getattr(p, BROWSER_TYPE)
+        browser = launcher.launch(headless=HEADLESS)
+        ctx = browser.new_context(
             base_url=FRONTEND_URL,
             viewport={"width": 1440, "height": 900},
         )
-        context.set_default_timeout(UI_TIMEOUT)
-        yield context
-        context.close()
+        ctx.set_default_timeout(UI_TIMEOUT)
+        yield ctx
+        ctx.close()
         browser.close()
 
 
 @pytest.fixture
 def page(browser_context):
-    """Fresh page per test."""
     pg = browser_context.new_page()
     yield pg
     pg.close()
 
 
 # ──────────────────────────────────────────────
-# TEST DATA FACTORY
+# HELPERS
 # ──────────────────────────────────────────────
-def _get_academic_year_id() -> int:
-    """Fetch the current academic year id from the API (cached per process)."""
-    if not hasattr(_get_academic_year_id, "_cached"):
-        try:
-            token = _get_auth_token()
-            headers = {"Authorization": f"Bearer {token}"} if token else {}
-            import httpx as _httpx
-            r = _httpx.get(
-                f"{API_URL}/yearend/current-year",
-                headers=headers,
-                timeout=5,
-                follow_redirects=True,
-            )
-            if r.status_code == 200:
-                _get_academic_year_id._cached = r.json().get("id", 1)
-            else:
-                _get_academic_year_id._cached = 1
-        except Exception:
-            _get_academic_year_id._cached = 1
-    return _get_academic_year_id._cached
-
-
 def today_str() -> str:
     return date.today().isoformat()
 
 
+def _resolve_class_id(raw: int | None) -> int:
+    """
+    Map caller-supplied class_id (1 or 2, meaning 'Std 1' or 'Std 2') to the
+    real DB primary key discovered during seeding.
+    """
+    if raw is None or raw == 1:
+        return _SESSION.get("class_id") or 1
+    if raw == 2:
+        return _SESSION.get("class_id_2") or _SESSION.get("class_id") or 1
+    # For values 3+, caller is responsible — pass through unchanged
+    return raw
+
+
+# ──────────────────────────────────────────────
+# FACTORIES
+# ──────────────────────────────────────────────
 class StudentFactory:
     @staticmethod
     def valid(**overrides):
         first = fake.first_name()
         last  = fake.last_name()
+
+        raw_class_id = overrides.pop("class_id", None)
+        resolved_cid = _resolve_class_id(raw_class_id)
+
         data = {
             "name_en":          f"{first} {last}",
             "name_gu":          "રાહુલ શાહ",
@@ -231,18 +261,18 @@ class StudentFactory:
             "contact":          f"9{fake.numerify('#########')}",
             "father_name":      f"{fake.first_name()} {last}",
             "admission_date":   "2023-06-01",
-            "academic_year_id": _get_academic_year_id(),
+            "academic_year_id": _SESSION.get("year_id", 1),
             "address":          fake.address(),
             "gr_number":        fake.bothify("GR###??").upper(),
             "roll_number":      fake.random_int(min=1, max=60),
-            "class_id":         1,
+            "class_id":         resolved_cid,
         }
-        # Map legacy override keys to API keys
-        first_override = overrides.pop("first_name", None)
-        last_override  = overrides.pop("last_name",  None)
-        if first_override or last_override:
-            data["name_en"] = f"{first_override or first} {last_override or last}"
 
+        # Legacy key mapping
+        fn = overrides.pop("first_name", None)
+        ln = overrides.pop("last_name",  None)
+        if fn or ln:
+            data["name_en"] = f"{fn or first} {ln or last}"
         if "date_of_birth" in overrides:
             overrides["dob"] = overrides.pop("date_of_birth")
         if "contact_number" in overrides:
@@ -251,8 +281,6 @@ class StudentFactory:
             fgu = overrides.pop("first_name_gujarati", "")
             lgu = overrides.pop("last_name_gujarati", "")
             overrides["name_gu"] = f"{fgu} {lgu}".strip()
-
-        # FIX: schema now uses aadhar_last4, not aadhar
         if "aadhar" in overrides:
             full = str(overrides.pop("aadhar") or "")
             overrides["aadhar_last4"] = full[-4:] if len(full) >= 4 else None
@@ -264,6 +292,10 @@ class StudentFactory:
     def minimal(**overrides):
         first = fake.first_name()
         last  = fake.last_name()
+
+        raw_class_id = overrides.pop("class_id", None)
+        resolved_cid = _resolve_class_id(raw_class_id)
+
         data = {
             "name_en":          f"{first} {last}",
             "name_gu":          "રાહુલ શાહ",
@@ -272,13 +304,13 @@ class StudentFactory:
             "contact":          f"9{fake.numerify('#########')}",
             "father_name":      f"{fake.first_name()} {last}",
             "admission_date":   "2023-06-01",
-            "academic_year_id": _get_academic_year_id(),
-            "class_id":         1,
+            "academic_year_id": _SESSION.get("year_id", 1),
+            "class_id":         resolved_cid,
         }
-        first_override = overrides.pop("first_name", None)
-        last_override  = overrides.pop("last_name",  None)
-        if first_override or last_override:
-            data["name_en"] = f"{first_override or first} {last_override or last}"
+        fn = overrides.pop("first_name", None)
+        ln = overrides.pop("last_name",  None)
+        if fn or ln:
+            data["name_en"] = f"{fn or first} {ln or last}"
         if "contact_number" in overrides:
             overrides["contact"] = overrides.pop("contact_number")
         if "aadhar" in overrides:
@@ -294,10 +326,10 @@ class FeeFactory:
         data = {
             "fee_head_id":      overrides.pop("fee_head_id", 1),
             "amount":           5000,
-            "class_id":         1,
-            "academic_year_id": _get_academic_year_id(),
+            "class_id":         _SESSION.get("class_id") or 1,
+            "academic_year_id": _SESSION.get("year_id", 1),
         }
-        overrides.pop("fee_head",     None)
+        overrides.pop("fee_head", None)
         overrides.pop("academic_year", None)
         data.update(overrides)
         return data
@@ -310,7 +342,6 @@ class PaymentFactory:
             "student_id":     student_id,
             "student_fee_id": fee_id,
             "amount_paid":    amount,
-            # FIX: was "payment_mode" (wrong key, ignored by API) — now "mode"
             "mode":           mode,
             "payment_date":   today_str(),
         }
@@ -319,19 +350,10 @@ class PaymentFactory:
 
 
 def make_payment(student_fee_id: int, amount: float, mode: str = "Cash") -> dict:
-    """
-    TEST FAILURE FIX: The old make_payment() used key "payment_mode" which
-    does not match the FastAPI PaymentCreate schema field "mode", so the
-    mode argument was silently ignored and all payments were saved as Cash.
-
-    Also added payment_date (required by the schema) which was missing.
-    """
     return {
         "student_fee_id": student_fee_id,
         "amount_paid":    amount,
-        # FIX: correct field name is "mode" (was "payment_mode")
         "mode":           mode,
-        # FIX: payment_date is required — was missing in original conftest
         "payment_date":   today_str(),
     }
 
@@ -352,7 +374,7 @@ def payment_factory():
 
 
 # ──────────────────────────────────────────────
-# HELPER: create a student and return its ID
+# create_student fixture
 # ──────────────────────────────────────────────
 @pytest.fixture
 def create_student(api):
@@ -368,7 +390,6 @@ def create_student(api):
 
     yield _create
 
-    # Teardown: mark students as Left after each test
     for sid in created_ids:
         try:
             api.delete(f"/students/{sid}")
@@ -377,7 +398,7 @@ def create_student(api):
 
 
 # ──────────────────────────────────────────────
-# HELPER: navigate UI and wait for page load
+# UI helper
 # ──────────────────────────────────────────────
 def goto(page: Page, path: str):
     page.goto(f"{FRONTEND_URL}/{path.lstrip('/')}")

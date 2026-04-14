@@ -10,3 +10,5 @@ __pycache__/
 
 # Tests
 sms_tests/venv/
+# Added by code-review-graph
+.code-review-graph/

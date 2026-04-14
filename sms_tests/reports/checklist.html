@@ -35,24 +35,24 @@
   .test-row.skip .status { background: #f1f5f9; color: #64748b; }
   .test-row.pending .status { background: #f1f5f9; color: #94a3b8; }
   .progress-bar { height: 8px; background: #e2e8f0; border-radius: 4px; margin: 8px 0; overflow: hidden; }
-  .progress-fill { height: 100%; background: #22c55e; border-radius: 4px; width: 18%; }
+  .progress-fill { height: 100%; background: #22c55e; border-radius: 4px; width: 27%; }
   .footer { text-align: center; padding: 24px; color: #94a3b8; font-size: 13px; }
 </style>
 </head>
 <body>
 <div class="header">
   <h1>🏫 SMS Test Checklist Report</h1>
-  <div class="meta">Generated: 13 Apr 2026 20:30:44</div>
+  <div class="meta">Generated: 14 Apr 2026 15:03:12</div>
   <div class="progress-bar" style="margin-top:16px; width:400px">
     <div class="progress-fill"></div>
   </div>
-  <div class="meta" style="margin-top:4px">18% passed (72/405)</div>
+  <div class="meta" style="margin-top:4px">27% passed (111/405)</div>
 </div>
 <div class="summary">
   <div class="stat"><div class="num blue">405</div><div class="lbl">Total Tests</div></div>
-  <div class="stat"><div class="num green">72</div><div class="lbl">Passed ✅</div></div>
-  <div class="stat"><div class="num red">49</div><div class="lbl">Failed ❌</div></div>
-  <div class="stat"><div class="num yellow">14</div><div class="lbl">Skipped ⏭️</div></div>
+  <div class="stat"><div class="num green">111</div><div class="lbl">Passed ✅</div></div>
+  <div class="stat"><div class="num red">13</div><div class="lbl">Failed ❌</div></div>
+  <div class="stat"><div class="num yellow">11</div><div class="lbl">Skipped ⏭️</div></div>
 </div>
 <div class="container">
   <table>
@@ -77,10 +77,10 @@
                     <td class="label">Add two students same name — both save</td>
                     <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row pass">
-                    <td class="icon">✅</td>
+                <tr class="test-row fail">
+                    <td class="icon">❌</td>
                     <td class="label">Add 10+ students to same class — all appear</td>
-                    <td class="status">PASSED</td>
+                    <td class="status">FAILED</td>
                 </tr>
                 <tr class="test-row pass">
                     <td class="icon">✅</td>
@@ -107,10 +107,10 @@
                     <td class="label">Removed student NOT in attendance roster</td>
                     <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Removed student NOT in marks grid</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
                 <tr class="test-row pass">
                     <td class="icon">✅</td>
@@ -197,10 +197,10 @@
                     <td class="label">Filter by class — only that class shown</td>
                     <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row pass">
-                    <td class="icon">✅</td>
+                <tr class="test-row fail">
+                    <td class="icon">❌</td>
                     <td class="label">Filter class + search — both apply</td>
-                    <td class="status">PASSED</td>
+                    <td class="status">FAILED</td>
                 </tr><tr class="section-header"><td colspan="3">💰 Fee Structure</td></tr><tr class="subsection-header"><td colspan="3">&nbsp;&nbsp;&nbsp;Setup</td></tr>
                 <tr class="test-row pass">
                     <td class="icon">✅</td>
@@ -222,15 +222,15 @@
                     <td class="label">Fee negative amount — rejected</td>
                     <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Fee ₹999999 — saves correctly</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Remove fee — disappears from table</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
                 <tr class="test-row pass">
                     <td class="icon">✅</td>
@@ -247,15 +247,15 @@
                     <td class="label">Payment = exact balance — balance becomes 0</td>
                     <td class="status">SKIPPED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Payment = 0 — rejected</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Payment negative — rejected</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
                 <tr class="test-row skip">
                     <td class="icon">⏭️</td>
@@ -292,10 +292,10 @@
                     <td class="label">Partial payment — in defaulters with correct balance</td>
                     <td class="status">SKIPPED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">0 fees assigned — NOT in defaulters</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
                 <tr class="test-row pass">
                     <td class="icon">✅</td>
@@ -307,135 +307,135 @@
                     <td class="label">₹0.01 balance — still in defaulters</td>
                     <td class="status">SKIPPED</td>
                 </tr><tr class="section-header"><td colspan="3">📝 Marks Entry</td></tr><tr class="subsection-header"><td colspan="3">&nbsp;&nbsp;&nbsp;Grid</td></tr>
-                <tr class="test-row skip">
-                    <td class="icon">⏭️</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Load GSEB subjects Std 1 — 5 subjects</td>
-                    <td class="status">SKIPPED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row skip">
-                    <td class="icon">⏭️</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Load GSEB subjects Std 10 — 7 subjects + practical</td>
-                    <td class="status">SKIPPED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row skip">
-                    <td class="icon">⏭️</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Load subjects twice — no duplicates</td>
-                    <td class="status">SKIPPED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Marks = 0 — saves (valid, not absent)</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Marks = 100 (max) — saves correctly</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Marks > max (101) — rejected</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Decimal marks (45.5) — saves</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Mark absent — is_absent=True saved</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
                 <tr class="test-row fail">
                     <td class="icon">❌</td>
                     <td class="label">Marks persist after save</td>
                     <td class="status">FAILED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Edit marks — updates, not duplicates</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr><tr class="subsection-header"><td colspan="3">&nbsp;&nbsp;&nbsp;Grades</td></tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">95/100 → A1, GP 10.0</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">85/100 → A2, GP 9.0</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">75/100 → B1, GP 8.0</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">65/100 → B2, GP 7.0</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">55/100 → C1, GP 6.0</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">45/100 → C2, GP 5.0</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">35/100 → D, GP 4.0</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">33/100 → D (passing threshold)</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">32/100 → E (just below)</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">30/100 → E (fail)</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Absent in 1 subject → FAIL</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Pass all subjects → PASS</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Fail 1 subject → FAIL</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Top scorer = Rank 1</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Same % → same or consecutive rank</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr><tr class="subsection-header"><td colspan="3">&nbsp;&nbsp;&nbsp;Results & PDF</td></tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Marksheet PDF generates</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
                 <tr class="test-row pass">
                     <td class="icon">✅</td>
@@ -457,35 +457,35 @@
                     <td class="label">Roster shows only ACTIVE students</td>
                     <td class="status">FAILED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Removed student NOT on roster</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Mark all Present</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
                 <tr class="test-row skip">
                     <td class="icon">⏭️</td>
                     <td class="label">Mark all Absent</td>
                     <td class="status">SKIPPED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Mix P/A/L/OL saves correctly</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Save for past date (backdating)</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Save for future date — documented</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
                 <tr class="test-row fail">
                     <td class="icon">❌</td>
@@ -502,15 +502,15 @@
                     <td class="label">Empty class — empty state, not error</td>
                     <td class="status">PASSED</td>
                 </tr><tr class="subsection-header"><td colspan="3">&nbsp;&nbsp;&nbsp;Monthly Summary</td></tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">No attendance — shows 0</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">100% attendance correct</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
                 <tr class="test-row fail">
                     <td class="icon">❌</td>
@@ -567,40 +567,40 @@
                     <td class="label">Class result — no marks (no crash)</td>
                     <td class="status">PASSED</td>
                 </tr><tr class="section-header"><td colspan="3">📄 Transfer Certificate</td></tr><tr class="subsection-header"><td colspan="3">&nbsp;&nbsp;&nbsp;TC</td></tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">TC for active student — correct details</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">TC for already-issued student — still works</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">TC shows correct class and year</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">TC number unique per student</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">TC issue date = today</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row skip">
-                    <td class="icon">⏭️</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">TC no GR number → shows '—', not crash</td>
-                    <td class="status">SKIPPED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">TC for removed student — still works</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr><tr class="section-header"><td colspan="3">📚 Year-End</td></tr><tr class="subsection-header"><td colspan="3">&nbsp;&nbsp;&nbsp;Management</td></tr>
                 <tr class="test-row pass">
                     <td class="icon">✅</td>
@@ -667,20 +667,20 @@
                     <td class="label">Dashboard loads</td>
                     <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row pass">
-                    <td class="icon">✅</td>
+                <tr class="test-row fail">
+                    <td class="icon">❌</td>
                     <td class="label">Browser back button works</td>
-                    <td class="status">PASSED</td>
+                    <td class="status">FAILED</td>
                 </tr>
                 <tr class="test-row pass">
                     <td class="icon">✅</td>
                     <td class="label">Direct URL access works</td>
                     <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row pass">
-                    <td class="icon">✅</td>
+                <tr class="test-row fail">
+                    <td class="icon">❌</td>
                     <td class="label">Page refresh stays on same route</td>
-                    <td class="status">PASSED</td>
+                    <td class="status">FAILED</td>
                 </tr>
                 <tr class="test-row pass">
                     <td class="icon">✅</td>
@@ -689,6 +689,6 @@
                 </tr>
   </table>
 </div>
-<div class="footer">SMS Automated Test Suite · 13 Apr 2026 20:30:44</div>
+<div class="footer">SMS Automated Test Suite · 14 Apr 2026 15:03:12</div>
 </body>
 </html>
