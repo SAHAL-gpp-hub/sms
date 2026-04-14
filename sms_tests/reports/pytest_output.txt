@@ -8,20 +8,20 @@ testpaths: tests
 plugins: playwright-0.5.1, Faker-25.0.0, html-4.1.1, json-report-1.5.0, metadata-3.1.1, base-url-2.1.0, anyio-4.13.0
 collecting ... collected 135 items
 
-tests/test_attendance.py::TestDailyAttendance::test_roster_shows_only_active_students FAILED [  0%]
+tests/test_attendance.py::TestDailyAttendance::test_roster_shows_only_active_students PASSED [  0%]
 tests/test_attendance.py::TestDailyAttendance::test_removed_student_not_on_roster PASSED [  1%]
 tests/test_attendance.py::TestDailyAttendance::test_mark_all_present PASSED [  2%]
-tests/test_attendance.py::TestDailyAttendance::test_mark_all_absent SKIPPED [  2%]
+tests/test_attendance.py::TestDailyAttendance::test_mark_all_absent PASSED [  2%]
 tests/test_attendance.py::TestDailyAttendance::test_mixed_status_palt PASSED [  3%]
 tests/test_attendance.py::TestDailyAttendance::test_save_attendance_past_date PASSED [  4%]
 tests/test_attendance.py::TestDailyAttendance::test_save_attendance_future_date PASSED [  5%]
-tests/test_attendance.py::TestDailyAttendance::test_attendance_prefilled_on_revisit FAILED [  5%]
-tests/test_attendance.py::TestDailyAttendance::test_update_attendance_no_duplicates FAILED [  6%]
+tests/test_attendance.py::TestDailyAttendance::test_attendance_prefilled_on_revisit PASSED [  5%]
+tests/test_attendance.py::TestDailyAttendance::test_update_attendance_no_duplicates PASSED [  6%]
 tests/test_attendance.py::TestDailyAttendance::test_empty_class_shows_empty_state PASSED [  7%]
 tests/test_attendance.py::TestMonthlySummary::test_no_attendance_shows_zero PASSED [  8%]
 tests/test_attendance.py::TestMonthlySummary::test_100_percent_attendance PASSED [  8%]
-tests/test_attendance.py::TestMonthlySummary::test_75_percent_boundary_not_highlighted FAILED [  9%]
-tests/test_attendance.py::TestMonthlySummary::test_below_75_percent_highlighted FAILED [ 10%]
+tests/test_attendance.py::TestMonthlySummary::test_75_percent_boundary_not_highlighted PASSED [  9%]
+tests/test_attendance.py::TestMonthlySummary::test_below_75_percent_highlighted PASSED [ 10%]
 tests/test_attendance.py::TestMonthlySummary::test_sundays_excluded_from_working_days PASSED [ 11%]
 tests/test_attendance.py::TestMonthlySummary::test_february_calculated_correctly PASSED [ 11%]
 tests/test_fees.py::TestFeeStructure::test_load_gseb_fee_heads PASSED    [ 12%]
@@ -54,7 +54,7 @@ tests/test_marks.py::TestMarksGrid::test_marks_entry_max PASSED          [ 31%]
 tests/test_marks.py::TestMarksGrid::test_marks_entry_exceeds_max_rejected PASSED [ 31%]
 tests/test_marks.py::TestMarksGrid::test_marks_entry_decimal PASSED      [ 32%]
 tests/test_marks.py::TestMarksGrid::test_mark_student_absent PASSED      [ 33%]
-tests/test_marks.py::TestMarksGrid::test_marks_persist_after_save FAILED [ 34%]
+tests/test_marks.py::TestMarksGrid::test_marks_persist_after_save PASSED [ 34%]
 tests/test_marks.py::TestMarksGrid::test_marks_update_correctly PASSED   [ 34%]
 tests/test_marks.py::TestMarksGrid::test_removed_student_not_in_marks_grid PASSED [ 35%]
 tests/test_marks.py::TestGradeCalculation::test_grade_thresholds[95-100-A1-10.0] PASSED [ 36%]
@@ -106,13 +106,13 @@ tests/test_reports_tc_system.py::TestSystemIntegration::test_no_500_errors_on_co
 tests/test_reports_tc_system.py::TestSystemUI::test_dashboard_loads PASSED [ 70%]
 tests/test_reports_tc_system.py::TestSystemUI::test_browser_back_button FAILED [ 71%]
 tests/test_reports_tc_system.py::TestSystemUI::test_direct_url_access PASSED [ 71%]
-tests/test_reports_tc_system.py::TestSystemUI::test_page_refresh_stays_on_same_page FAILED [ 72%]
+tests/test_reports_tc_system.py::TestSystemUI::test_page_refresh_stays_on_same_page PASSED [ 72%]
 tests/test_reports_tc_system.py::TestSystemUI::test_dashboard_student_count_updates PASSED [ 73%]
 tests/test_students.py::TestStudentCRUD::test_add_student_all_fields PASSED [ 74%]
 tests/test_students.py::TestStudentCRUD::test_add_student_only_required_fields PASSED [ 74%]
 tests/test_students.py::TestStudentCRUD::test_add_student_gujarati_name PASSED [ 75%]
 tests/test_students.py::TestStudentCRUD::test_add_two_students_same_name PASSED [ 76%]
-tests/test_students.py::TestStudentCRUD::test_add_10_plus_students_same_class FAILED [ 77%]
+tests/test_students.py::TestStudentCRUD::test_add_10_plus_students_same_class PASSED [ 77%]
 tests/test_students.py::TestStudentCRUD::test_edit_student_change_class PASSED [ 77%]
 tests/test_students.py::TestStudentCRUD::test_edit_student_contact_validation_still_works PASSED [ 78%]
 tests/test_students.py::TestStudentCRUD::test_remove_student PASSED      [ 79%]
@@ -139,7 +139,7 @@ tests/test_students.py::TestStudentSearchFilter::test_search_by_contact_number P
 tests/test_students.py::TestStudentSearchFilter::test_search_by_gr_number PASSED [ 94%]
 tests/test_students.py::TestStudentSearchFilter::test_search_case_insensitive PASSED [ 95%]
 tests/test_students.py::TestStudentSearchFilter::test_filter_by_class PASSED [ 96%]
-tests/test_students.py::TestStudentSearchFilter::test_filter_class_plus_search FAILED [ 97%]
+tests/test_students.py::TestStudentSearchFilter::test_filter_class_plus_search PASSED [ 97%]
 tests/test_students.py::TestStudentUI::test_student_list_page_loads FAILED [ 97%]
 tests/test_students.py::TestStudentUI::test_add_student_form_opens FAILED [ 98%]
 tests/test_students.py::TestStudentUI::test_search_ui_filters_students FAILED [ 99%]
@@ -150,63 +150,15 @@ locator("input[placeholder*='contact'],
 input[placeholder*='10-digit']").first)                                  [100%]
 
 =================================== FAILURES ===================================
-__________ TestDailyAttendance.test_roster_shows_only_active_students __________
-tests/test_attendance.py:59: in test_roster_shows_only_active_students
-    assert sid in ids, "Newly created student should be on roster"
-E   AssertionError: Newly created student should be on roster
-E   assert 97 in []
----------------------------- Captured stdout setup -----------------------------
-
-[conftest] /setup/seed → 200
-[conftest] resolved class_id=4 class_id_2=5
-[conftest] academic_year_id=1
-___________ TestDailyAttendance.test_attendance_prefilled_on_revisit ___________
-tests/test_attendance.py:129: in test_attendance_prefilled_on_revisit
-    assert entry is not None
-E   assert None is not None
-___________ TestDailyAttendance.test_update_attendance_no_duplicates ___________
-tests/test_attendance.py:143: in test_update_attendance_no_duplicates
-    assert entry is not None
-E   assert None is not None
-_________ TestMonthlySummary.test_75_percent_boundary_not_highlighted __________
-tests/test_attendance.py:220: in test_75_percent_boundary_not_highlighted
-    assert entry is not None, "Student should appear in monthly summary"
-E   AssertionError: Student should appear in monthly summary
-E   assert None is not None
-_____________ TestMonthlySummary.test_below_75_percent_highlighted _____________
-tests/test_attendance.py:251: in test_below_75_percent_highlighted
-    assert entry is not None, "Student should appear in monthly summary"
-E   AssertionError: Student should appear in monthly summary
-E   assert None is not None
-_________________ TestMarksGrid.test_marks_persist_after_save __________________
-tests/test_marks.py:173: in test_marks_persist_after_save
-    assert student_entry is not None, "Student not found in marks entry"
-E   AssertionError: Student not found in marks entry
-E   assert None is not None
 ____________________ TestSystemUI.test_browser_back_button _____________________
-tests/test_reports_tc_system.py:308: in test_browser_back_button
-    assert "students" in page.url, f"Back should go to /students, got {page.url}"
+tests/test_reports_tc_system.py:323: in test_browser_back_button
+    assert "students" in authenticated_page.url, (
 E   AssertionError: Back should go to /students, got http://localhost/login
 E   assert 'students' in 'http://localhost/login'
 E    +  where 'http://localhost/login' = <Page url='http://localhost/login'>.url
-______________ TestSystemUI.test_page_refresh_stays_on_same_page _______________
-tests/test_reports_tc_system.py:323: in test_page_refresh_stays_on_same_page
-    assert "attendance" in page.url, f"After refresh, expected /attendance, got {page.url}"
-E   AssertionError: After refresh, expected /attendance, got http://localhost/login
-E   assert 'attendance' in 'http://localhost/login'
-E    +  where 'http://localhost/login' = <Page url='http://localhost/login'>.url
-_____________ TestStudentCRUD.test_add_10_plus_students_same_class _____________
-tests/test_students.py:71: in test_add_10_plus_students_same_class
-    assert sid in student_ids_in_list, f"Student {sid} missing from class list"
-E   AssertionError: Student 166 missing from class list
-E   assert 166 in []
-____________ TestStudentSearchFilter.test_filter_class_plus_search _____________
-tests/test_students.py:310: in test_filter_class_plus_search
-    assert sid in ids
-E   assert 198 in []
 __________________ TestStudentUI.test_student_list_page_loads __________________
-tests/test_students.py:325: in test_student_list_page_loads
-    page.wait_for_selector("table, [data-testid='student-list'], .student-list", timeout=8000)
+tests/test_students.py:348: in test_student_list_page_loads
+    authenticated_page.wait_for_selector(
 venv/lib/python3.13/site-packages/playwright/sync_api/_generated.py:8169: in wait_for_selector
     self._sync(
 venv/lib/python3.13/site-packages/playwright/_impl/_page.py:424: in wait_for_selector
@@ -221,8 +173,8 @@ E   playwright._impl._errors.TimeoutError: Page.wait_for_selector: Timeout 8000m
 E   Call log:
 E     - waiting for locator("table, [data-testid='student-list'], .student-list") to be visible
 __________________ TestStudentUI.test_add_student_form_opens ___________________
-tests/test_students.py:331: in test_add_student_form_opens
-    page.click("a:has-text('Add Student'), button:has-text('Add'), [data-testid='add-student']")
+tests/test_students.py:356: in test_add_student_form_opens
+    authenticated_page.click(
 venv/lib/python3.13/site-packages/playwright/sync_api/_generated.py:9909: in click
     self._sync(
 venv/lib/python3.13/site-packages/playwright/_impl/_page.py:827: in click
@@ -237,7 +189,7 @@ E   playwright._impl._errors.TimeoutError: Page.click: Timeout 10000ms exceeded.
 E   Call log:
 E     - waiting for locator("a:has-text('Add Student'), button:has-text('Add'), [data-testid='add-student']")
 ________________ TestStudentUI.test_search_ui_filters_students _________________
-tests/test_students.py:340: in test_search_ui_filters_students
+tests/test_students.py:369: in test_search_ui_filters_students
     search_input.fill("Rah")
 venv/lib/python3.13/site-packages/playwright/sync_api/_generated.py:15795: in fill
     self._sync(
@@ -256,25 +208,9 @@ E     - waiting for locator("input[placeholder*='Search'], input[type='search'],
 report saved to: reports/report.json
 - Generated html report: file:///Users/mohammad/school-sms/sms_tests/reports/report.html -
 =========================== short test summary info ============================
-FAILED tests/test_attendance.py::TestDailyAttendance::test_roster_shows_only_active_students - AssertionError: Newly created student should be on roster
-assert 97 in []
-FAILED tests/test_attendance.py::TestDailyAttendance::test_attendance_prefilled_on_revisit - assert None is not None
-FAILED tests/test_attendance.py::TestDailyAttendance::test_update_attendance_no_duplicates - assert None is not None
-FAILED tests/test_attendance.py::TestMonthlySummary::test_75_percent_boundary_not_highlighted - AssertionError: Student should appear in monthly summary
-assert None is not None
-FAILED tests/test_attendance.py::TestMonthlySummary::test_below_75_percent_highlighted - AssertionError: Student should appear in monthly summary
-assert None is not None
-FAILED tests/test_marks.py::TestMarksGrid::test_marks_persist_after_save - AssertionError: Student not found in marks entry
-assert None is not None
 FAILED tests/test_reports_tc_system.py::TestSystemUI::test_browser_back_button - AssertionError: Back should go to /students, got http://localhost/login
 assert 'students' in 'http://localhost/login'
  +  where 'http://localhost/login' = <Page url='http://localhost/login'>.url
-FAILED tests/test_reports_tc_system.py::TestSystemUI::test_page_refresh_stays_on_same_page - AssertionError: After refresh, expected /attendance, got http://localhost/login
-assert 'attendance' in 'http://localhost/login'
- +  where 'http://localhost/login' = <Page url='http://localhost/login'>.url
-FAILED tests/test_students.py::TestStudentCRUD::test_add_10_plus_students_same_class - AssertionError: Student 166 missing from class list
-assert 166 in []
-FAILED tests/test_students.py::TestStudentSearchFilter::test_filter_class_plus_search - assert 198 in []
 FAILED tests/test_students.py::TestStudentUI::test_student_list_page_loads - playwright._impl._errors.TimeoutError: Page.wait_for_selector: Timeout 8000ms exceeded.
 Call log:
   - waiting for locator("table, [data-testid='student-list'], .student-list") to be visible
@@ -284,4 +220,4 @@ Call log:
 FAILED tests/test_students.py::TestStudentUI::test_search_ui_filters_students - playwright._impl._errors.TimeoutError: Locator.fill: Timeout 10000ms exceeded.
 Call log:
   - waiting for locator("input[placeholder*='Search'], input[type='search'], [data-testid='search']").first
-================= 13 failed, 111 passed, 11 skipped in 53.16s ==================
+================== 4 failed, 121 passed, 10 skipped in 54.42s ==================

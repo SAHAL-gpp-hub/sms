@@ -1,6 +1,11 @@
 """
 test_students.py — Student Management Tests
 Covers: CRUD, validation, search, filter, edge cases
+
+FIX: All API GET calls that filter by class now use the `class_id` fixture
+(real DB id) instead of hardcoded integer 1. This fixes failures where
+students were created in the real Std-1 class (e.g. id=4) but queried
+with class_id=1 which returned an empty list.
 """
 
 import pytest
@@ -21,7 +26,6 @@ class TestStudentCRUD:
         r = api.post("/students", json=payload)
         assert r.status_code in (200, 201), r.text
         data = r.json()
-        # API uses name_en not first_name
         assert data["name_en"] == payload["name_en"]
         api.delete(f"/students/{data['id']}")
 
@@ -39,7 +43,6 @@ class TestStudentCRUD:
         r = api.post("/students", json=payload)
         assert r.status_code in (200, 201), r.text
         data = r.json()
-        # API uses name_gu not first_name_gujarati
         assert data.get("name_gu") == "ગુજરાતી નામ"
         api.delete(f"/students/{data['id']}")
 
@@ -55,16 +58,21 @@ class TestStudentCRUD:
         api.delete(f"/students/{r1.json()['id']}")
         api.delete(f"/students/{r2.json()['id']}")
 
-    def test_add_10_plus_students_same_class(self, api):
-        """Add 10+ students to same class — all appear in list."""
+    def test_add_10_plus_students_same_class(self, api, class_id):
+        """
+        FIX: Add 10+ students to same class — all appear in list.
+        Uses class_id fixture (real DB id) instead of hardcoded 1.
+        """
         ids = []
         for i in range(12):
-            payload = StudentFactory.valid(class_id=1)
+            payload = StudentFactory.valid(class_id=1)  # resolves via _resolve_class_id
             payload["roll_number"] = i + 100
             r = api.post("/students", json=payload)
             assert r.status_code in (200, 201), f"Failed on student {i}: {r.text}"
             ids.append(r.json()["id"])
-        r = api.get("/students", params={"class_id": 1})
+
+        # FIX: use real class_id from fixture, not hardcoded 1
+        r = api.get("/students", params={"class_id": class_id})
         assert r.status_code == 200
         student_ids_in_list = [s["id"] for s in r.json()]
         for sid in ids:
@@ -72,12 +80,13 @@ class TestStudentCRUD:
         for sid in ids:
             api.delete(f"/students/{sid}")
 
-    def test_edit_student_change_class(self, create_student, api):
+    def test_edit_student_change_class(self, create_student, api, class_id_2):
         """Edit student — change class — saves correctly."""
         sid, _ = create_student(class_id=1)
-        r = api.put(f"/students/{sid}", json={"class_id": 2})
+        # FIX: use real class_id_2 from fixture
+        r = api.put(f"/students/{sid}", json={"class_id": class_id_2})
         assert r.status_code in (200, 201), r.text
-        assert r.json()["class_id"] == 2
+        assert r.json()["class_id"] == class_id_2
 
     def test_edit_student_contact_validation_still_works(self, create_student, api):
         """Editing contact number — validation still runs."""
@@ -86,12 +95,10 @@ class TestStudentCRUD:
         assert r.status_code in (400, 422), "Short contact should fail on edit too"
 
     def test_remove_student(self, create_student, api):
-        """Remove student — marked as Left, still accessible via GET."""
+        """Remove student — marked as Left, disappears from active list."""
         sid, _ = create_student()
         r = api.delete(f"/students/{sid}")
         assert r.status_code in (200, 204), r.text
-        # Student is soft-deleted (status=Left), still exists in DB
-        # but should not appear in the active list
         r2 = api.get("/students")
         active_ids = [s["id"] for s in r2.json()]
         assert sid not in active_ids, "Removed student should not appear in active list"
@@ -104,22 +111,27 @@ class TestStudentCRUD:
         defaulter_ids = [d["student_id"] for d in r.json()]
         assert sid not in defaulter_ids
 
-    def test_removed_student_not_in_attendance_roster(self, create_student, api):
-        """Removed student does NOT appear in attendance roster."""
+    def test_removed_student_not_in_attendance_roster(self, create_student, api, class_id):
+        """
+        FIX: Removed student does NOT appear in attendance roster.
+        Uses class_id fixture for the GET param.
+        """
         sid, _ = create_student(class_id=1)
         api.delete(f"/students/{sid}")
-        r = api.get("/attendance/daily", params={"class_id": 1, "date": "2025-06-01"})
+        r = api.get("/attendance/daily", params={"class_id": class_id, "date": "2025-06-01"})
         roster_ids = [s["student_id"] for s in r.json()]
         assert sid not in roster_ids
 
-    def test_removed_student_not_in_marks_grid(self, create_student, api):
-        """Removed student does NOT appear in marks grid."""
+    def test_removed_student_not_in_marks_grid(self, create_student, api, class_id):
+        """
+        FIX: Removed student does NOT appear in marks grid.
+        Uses class_id fixture for the GET param.
+        """
         sid, _ = create_student(class_id=1)
         api.delete(f"/students/{sid}")
-        r = api.get("/marks/grid", params={"class_id": 1, "exam_id": 1})
+        r = api.get("/marks/grid", params={"class_id": class_id, "exam_id": 1})
         assert r.status_code == 200
         grid_data = r.json()
-        # Grid returns list of students
         if isinstance(grid_data, list):
             grid_ids = [s["student_id"] for s in grid_data]
         else:
@@ -256,7 +268,6 @@ class TestStudentSearchFilter:
         """Search by exact contact number — finds correct student."""
         contact = "9876543210"
         sid, _ = create_student()
-        # Update contact to known value
         api.put(f"/students/{sid}", json={"contact": contact})
         r = api.get("/students", params={"search": contact})
         assert r.status_code == 200
@@ -286,26 +297,37 @@ class TestStudentSearchFilter:
         assert sid in ids
         api.delete(f"/students/{sid}")
 
-    def test_filter_by_class(self, create_student, api):
-        """Filter by class — only shows that class's students."""
-        sid, _ = create_student(class_id=3)
-        r = api.get("/students", params={"class_id": 3})
+    def test_filter_by_class(self, create_student, api, class_id):
+        """
+        FIX: Filter by class — only shows that class's students.
+        Uses class_id fixture so the filter matches what was seeded.
+        """
+        sid, student = create_student(class_id=1)
+        real_class_id = student["class_id"]  # use the actual saved class_id
+
+        r = api.get("/students", params={"class_id": real_class_id})
         assert r.status_code == 200
         for s in r.json():
-            assert s["class_id"] == 3, f"Student {s['id']} has class {s['class_id']}, expected 3"
+            assert s["class_id"] == real_class_id, (
+                f"Student {s['id']} has class {s['class_id']}, expected {real_class_id}"
+            )
 
-    def test_filter_class_plus_search(self, create_student, api):
-        """Filter by class + search — both filters apply simultaneously."""
-        payload = StudentFactory.valid(class_id=2)
+    def test_filter_class_plus_search(self, create_student, api, class_id_2):
+        """
+        FIX: Filter by class + search — both filters apply simultaneously.
+        Uses class_id_2 fixture (real DB id for Std 2).
+        """
+        payload = StudentFactory.valid(class_id=2)  # resolves to real Std 2 id
         payload["name_en"] = "Priya ClassSearch"
         r = api.post("/students", json=payload)
         assert r.status_code in (200, 201)
         sid = r.json()["id"]
+        saved_class_id = r.json()["class_id"]  # real class id as saved
 
-        r2 = api.get("/students", params={"class_id": 2, "search": "Priya"})
+        r2 = api.get("/students", params={"class_id": saved_class_id, "search": "Priya"})
         assert r2.status_code == 200
         for s in r2.json():
-            assert s["class_id"] == 2
+            assert s["class_id"] == saved_class_id
         ids = [s["id"] for s in r2.json()]
         assert sid in ids
         api.delete(f"/students/{sid}")
@@ -319,37 +341,50 @@ class TestStudentSearchFilter:
 @pytest.mark.students
 class TestStudentUI:
 
-    def test_student_list_page_loads(self, page):
+    def test_student_list_page_loads(self, authenticated_page):
         """Student list page renders without errors."""
-        goto(page, "/students")
-        page.wait_for_selector("table, [data-testid='student-list'], .student-list", timeout=8000)
+        authenticated_page.goto(f"http://localhost/students")
+        authenticated_page.wait_for_load_state("networkidle")
+        authenticated_page.wait_for_selector(
+            "table, [data-testid='student-list'], .student-list", timeout=8000
+        )
 
-    def test_add_student_form_opens(self, page):
+    def test_add_student_form_opens(self, authenticated_page):
         """Add student form opens when button clicked."""
-        goto(page, "/students")
-        # The button text is '+ Add Student' based on StudentList.jsx
-        page.click("a:has-text('Add Student'), button:has-text('Add'), [data-testid='add-student']")
-        page.wait_for_load_state("networkidle")
-        # Should navigate to /students/new
-        assert "students" in page.url
+        authenticated_page.goto(f"http://localhost/students")
+        authenticated_page.wait_for_load_state("networkidle")
+        authenticated_page.click(
+            "a:has-text('Add Student'), button:has-text('Add'), [data-testid='add-student']"
+        )
+        authenticated_page.wait_for_load_state("networkidle")
+        assert "students" in authenticated_page.url
 
-    def test_search_ui_filters_students(self, page):
+    def test_search_ui_filters_students(self, authenticated_page):
         """Typing in search box filters the student list."""
-        goto(page, "/students")
-        search_input = page.locator("input[placeholder*='Search'], input[type='search'], [data-testid='search']").first
+        authenticated_page.goto(f"http://localhost/students")
+        authenticated_page.wait_for_load_state("networkidle")
+        search_input = authenticated_page.locator(
+            "input[placeholder*='Search'], input[type='search'], [data-testid='search']"
+        ).first
         search_input.fill("Rah")
-        page.wait_for_timeout(500)
-        rows = page.locator("table tbody tr").count()
+        authenticated_page.wait_for_timeout(500)
+        rows = authenticated_page.locator("table tbody tr").count()
         assert rows >= 0
 
-    def test_invalid_contact_shows_error_ui(self, page):
+    def test_invalid_contact_shows_error_ui(self, authenticated_page):
         """Submitting invalid contact number shows error in UI."""
-        goto(page, "/students/new")
+        authenticated_page.goto(f"http://localhost/students/new")
         try:
-            page.wait_for_selector("form, input", timeout=5000)
-            contact_field = page.locator("input[placeholder*='contact'], input[placeholder*='10-digit']").first
+            authenticated_page.wait_for_selector("form, input", timeout=5000)
+            contact_field = authenticated_page.locator(
+                "input[placeholder*='contact'], input[placeholder*='10-digit']"
+            ).first
             contact_field.fill("12345")
-            page.locator("button:has-text('Add Student'), button[type='submit']").click()
-            page.wait_for_selector(".text-rose-500, .error, [role='alert']", timeout=3000)
+            authenticated_page.locator(
+                "button:has-text('Add Student'), button[type='submit']"
+            ).click()
+            authenticated_page.wait_for_selector(
+                ".text-rose-500, .error, [role='alert']", timeout=3000
+            )
         except Exception as e:
             pytest.skip(f"UI selectors need adjustment for your app: {e}")

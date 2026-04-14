@@ -1,12 +1,17 @@
 """
 test_marks.py — Marks Entry & Grade Calculation Tests
 
-ISSUE 7 FIX: The /grid endpoint previously returned a raw list of students
-(subjects were stripped).  It now returns {students: [...], subjects: [...]}.
-Tests that read /grid are updated to extract the students list from the dict.
+FIXES:
+  1. All calls that use class_id in GET params now use the `class_id` fixture
+     (real DB id) instead of hardcoded integer 1. This fixes test_marks_persist_after_save
+     and test_removed_student_not_in_marks_grid which were looking up the student
+     in the wrong class.
 
-BUG 5 VERIFICATION: Grade tests now verify that a perfect score (100/100)
-produces cgpa == 10.0 exactly (not 9.9 due to float precision loss).
+  2. get_or_create_exam() and get_subjects_for_class() accept a class_id param
+     so the correct real DB class id flows through.
+
+  3. BUG 5 VERIFICATION: Grade tests verify that a perfect score (100/100)
+     produces cgpa == 10.0 exactly.
 """
 
 import pytest
@@ -24,21 +29,27 @@ def make_mark(student_id, exam_id, subject_id, marks=80, max_marks=100, is_absen
     }
 
 
-def get_or_create_exam(api, class_id=1, academic_year_id=1):
-    r = api.get("/marks/exams", params={"class_id": class_id, "academic_year_id": academic_year_id})
+def get_or_create_exam(api, class_id, academic_year_id=None):
+    """FIX: accepts real class_id instead of defaulting to 1."""
+    params = {"class_id": class_id}
+    if academic_year_id:
+        params["academic_year_id"] = academic_year_id
+    r = api.get("/marks/exams", params=params)
     if r.status_code == 200 and r.json():
         return r.json()[0]["id"]
-    r2 = api.post("/marks/exams", json={
+    create_payload = {
         "name":             "Unit Test 1",
         "class_id":         class_id,
-        "academic_year_id": academic_year_id,
-    })
+        "academic_year_id": academic_year_id or 1,
+    }
+    r2 = api.post("/marks/exams", json=create_payload)
     if r2.status_code in (200, 201):
         return r2.json()["id"]
     return 1
 
 
-def get_subjects_for_class(api, class_id=1):
+def get_subjects_for_class(api, class_id):
+    """FIX: accepts real class_id instead of defaulting to 1."""
     api.post(f"/marks/subjects/seed/{class_id}")
     r = api.get("/marks/subjects", params={"class_id": class_id})
     return r.json() if r.status_code == 200 else []
@@ -96,56 +107,62 @@ class TestMarksGrid:
             names = [s["name"] for s in r2.json()]
             assert len(names) == len(set(names)), f"Duplicate subjects: {names}"
 
-    def test_marks_entry_zero(self, api, create_student):
+    def test_marks_entry_zero(self, api, create_student, class_id):
+        """FIX: use class_id fixture."""
         sid, _ = create_student(class_id=1)
-        subjects = get_subjects_for_class(api, 1)
+        subjects = get_subjects_for_class(api, class_id)
         if not subjects:
-            pytest.skip("No subjects for class 1")
-        exam_id = get_or_create_exam(api, class_id=1)
+            pytest.skip(f"No subjects for class {class_id}")
+        exam_id = get_or_create_exam(api, class_id=class_id)
 
         r = api.post("/marks/bulk", json=[make_mark(sid, exam_id, subjects[0]["id"], marks=0)])
         assert r.status_code in (200, 201), f"0 marks should be valid: {r.text}"
 
-    def test_marks_entry_max(self, api, create_student):
+    def test_marks_entry_max(self, api, create_student, class_id):
+        """FIX: use class_id fixture."""
         sid, _ = create_student(class_id=1)
-        subjects = get_subjects_for_class(api, 1)
+        subjects = get_subjects_for_class(api, class_id)
         if not subjects:
-            pytest.skip("No subjects for class 1")
-        exam_id = get_or_create_exam(api, class_id=1)
+            pytest.skip(f"No subjects for class {class_id}")
+        exam_id = get_or_create_exam(api, class_id=class_id)
 
         r = api.post("/marks/bulk", json=[make_mark(sid, exam_id, subjects[0]["id"], marks=100)])
         assert r.status_code in (200, 201), r.text
 
-    def test_marks_entry_exceeds_max_rejected(self, api, create_student):
+    def test_marks_entry_exceeds_max_rejected(self, api, create_student, class_id):
+        """FIX: use class_id fixture."""
         sid, _ = create_student(class_id=1)
-        subjects = get_subjects_for_class(api, 1)
+        subjects = get_subjects_for_class(api, class_id)
         if not subjects:
-            pytest.skip("No subjects for class 1")
-        exam_id = get_or_create_exam(api, class_id=1)
+            pytest.skip(f"No subjects for class {class_id}")
+        exam_id = get_or_create_exam(api, class_id=class_id)
 
         r = api.post("/marks/bulk", json=[make_mark(sid, exam_id, subjects[0]["id"], marks=101)])
         assert r.status_code in (400, 422), "Marks above max should be rejected"
 
-    def test_marks_entry_decimal(self, api, create_student):
+    def test_marks_entry_decimal(self, api, create_student, class_id):
+        """FIX: use class_id fixture."""
         sid, _ = create_student(class_id=1)
-        subjects = get_subjects_for_class(api, 1)
+        subjects = get_subjects_for_class(api, class_id)
         if not subjects:
-            pytest.skip("No subjects for class 1")
-        exam_id = get_or_create_exam(api, class_id=1)
+            pytest.skip(f"No subjects for class {class_id}")
+        exam_id = get_or_create_exam(api, class_id=class_id)
 
         r = api.post("/marks/bulk", json=[make_mark(sid, exam_id, subjects[0]["id"], marks=45.5)])
         assert r.status_code in (200, 201), r.text
 
-    def test_mark_student_absent(self, api, create_student):
+    def test_mark_student_absent(self, api, create_student, class_id):
+        """FIX: use class_id fixture."""
         sid, _ = create_student(class_id=1)
-        subjects = get_subjects_for_class(api, 1)
+        subjects = get_subjects_for_class(api, class_id)
         if not subjects:
-            pytest.skip("No subjects for class 1")
-        exam_id = get_or_create_exam(api, class_id=1)
+            pytest.skip(f"No subjects for class {class_id}")
+        exam_id = get_or_create_exam(api, class_id=class_id)
 
-        r = api.post("/marks/bulk", json=[make_mark(sid, exam_id, subjects[0]["id"], is_absent=True)])
+        r = api.post("/marks/bulk",
+                     json=[make_mark(sid, exam_id, subjects[0]["id"], is_absent=True)])
         assert r.status_code in (200, 201), r.text
-        r2 = api.get("/marks/results", params={"class_id": 1, "exam_id": exam_id})
+        r2 = api.get("/marks/results", params={"class_id": class_id, "exam_id": exam_id})
         if r2.status_code == 200:
             results = r2.json()
             student_result = next((s for s in results if s.get("student_id") == sid), None)
@@ -156,52 +173,57 @@ class TestMarksGrid:
                 ]
                 assert len(absent_subjects) > 0, "Absent subject should show grade AB"
 
-    def test_marks_persist_after_save(self, api, create_student):
+    def test_marks_persist_after_save(self, api, create_student, class_id):
+        """
+        FIX: Use class_id fixture in both bulk save and GET /marks/entry.
+        Previously the student was in class id=4 but queried with class_id=1,
+        so the entry was never found.
+        """
         sid, _ = create_student(class_id=1)
-        subjects = get_subjects_for_class(api, 1)
+        subjects = get_subjects_for_class(api, class_id)
         if not subjects:
-            pytest.skip("No subjects for class 1")
-        exam_id = get_or_create_exam(api, class_id=1)
+            pytest.skip(f"No subjects for class {class_id}")
+        exam_id = get_or_create_exam(api, class_id=class_id)
 
         api.post("/marks/bulk", json=[make_mark(sid, exam_id, subjects[0]["id"], marks=78)])
 
-        r = api.get("/marks/entry", params={"class_id": 1, "exam_id": exam_id})
+        r = api.get("/marks/entry", params={"class_id": class_id, "exam_id": exam_id})
         assert r.status_code == 200
         data = r.json()
         students = data.get("students", [])
         student_entry = next((s for s in students if s.get("student_id") == sid), None)
-        assert student_entry is not None, "Student not found in marks entry"
+        assert student_entry is not None, (
+            f"Student {sid} not found in marks entry for class {class_id}, exam {exam_id}"
+        )
 
-    def test_marks_update_correctly(self, api, create_student):
+    def test_marks_update_correctly(self, api, create_student, class_id):
+        """FIX: use class_id fixture."""
         sid, _ = create_student(class_id=1)
-        subjects = get_subjects_for_class(api, 1)
+        subjects = get_subjects_for_class(api, class_id)
         if not subjects:
-            pytest.skip("No subjects for class 1")
-        exam_id = get_or_create_exam(api, class_id=1)
+            pytest.skip(f"No subjects for class {class_id}")
+        exam_id = get_or_create_exam(api, class_id=class_id)
 
         api.post("/marks/bulk", json=[make_mark(sid, exam_id, subjects[0]["id"], marks=50)])
         r2 = api.post("/marks/bulk", json=[make_mark(sid, exam_id, subjects[0]["id"], marks=75)])
         assert r2.status_code in (200, 201), r2.text
 
-        r3 = api.get("/marks/entry", params={"class_id": 1, "exam_id": exam_id})
+        r3 = api.get("/marks/entry", params={"class_id": class_id, "exam_id": exam_id})
         assert r3.status_code == 200
 
-    def test_removed_student_not_in_marks_grid(self, create_student, api):
+    def test_removed_student_not_in_marks_grid(self, create_student, api, class_id):
         """
-        ISSUE 7 FIX: /grid now returns {students: [...], subjects: [...]}.
-        Extract students list from the dict.
+        FIX: Use class_id fixture so the grid query uses the correct class id.
         """
         sid, _ = create_student(class_id=1)
         api.delete(f"/students/{sid}")
-        exam_id = get_or_create_exam(api, class_id=1)
+        exam_id = get_or_create_exam(api, class_id=class_id)
 
-        r = api.get("/marks/grid", params={"class_id": 1, "exam_id": exam_id})
+        r = api.get("/marks/grid", params={"class_id": class_id, "exam_id": exam_id})
         assert r.status_code == 200
 
         grid_data = r.json()
-        # ISSUE 7 FIX: /grid now returns full object, extract students list
         if isinstance(grid_data, list):
-            # Backward compat: handle if server still returns plain list
             grid_ids = [s["student_id"] for s in grid_data]
         else:
             grid_ids = [s["student_id"] for s in grid_data.get("students", [])]
@@ -231,8 +253,9 @@ GRADE_CASES = [
 @pytest.mark.marks
 class TestGradeCalculation:
 
-    def _setup_student_with_marks(self, api, create_student, score, class_id=1):
-        sid, _ = create_student(class_id=class_id)
+    def _setup_student_with_marks(self, api, create_student, score, class_id):
+        """FIX: accepts real class_id from fixture."""
+        sid, _ = create_student(class_id=1)
         subjects = get_subjects_for_class(api, class_id)
         if not subjects:
             return sid, None, None
@@ -242,48 +265,46 @@ class TestGradeCalculation:
         return sid, exam_id, subjects
 
     @pytest.mark.parametrize("score,max_marks,expected_grade,expected_gp", GRADE_CASES)
-    def test_grade_thresholds(self, api, create_student, score, max_marks, expected_grade, expected_gp):
-        sid, exam_id, subjects = self._setup_student_with_marks(api, create_student, score)
+    def test_grade_thresholds(self, api, create_student, class_id,
+                               score, max_marks, expected_grade, expected_gp):
+        sid, exam_id, subjects = self._setup_student_with_marks(
+            api, create_student, score, class_id
+        )
         if not subjects:
             pytest.skip("No subjects available")
 
-        r = api.get("/marks/results", params={"class_id": 1, "exam_id": exam_id})
+        r = api.get("/marks/results", params={"class_id": class_id, "exam_id": exam_id})
         if r.status_code == 200:
             results = r.json()
             student_result = next((s for s in results if s.get("student_id") == sid), None)
             if student_result:
                 assert student_result.get("grade") == expected_grade, \
                     f"Score {score}: expected grade {expected_grade}, got {student_result.get('grade')}"
-                # BUG 5 FIX verification: cgpa must be exact float, not 9.999...
                 assert float(student_result.get("cgpa", 0)) == expected_gp, \
                     f"Score {score}: expected cgpa {expected_gp}, got {student_result.get('cgpa')}"
 
-    def test_perfect_score_cgpa_is_exactly_10(self, api, create_student):
-        """
-        BUG 5 EXPLICIT TEST: Student with 100/100 in every subject must
-        get cgpa == 10.0 exactly (not 9.9 due to float precision loss).
-        """
-        sid, exam_id, subjects = self._setup_student_with_marks(api, create_student, 100)
+    def test_perfect_score_cgpa_is_exactly_10(self, api, create_student, class_id):
+        """BUG 5 EXPLICIT TEST: 100/100 must give cgpa == 10.0 exactly."""
+        sid, exam_id, subjects = self._setup_student_with_marks(api, create_student, 100, class_id)
         if not subjects:
             pytest.skip("No subjects available")
 
-        r = api.get("/marks/results", params={"class_id": 1, "exam_id": exam_id})
+        r = api.get("/marks/results", params={"class_id": class_id, "exam_id": exam_id})
         if r.status_code == 200:
             results = r.json()
             sr = next((s for s in results if s.get("student_id") == sid), None)
             if sr:
                 cgpa = sr.get("cgpa")
                 assert cgpa == 10.0, (
-                    f"Perfect score should give CGPA 10.0 exactly, got {cgpa!r}. "
-                    "This indicates the float precision bug (Bug 5) is not fixed."
+                    f"Perfect score should give CGPA 10.0 exactly, got {cgpa!r}."
                 )
 
-    def test_absent_subject_causes_fail(self, api, create_student):
+    def test_absent_subject_causes_fail(self, api, create_student, class_id):
         sid, _ = create_student(class_id=1)
-        subjects = get_subjects_for_class(api, 1)
+        subjects = get_subjects_for_class(api, class_id)
         if not subjects or len(subjects) < 2:
             pytest.skip("Need at least 2 subjects")
-        exam_id = get_or_create_exam(api, class_id=1)
+        exam_id = get_or_create_exam(api, class_id=class_id)
 
         entries = []
         for i, sub in enumerate(subjects):
@@ -293,7 +314,7 @@ class TestGradeCalculation:
                 entries.append(make_mark(sid, exam_id, sub["id"], marks=80))
         api.post("/marks/bulk", json=entries)
 
-        r = api.get("/marks/results", params={"class_id": 1, "exam_id": exam_id})
+        r = api.get("/marks/results", params={"class_id": class_id, "exam_id": exam_id})
         if r.status_code == 200:
             results = r.json()
             student_result = next((s for s in results if s.get("student_id") == sid), None)
@@ -301,29 +322,29 @@ class TestGradeCalculation:
                 assert student_result.get("result") == "FAIL", \
                     "Absent in 1 subject should cause FAIL"
 
-    def test_pass_all_subjects(self, api, create_student):
+    def test_pass_all_subjects(self, api, create_student, class_id):
         sid, _ = create_student(class_id=1)
-        subjects = get_subjects_for_class(api, 1)
+        subjects = get_subjects_for_class(api, class_id)
         if not subjects:
             pytest.skip("No subjects")
-        exam_id = get_or_create_exam(api, class_id=1)
+        exam_id = get_or_create_exam(api, class_id=class_id)
 
         entries = [make_mark(sid, exam_id, sub["id"], marks=60) for sub in subjects]
         api.post("/marks/bulk", json=entries)
 
-        r = api.get("/marks/results", params={"class_id": 1, "exam_id": exam_id})
+        r = api.get("/marks/results", params={"class_id": class_id, "exam_id": exam_id})
         if r.status_code == 200:
             results = r.json()
             student_result = next((s for s in results if s.get("student_id") == sid), None)
             if student_result:
                 assert student_result.get("result") == "PASS"
 
-    def test_fail_one_subject_fails_overall(self, api, create_student):
+    def test_fail_one_subject_fails_overall(self, api, create_student, class_id):
         sid, _ = create_student(class_id=1)
-        subjects = get_subjects_for_class(api, 1)
+        subjects = get_subjects_for_class(api, class_id)
         if not subjects or len(subjects) < 2:
             pytest.skip("Need at least 2 subjects")
-        exam_id = get_or_create_exam(api, class_id=1)
+        exam_id = get_or_create_exam(api, class_id=class_id)
 
         entries = []
         for i, sub in enumerate(subjects):
@@ -331,45 +352,45 @@ class TestGradeCalculation:
             entries.append(make_mark(sid, exam_id, sub["id"], marks=marks))
         api.post("/marks/bulk", json=entries)
 
-        r = api.get("/marks/results", params={"class_id": 1, "exam_id": exam_id})
+        r = api.get("/marks/results", params={"class_id": class_id, "exam_id": exam_id})
         if r.status_code == 200:
             results = r.json()
             student_result = next((s for s in results if s.get("student_id") == sid), None)
             if student_result:
                 assert student_result.get("result") == "FAIL"
 
-    def test_class_rank_top_scorer_is_rank1(self, api, create_student):
+    def test_class_rank_top_scorer_is_rank1(self, api, create_student, class_id):
         sid1, _ = create_student(class_id=1)
         sid2, _ = create_student(class_id=1)
-        subjects = get_subjects_for_class(api, 1)
+        subjects = get_subjects_for_class(api, class_id)
         if not subjects:
             pytest.skip("No subjects")
-        exam_id = get_or_create_exam(api, class_id=1)
+        exam_id = get_or_create_exam(api, class_id=class_id)
 
         for sub in subjects:
             api.post("/marks/bulk", json=[make_mark(sid1, exam_id, sub["id"], marks=70)])
             api.post("/marks/bulk", json=[make_mark(sid2, exam_id, sub["id"], marks=90)])
 
-        r = api.get("/marks/results", params={"class_id": 1, "exam_id": exam_id})
+        r = api.get("/marks/results", params={"class_id": class_id, "exam_id": exam_id})
         if r.status_code == 200:
             results = r.json()
             rank1 = next((s for s in results if s.get("class_rank") == 1), None)
             if rank1:
                 assert rank1["student_id"] == sid2, "Top scorer should be Rank 1"
 
-    def test_same_percentage_same_rank(self, api, create_student):
+    def test_same_percentage_same_rank(self, api, create_student, class_id):
         sid1, _ = create_student(class_id=1)
         sid2, _ = create_student(class_id=1)
-        subjects = get_subjects_for_class(api, 1)
+        subjects = get_subjects_for_class(api, class_id)
         if not subjects:
             pytest.skip("No subjects")
-        exam_id = get_or_create_exam(api, class_id=1)
+        exam_id = get_or_create_exam(api, class_id=class_id)
 
         for sid in [sid1, sid2]:
             for sub in subjects:
                 api.post("/marks/bulk", json=[make_mark(sid, exam_id, sub["id"], marks=80)])
 
-        r = api.get("/marks/results", params={"class_id": 1, "exam_id": exam_id})
+        r = api.get("/marks/results", params={"class_id": class_id, "exam_id": exam_id})
         if r.status_code == 200:
             results = r.json()
             r1 = next((s.get("class_rank") for s in results if s["student_id"] == sid1), None)
@@ -387,24 +408,29 @@ class TestGradeCalculation:
 @pytest.mark.marks
 class TestResultsPDF:
 
-    def test_marksheet_pdf_generates(self, api, create_student):
+    def test_marksheet_pdf_generates(self, api, create_student, class_id):
+        """FIX: use class_id fixture."""
         sid, _ = create_student(class_id=1)
-        subjects = get_subjects_for_class(api, 1)
-        exam_id = get_or_create_exam(api, class_id=1)
+        subjects = get_subjects_for_class(api, class_id)
+        exam_id = get_or_create_exam(api, class_id=class_id)
         if subjects:
-            api.post("/marks/bulk", json=[make_mark(sid, exam_id, subjects[0]["id"], marks=75)])
+            api.post("/marks/bulk",
+                     json=[make_mark(sid, exam_id, subjects[0]["id"], marks=75)])
 
-        r = api.get(f"/pdf/marksheet/student/{sid}", params={"exam_id": exam_id, "class_id": 1})
+        r = api.get(f"/pdf/marksheet/student/{sid}",
+                    params={"exam_id": exam_id, "class_id": class_id})
         assert r.status_code not in (500,), f"PDF generation error: {r.text}"
 
-    def test_bulk_class_pdf_generates(self, api):
-        exam_id = get_or_create_exam(api, class_id=1)
-        r = api.get("/pdf/marksheet/class/1", params={"exam_id": exam_id})
+    def test_bulk_class_pdf_generates(self, api, class_id):
+        """FIX: use class_id fixture."""
+        exam_id = get_or_create_exam(api, class_id=class_id)
+        r = api.get(f"/pdf/marksheet/class/{class_id}", params={"exam_id": exam_id})
         assert r.status_code not in (500,), "Bulk PDF generation should not 500"
 
-    def test_results_sorted_by_rank(self, api):
-        exam_id = get_or_create_exam(api, class_id=1)
-        r = api.get("/marks/results", params={"class_id": 1, "exam_id": exam_id})
+    def test_results_sorted_by_rank(self, api, class_id):
+        """FIX: use class_id fixture."""
+        exam_id = get_or_create_exam(api, class_id=class_id)
+        r = api.get("/marks/results", params={"class_id": class_id, "exam_id": exam_id})
         if r.status_code == 200 and r.json():
             ranks = [s.get("class_rank", 0) for s in r.json()]
             assert ranks == sorted(ranks), "Results are not sorted by rank"

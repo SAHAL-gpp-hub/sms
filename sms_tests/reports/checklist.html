@@ -35,24 +35,24 @@
   .test-row.skip .status { background: #f1f5f9; color: #64748b; }
   .test-row.pending .status { background: #f1f5f9; color: #94a3b8; }
   .progress-bar { height: 8px; background: #e2e8f0; border-radius: 4px; margin: 8px 0; overflow: hidden; }
-  .progress-fill { height: 100%; background: #22c55e; border-radius: 4px; width: 27%; }
+  .progress-fill { height: 100%; background: #22c55e; border-radius: 4px; width: 30%; }
   .footer { text-align: center; padding: 24px; color: #94a3b8; font-size: 13px; }
 </style>
 </head>
 <body>
 <div class="header">
   <h1>🏫 SMS Test Checklist Report</h1>
-  <div class="meta">Generated: 14 Apr 2026 15:03:12</div>
+  <div class="meta">Generated: 14 Apr 2026 15:35:09</div>
   <div class="progress-bar" style="margin-top:16px; width:400px">
     <div class="progress-fill"></div>
   </div>
-  <div class="meta" style="margin-top:4px">27% passed (111/405)</div>
+  <div class="meta" style="margin-top:4px">30% passed (121/405)</div>
 </div>
 <div class="summary">
   <div class="stat"><div class="num blue">405</div><div class="lbl">Total Tests</div></div>
-  <div class="stat"><div class="num green">111</div><div class="lbl">Passed ✅</div></div>
-  <div class="stat"><div class="num red">13</div><div class="lbl">Failed ❌</div></div>
-  <div class="stat"><div class="num yellow">11</div><div class="lbl">Skipped ⏭️</div></div>
+  <div class="stat"><div class="num green">121</div><div class="lbl">Passed ✅</div></div>
+  <div class="stat"><div class="num red">4</div><div class="lbl">Failed ❌</div></div>
+  <div class="stat"><div class="num yellow">10</div><div class="lbl">Skipped ⏭️</div></div>
 </div>
 <div class="container">
   <table>
@@ -77,10 +77,10 @@
                     <td class="label">Add two students same name — both save</td>
                     <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Add 10+ students to same class — all appear</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
                 <tr class="test-row pass">
                     <td class="icon">✅</td>
@@ -197,10 +197,10 @@
                     <td class="label">Filter by class — only that class shown</td>
                     <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Filter class + search — both apply</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr><tr class="section-header"><td colspan="3">💰 Fee Structure</td></tr><tr class="subsection-header"><td colspan="3">&nbsp;&nbsp;&nbsp;Setup</td></tr>
                 <tr class="test-row pass">
                     <td class="icon">✅</td>
@@ -347,10 +347,10 @@
                     <td class="label">Mark absent — is_absent=True saved</td>
                     <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Marks persist after save</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
                 <tr class="test-row pass">
                     <td class="icon">✅</td>
@@ -452,10 +452,10 @@
                     <td class="label">Empty class — results page not crash</td>
                     <td class="status">PASSED</td>
                 </tr><tr class="section-header"><td colspan="3">📅 Attendance</td></tr><tr class="subsection-header"><td colspan="3">&nbsp;&nbsp;&nbsp;Daily Marking</td></tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Roster shows only ACTIVE students</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
                 <tr class="test-row pass">
                     <td class="icon">✅</td>
@@ -467,10 +467,10 @@
                     <td class="label">Mark all Present</td>
                     <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row skip">
-                    <td class="icon">⏭️</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Mark all Absent</td>
-                    <td class="status">SKIPPED</td>
+                    <td class="status">PASSED</td>
                 </tr>
                 <tr class="test-row pass">
                     <td class="icon">✅</td>
@@ -487,15 +487,15 @@
                     <td class="label">Save for future date — documented</td>
                     <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Revisit same date — pre-filled</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Update attendance — no duplicate</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
                 <tr class="test-row pass">
                     <td class="icon">✅</td>
@@ -512,15 +512,15 @@
                     <td class="label">100% attendance correct</td>
                     <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">75% exactly — NOT highlighted</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Below 75% — highlighted red</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
                 <tr class="test-row pass">
                     <td class="icon">✅</td>
@@ -677,10 +677,10 @@
                     <td class="label">Direct URL access works</td>
                     <td class="status">PASSED</td>
                 </tr>
-                <tr class="test-row fail">
-                    <td class="icon">❌</td>
+                <tr class="test-row pass">
+                    <td class="icon">✅</td>
                     <td class="label">Page refresh stays on same route</td>
-                    <td class="status">FAILED</td>
+                    <td class="status">PASSED</td>
                 </tr>
                 <tr class="test-row pass">
                     <td class="icon">✅</td>
@@ -689,6 +689,6 @@
                 </tr>
   </table>
 </div>
-<div class="footer">SMS Automated Test Suite · 14 Apr 2026 15:03:12</div>
+<div class="footer">SMS Automated Test Suite · 14 Apr 2026 15:35:09</div>
 </body>
 </html>

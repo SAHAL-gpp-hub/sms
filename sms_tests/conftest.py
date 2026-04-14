@@ -10,6 +10,9 @@ FIXES IN THIS VERSION:
   4. FEE FACTORY: Uses real seeded class id.
   5. make_payment(): Uses correct "mode" key (not "payment_mode").
   6. StudentFactory: Uses aadhar_last4 (not aadhar).
+  7. FIX: Added class_id and class_id_2 fixtures so tests can use real DB ids
+     in API params instead of hardcoded integers.
+  8. FIX: Added ui_login helper to authenticate Playwright browser sessions.
 """
 
 import os
@@ -92,11 +95,6 @@ def _seed_and_resolve(token: str) -> None:
     """
     Seed the database (creates academic year 2025-26 and classes Nursery–10),
     then resolve the real DB primary key ids for classes "1" and "2".
-
-    The classes table uses a serial PK — after a database reset the ids may
-    start from any number, NOT necessarily 1. Hardcoding class_id=1 in tests
-    breaks as soon as the sequence has advanced. This function looks up the
-    actual ids after seeding.
     """
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -197,6 +195,33 @@ def raw_api():
 
 
 # ──────────────────────────────────────────────
+# FIX: Expose real DB class ids as fixtures
+# ──────────────────────────────────────────────
+@pytest.fixture(scope="session")
+def class_id(api):
+    """
+    FIX: Returns the real DB primary key for 'Std 1' class.
+    Use this in GET params instead of hardcoded integer 1.
+    e.g. api.get("/students", params={"class_id": class_id})
+    """
+    return _SESSION.get("class_id") or 1
+
+
+@pytest.fixture(scope="session")
+def class_id_2(api):
+    """
+    FIX: Returns the real DB primary key for 'Std 2' class.
+    """
+    return _SESSION.get("class_id_2") or _SESSION.get("class_id") or 2
+
+
+@pytest.fixture(scope="session")
+def year_id(api):
+    """Returns the current academic year DB id."""
+    return _SESSION.get("year_id") or 1
+
+
+# ──────────────────────────────────────────────
 # PLAYWRIGHT
 # ──────────────────────────────────────────────
 @pytest.fixture(scope="session")
@@ -217,6 +242,36 @@ def browser_context():
 @pytest.fixture
 def page(browser_context):
     pg = browser_context.new_page()
+    yield pg
+    pg.close()
+
+
+@pytest.fixture(scope="session")
+def authenticated_page(browser_context):
+    """
+    FIX: A persistent Playwright page that is logged in once per session.
+    The JWT is injected into localStorage via window.localStorage so the
+    React app's in-memory token (auth.js) is set before navigation.
+
+    Since auth.js uses a module-level variable (not localStorage), we inject
+    the token by intercepting the page and calling the app's setToken via
+    the browser console, or by navigating through the login form once.
+    """
+    pg = browser_context.new_page()
+
+    # Navigate to login page and submit credentials
+    pg.goto(f"{FRONTEND_URL}/login")
+    pg.wait_for_load_state("networkidle")
+
+    try:
+        pg.fill("input[type='email']", TEST_EMAIL)
+        pg.fill("input[type='password']", TEST_PASSWORD)
+        pg.click("button[type='submit']")
+        pg.wait_for_url(f"{FRONTEND_URL}/**", timeout=8000)
+        pg.wait_for_load_state("networkidle")
+    except Exception as e:
+        print(f"\n[conftest] UI login failed: {e}")
+
     yield pg
     pg.close()
 

@@ -1,21 +1,16 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
-from app.models.base_models import (
-    Attendance, Student, Class,
-    FeePayment, StudentFee, FeeStructure, AcademicYear,
-)
+from app.models.base_models import Attendance, Student, Class
 from app.schemas.attendance import AttendanceEntry
 from datetime import date, timedelta
 from calendar import monthrange
-from decimal import Decimal
-
 
 def mark_attendance_bulk(db: Session, entries: list[AttendanceEntry]):
     for entry in entries:
         existing = db.query(Attendance).filter_by(
             student_id=entry.student_id,
             class_id=entry.class_id,
-            date=entry.date,
+            date=entry.date
         ).first()
         if existing:
             existing.status = entry.status
@@ -24,19 +19,15 @@ def mark_attendance_bulk(db: Session, entries: list[AttendanceEntry]):
                 student_id=entry.student_id,
                 class_id=entry.class_id,
                 date=entry.date,
-                status=entry.status,
+                status=entry.status
             ))
     db.commit()
     return {"marked": len(entries)}
 
-
 def get_attendance_for_date(db: Session, class_id: int, date: date):
-    students = (
-        db.query(Student)
-        .filter_by(class_id=class_id)
-        .filter(Student.status == "Active")
-        .all()
-    )
+    students = db.query(Student).filter_by(
+        class_id=class_id
+    ).filter(Student.status == "Active").all()
 
     attendance = db.query(Attendance).filter_by(
         class_id=class_id, date=date
@@ -49,38 +40,24 @@ def get_attendance_for_date(db: Session, class_id: int, date: date):
             "student_id": s.id,
             "student_name": s.name_en,
             "roll_number": s.roll_number,
-            "status": att_map.get(s.id, "P"),
+            "status": att_map.get(s.id, "P")  # default Present
         }
         for s in sorted(students, key=lambda x: x.roll_number or 9999)
     ]
 
-
 def get_monthly_summary(db: Session, class_id: int, year: int, month: int):
-    """
-    BUG 1 FIX: Field names changed from:
-        attendance_percentage -> percentage
-        is_low_attendance    -> low_attendance
-    to match the Pydantic schema (MonthlyAttendanceSummary) and the frontend.
-
-    DATA ERROR 1 NOTE: working_days counts Mon-Sat only (GSEB 6-day week).
-    Public holidays are not subtracted here — schools should mark those days
-    as 'OL' (On Leave) in the attendance tool so they are counted as present.
-    """
-    students = (
-        db.query(Student)
-        .filter_by(class_id=class_id)
-        .filter(Student.status == "Active")
-        .all()
-    )
+    students = db.query(Student).filter_by(
+        class_id=class_id
+    ).filter(Student.status == "Active").all()
 
     _, days_in_month = monthrange(year, month)
     month_start = date(year, month, 1)
     month_end = date(year, month, days_in_month)
 
-    # GSEB schools run Mon–Sat (weekday() 0–5); Sunday (6) is excluded.
+    # Count working days (Mon-Sat, excluding Sun)
     working_days = sum(
         1 for d in range(days_in_month)
-        if date(year, month, d + 1).weekday() != 6
+        if date(year, month, d + 1).weekday() != 6  # not Sunday
     )
 
     results = []
@@ -89,14 +66,14 @@ def get_monthly_summary(db: Session, class_id: int, year: int, month: int):
             Attendance.student_id == student.id,
             Attendance.class_id == class_id,
             Attendance.date >= month_start,
-            Attendance.date <= month_end,
+            Attendance.date <= month_end
         ).all()
 
         status_map = {r.date: r.status for r in records}
-        present = sum(1 for s in status_map.values() if s in ("P", "OL"))
+        present = sum(1 for s in status_map.values() if s == "P")
         absent = sum(1 for s in status_map.values() if s == "A")
         late = sum(1 for s in status_map.values() if s == "L")
-        percentage = round((present / working_days * 100), 1) if working_days > 0 else 0.0
+        percentage = round((present / working_days * 100), 1) if working_days > 0 else 0
 
         results.append({
             "student_id": student.id,
@@ -106,115 +83,69 @@ def get_monthly_summary(db: Session, class_id: int, year: int, month: int):
             "days_present": present,
             "days_absent": absent,
             "days_late": late,
-            # FIX: was "attendance_percentage" — now matches schema & frontend
             "percentage": percentage,
-            # FIX: was "is_low_attendance" — now matches schema & frontend
-            "low_attendance": percentage < 75,
-        })
+            "low_attendance": percentage < 75       })
 
     results.sort(key=lambda x: x["roll_number"] or 9999)
     return results
 
-
 def get_dashboard_stats(db: Session):
-    """
-    PERFORMANCE FIX: defaulter count now uses a single aggregating SQL query
-    instead of calling get_defaulters() which issued one query per student (N+1).
-    """
+    from app.models.base_models import (
+        Student, FeePayment, StudentFee, FeeStructure, AcademicYear
+    )
+    from decimal import Decimal
+    from datetime import date
+    from sqlalchemy.orm import joinedload
+
     # Total active students
     total_students = db.query(Student).filter_by(status="Active").count()
 
     # Current academic year
     current_year = db.query(AcademicYear).filter_by(is_current=True).first()
 
+    # Fees collected this month
     today = date.today()
     month_start = date(today.year, today.month, 1)
-
-    # Fees collected this month
-    fees_this_month = (
-        db.query(func.sum(FeePayment.amount_paid))
-        .filter(
-            FeePayment.payment_date >= month_start,
-            FeePayment.payment_date <= today,
-        )
-        .scalar()
-        or Decimal("0")
-    )
+    fees_this_month = db.query(func.sum(FeePayment.amount_paid)).filter(
+        FeePayment.payment_date >= month_start,
+        FeePayment.payment_date <= today
+    ).scalar() or Decimal("0")
 
     # Total fees collected this year
     if current_year:
-        fees_this_year = (
-            db.query(func.sum(FeePayment.amount_paid))
-            .filter(
-                FeePayment.payment_date >= current_year.start_date,
-                FeePayment.payment_date <= today,
-            )
-            .scalar()
-            or Decimal("0")
-        )
+        fees_this_year = db.query(func.sum(FeePayment.amount_paid)).filter(
+            FeePayment.payment_date >= current_year.start_date,
+            FeePayment.payment_date <= today
+        ).scalar() or Decimal("0")
     else:
         fees_this_year = Decimal("0")
 
-    # Total outstanding — single aggregating query (replaces N+1 get_defaulters call)
+    # Total outstanding
     total_due = db.query(func.sum(StudentFee.net_amount)).scalar() or Decimal("0")
     total_paid = db.query(func.sum(FeePayment.amount_paid)).scalar() or Decimal("0")
     total_outstanding = total_due - total_paid
 
-    # PERFORMANCE FIX: defaulter count via single GROUP BY query instead of
-    # iterating every student and issuing per-student fee queries.
-    # A "defaulter" is an active student whose sum(net_amount) > sum(paid).
-    subq = (
-        db.query(
-            StudentFee.student_id,
-            func.sum(StudentFee.net_amount).label("due"),
-            func.coalesce(func.sum(FeePayment.amount_paid), 0).label("paid"),
-        )
-        .join(Student, Student.id == StudentFee.student_id)
-        .join(
-            FeeStructure,
-            and_(
-                FeeStructure.id == StudentFee.fee_structure_id,
-                FeeStructure.academic_year_id == Student.academic_year_id,
-            ),
-        )
-        .outerjoin(FeePayment, FeePayment.student_fee_id == StudentFee.id)
-        .filter(Student.status == "Active")
-        .group_by(StudentFee.student_id)
-        .subquery()
-    )
-    defaulter_count = (
-        db.query(func.count())
-        .select_from(subq)
-        .filter(subq.c.due > subq.c.paid)
-        .scalar()
-        or 0
-    )
+    # Defaulters count
+    from app.services.fee_service import get_defaulters
+    defaulters = get_defaulters(db)
+    defaulter_count = len(defaulters)
 
     # Recent payments (last 5)
-    recent_payments = (
-        db.query(FeePayment)
-        .order_by(FeePayment.payment_date.desc())
-        .limit(5)
-        .all()
-    )
+    recent_payments = db.query(FeePayment).order_by(
+        FeePayment.payment_date.desc()
+    ).limit(5).all()
 
     # Recent admissions (last 5)
-    recent_students = (
-        db.query(Student)
-        .filter_by(status="Active")
-        .order_by(Student.created_at.desc())
-        .limit(5)
-        .all()
-    )
+    recent_students = db.query(Student).filter_by(
+        status="Active"
+    ).order_by(Student.created_at.desc()).limit(5).all()
 
-    # Class-wise enrollment count
-    class_counts = (
-        db.query(Class.name, func.count(Student.id))
-        .join(Student, Student.class_id == Class.id)
-        .filter(Student.status == "Active")
-        .group_by(Class.name)
-        .all()
-    )
+    # Class-wise count
+    class_counts = db.query(
+        Class.name, func.count(Student.id)
+    ).join(Student, Student.class_id == Class.id).filter(
+        Student.status == "Active"
+    ).group_by(Class.name).all()
 
     return {
         "total_students": total_students,
@@ -227,7 +158,7 @@ def get_dashboard_stats(db: Session):
                 "receipt_number": p.receipt_number,
                 "amount": float(p.amount_paid),
                 "date": str(p.payment_date),
-                "mode": p.mode,
+                "mode": p.mode
             }
             for p in recent_payments
         ],
@@ -235,12 +166,12 @@ def get_dashboard_stats(db: Session):
             {
                 "student_id": s.student_id,
                 "name": s.name_en,
-                "class_id": s.class_id,
+                "class_id": s.class_id
             }
             for s in recent_students
         ],
         "class_counts": [
             {"class_name": name, "count": count}
             for name, count in class_counts
-        ],
+        ]
     }
