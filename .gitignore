@@ -2,13 +2,29 @@
 __pycache__/
 *.pyc
 
+# Virtual environments
+venv/
+.env
+
 # Mac
 .DS_Store
 
-# Env
-.env
+# VS Code
+.vscode/
 
-# Tests
+# Test artifacts
+.pytest_cache/
+reports/
+
+# Project-specific
 sms_tests/venv/
-# Added by code-review-graph
-.code-review-graph/
+
+# AI / tooling files
+.cursorrules
+.mcp.json
+.opencodex.json
+.windsurfrules
+
+# Docs (optional - remove if needed)
+GEMINI.md
+AGENTS.md
