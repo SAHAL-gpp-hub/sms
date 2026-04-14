@@ -24,6 +24,7 @@ sms_tests/venv/
 .mcp.json
 .opencodex.json
 .windsurfrules
+.opencode.json
 
 # Docs (optional - remove if needed)
 GEMINI.md
