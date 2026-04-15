@@ -1,3 +1,17 @@
+"""
+app/routers/pdf.py
+
+PDF DOWNLOAD FIX: All PDF endpoints are called by the browser directly via
+window.open() or <a href="..."> links. The browser cannot attach an
+Authorization: Bearer header to these navigations, so all PDF download
+routes must NOT require JWT authentication.
+
+These routes are read-only — they generate and return binary PDF data.
+No student data is modified. The security trade-off is acceptable for an
+internal school system; if stricter control is needed in future, use
+short-lived signed URL tokens.
+"""
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
@@ -12,7 +26,12 @@ from app.pdf.report_pdf import (
 
 router = APIRouter(prefix="/api/v1/pdf", tags=["PDF"])
 
-# Marksheet PDFs
+
+# ──────────────────────────────────────────────
+# All routes: NO auth dependency
+# (browser opens via window.open / <a href>)
+# ──────────────────────────────────────────────
+
 @router.get("/marksheet/student/{student_id}")
 def generate_student_marksheet(
     student_id: int,
@@ -23,8 +42,12 @@ def generate_student_marksheet(
     pdf = render_marksheet_pdf(db, exam_id, class_id, student_id)
     if not pdf:
         raise HTTPException(status_code=404, detail="No marks found for this student")
-    return Response(content=pdf, media_type="application/pdf",
-        headers={"Content-Disposition": f"inline; filename=marksheet_{student_id}.pdf"})
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=marksheet_{student_id}.pdf"}
+    )
+
 
 @router.get("/marksheet/class/{class_id}")
 def generate_class_marksheet(
@@ -35,18 +58,25 @@ def generate_class_marksheet(
     pdf = render_marksheet_pdf(db, exam_id, class_id)
     if not pdf:
         raise HTTPException(status_code=404, detail="No marks found for this class")
-    return Response(content=pdf, media_type="application/pdf",
-        headers={"Content-Disposition": f"inline; filename=marksheet_class_{class_id}.pdf"})
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=marksheet_class_{class_id}.pdf"}
+    )
 
-# Report PDFs
+
 @router.get("/report/defaulters")
 def defaulter_report(
     academic_year_id: Optional[int] = Query(None),
     db: Session = Depends(get_db)
 ):
     pdf = render_defaulter_report(db, academic_year_id)
-    return Response(content=pdf, media_type="application/pdf",
-        headers={"Content-Disposition": "inline; filename=defaulter_report.pdf"})
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "inline; filename=defaulter_report.pdf"}
+    )
+
 
 @router.get("/report/attendance")
 def attendance_report(
@@ -56,8 +86,12 @@ def attendance_report(
     db: Session = Depends(get_db)
 ):
     pdf = render_attendance_report(db, class_id, year, month)
-    return Response(content=pdf, media_type="application/pdf",
-        headers={"Content-Disposition": "inline; filename=attendance_report.pdf"})
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "inline; filename=attendance_report.pdf"}
+    )
+
 
 @router.get("/report/results")
 def result_report(
@@ -66,5 +100,8 @@ def result_report(
     db: Session = Depends(get_db)
 ):
     pdf = render_result_report(db, exam_id, class_id)
-    return Response(content=pdf, media_type="application/pdf",
-        headers={"Content-Disposition": "inline; filename=result_report.pdf"})
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "inline; filename=result_report.pdf"}
+    )

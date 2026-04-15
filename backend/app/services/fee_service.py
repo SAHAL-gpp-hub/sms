@@ -323,17 +323,12 @@ def get_defaulters(
     academic_year_id: Optional[int] = None,
 ):
     """
-    PERFORMANCE 1 FIX:
-    Old code: loop over every active student → 1 StudentFee query per student.
-    For 600 students that is 600 queries on every defaulters page load.
-
-    New code: single GROUP BY query returning (student, total_due, total_paid)
-    then filter in Python for balance > 0.  Runs in 1 query regardless of
-    student count.
+    FIXED VERSION:
+    - Uses FeeStructure for academic year filtering (correct schema)
+    - Single query (optimized)
+    - No AttributeError
     """
-    from sqlalchemy import and_, case
 
-    # Aggregate dues and payments per student in one pass.
     q = (
         db.query(
             Student,
@@ -341,41 +336,44 @@ def get_defaulters(
             func.coalesce(func.sum(FeePayment.amount_paid), 0).label("total_paid"),
         )
         .join(StudentFee, StudentFee.student_id == Student.id, isouter=True)
-        .join(FeePayment, FeePayment.student_fee_id == StudentFee.id, isouter=True)
+        .join(FeeStructure, StudentFee.fee_structure_id == FeeStructure.id, isouter=True)
+        .outerjoin(FeePayment, FeePayment.student_fee_id == StudentFee.id)
         .filter(Student.status == "Active")
     )
 
-    # BUG 2 FIX: filter fees by StudentFee.academic_year_id (not via FeeStructure join)
+    # ✅ FIX: Use FeeStructure for academic year filtering
     if academic_year_id is not None:
-        q = q.filter(StudentFee.academic_year_id == academic_year_id)
-    elif True:
-        # Default: only fees for the student's current academic year
-        q = q.filter(
-            StudentFee.academic_year_id == Student.academic_year_id
-        )
+        q = q.filter(FeeStructure.academic_year_id == academic_year_id)
+    else:
+        # Default: match student's academic year
+        q = q.filter(FeeStructure.academic_year_id == Student.academic_year_id)
 
+    # Optional class filter
     if class_id is not None:
         q = q.filter(Student.class_id == class_id)
 
     q = q.group_by(Student.id)
 
+    results = q.all()
+
     defaulters = []
-    for student, total_due, total_paid in q.all():
+    for student, total_due, total_paid in results:
         balance = Decimal(str(total_due)) - Decimal(str(total_paid))
+
         if balance > 0:
-            class_row = db.query(Class).filter_by(id=student.class_id).first()
             defaulters.append(
                 {
                     "student_id": student.id,
                     "student_name": student.name_en,
                     "class_id": student.class_id,
-                    "class_name": class_row.name if class_row else "—",
                     "contact": student.contact,
-                    "total_due":  float(total_due),
+                    "total_due": float(total_due),
                     "total_paid": float(total_paid),
-                    "balance":    float(balance),
+                    "balance": float(balance),
                 }
             )
 
-    defaulters.sort(key=lambda item: item["balance"], reverse=True)
+    # Sort highest defaulters first
+    defaulters.sort(key=lambda x: x["balance"], reverse=True)
+
     return defaulters

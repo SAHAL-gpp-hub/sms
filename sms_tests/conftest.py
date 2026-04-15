@@ -12,7 +12,10 @@ FIXES IN THIS VERSION:
   6. StudentFactory: Uses aadhar_last4 (not aadhar).
   7. FIX: Added class_id and class_id_2 fixtures so tests can use real DB ids
      in API params instead of hardcoded integers.
-  8. FIX: Added ui_login helper to authenticate Playwright browser sessions.
+  8. FIX: authenticated_page is now function-scoped — each UI test gets a
+     fresh page that logs in cleanly. A shared session page breaks after any
+     test that triggers a reload (losing the in-memory token) or navigates
+     to /login, causing all subsequent tests to start from /login.
 """
 
 import os
@@ -195,34 +198,28 @@ def raw_api():
 
 
 # ──────────────────────────────────────────────
-# FIX: Expose real DB class ids as fixtures
+# Expose real DB class ids as session fixtures
 # ──────────────────────────────────────────────
 @pytest.fixture(scope="session")
 def class_id(api):
-    """
-    FIX: Returns the real DB primary key for 'Std 1' class.
-    Use this in GET params instead of hardcoded integer 1.
-    e.g. api.get("/students", params={"class_id": class_id})
-    """
+    """Real DB primary key for 'Std 1'. Use in GET params instead of hardcoded 1."""
     return _SESSION.get("class_id") or 1
 
 
 @pytest.fixture(scope="session")
 def class_id_2(api):
-    """
-    FIX: Returns the real DB primary key for 'Std 2' class.
-    """
+    """Real DB primary key for 'Std 2'."""
     return _SESSION.get("class_id_2") or _SESSION.get("class_id") or 2
 
 
 @pytest.fixture(scope="session")
 def year_id(api):
-    """Returns the current academic year DB id."""
+    """Current academic year DB id."""
     return _SESSION.get("year_id") or 1
 
 
 # ──────────────────────────────────────────────
-# PLAYWRIGHT
+# PLAYWRIGHT — browser + context (session)
 # ──────────────────────────────────────────────
 @pytest.fixture(scope="session")
 def browser_context():
@@ -241,37 +238,52 @@ def browser_context():
 
 @pytest.fixture
 def page(browser_context):
+    """Fresh unauthenticated page per test."""
     pg = browser_context.new_page()
     yield pg
     pg.close()
 
 
-@pytest.fixture(scope="session")
-def authenticated_page(browser_context):
+def _login_page(pg: Page) -> bool:
     """
-    FIX: A persistent Playwright page that is logged in once per session.
-    The JWT is injected into localStorage via window.localStorage so the
-    React app's in-memory token (auth.js) is set before navigation.
-
-    Since auth.js uses a module-level variable (not localStorage), we inject
-    the token by intercepting the page and calling the app's setToken via
-    the browser console, or by navigating through the login form once.
+    Navigate to /login and submit credentials.
+    Returns True if login succeeded (redirected away from /login).
     """
-    pg = browser_context.new_page()
-
-    # Navigate to login page and submit credentials
     pg.goto(f"{FRONTEND_URL}/login")
     pg.wait_for_load_state("networkidle")
-
     try:
         pg.fill("input[type='email']", TEST_EMAIL)
         pg.fill("input[type='password']", TEST_PASSWORD)
         pg.click("button[type='submit']")
-        pg.wait_for_url(f"{FRONTEND_URL}/**", timeout=8000)
+        # Wait for redirect away from /login
+        pg.wait_for_function(
+            "() => !window.location.pathname.includes('/login')",
+            timeout=8000
+        )
         pg.wait_for_load_state("networkidle")
+        return True
     except Exception as e:
         print(f"\n[conftest] UI login failed: {e}")
+        return False
 
+
+@pytest.fixture
+def authenticated_page(browser_context):
+    """
+    FIX: Function-scoped authenticated page — each UI test gets its own
+    fresh page that logs in cleanly before the test runs.
+
+    Previously this was session-scoped (one shared page). That broke when:
+    - test_page_refresh_stays_on_same_page reloaded the page, losing the
+      in-memory JWT token, landing at /login
+    - test_browser_back_button left the page at /login
+    - All subsequent tests in the same session inherited that /login state
+
+    Making it function-scoped costs ~1s per UI test for login, but guarantees
+    each test starts from a clean authenticated state.
+    """
+    pg = browser_context.new_page()
+    _login_page(pg)
     yield pg
     pg.close()
 
@@ -292,7 +304,6 @@ def _resolve_class_id(raw: int | None) -> int:
         return _SESSION.get("class_id") or 1
     if raw == 2:
         return _SESSION.get("class_id_2") or _SESSION.get("class_id") or 1
-    # For values 3+, caller is responsible — pass through unchanged
     return raw
 
 
@@ -323,7 +334,6 @@ class StudentFactory:
             "class_id":         resolved_cid,
         }
 
-        # Legacy key mapping
         fn = overrides.pop("first_name", None)
         ln = overrides.pop("last_name",  None)
         if fn or ln:

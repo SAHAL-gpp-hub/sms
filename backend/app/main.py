@@ -21,17 +21,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# C-01 FIX: Auth router included first (unprotected — needed for login/register)
+# ── Public routes (no auth) ──────────────────────────────────────────
+# Auth router — login/register
 app.include_router(auth.router)
 
-# C-01 FIX: All other routers now require a valid JWT token
+# PDF download routes — browser opens these directly via window.open/<a href>,
+# so no Authorization header can be sent. Read-only, no data mutation.
+app.include_router(pdf.router)
+
+# Year-end router — TC PDF downloads are public; write ops (promote/new-year)
+# enforce their own per-route Depends(get_current_user).
+app.include_router(yearend.router)
+
+# ── Protected routes (JWT required) ─────────────────────────────────
 app.include_router(students.router,   dependencies=[Depends(get_current_user)])
 app.include_router(setup.router,      dependencies=[Depends(get_current_user)])
 app.include_router(fees.router,       dependencies=[Depends(get_current_user)])
 app.include_router(marks.router,      dependencies=[Depends(get_current_user)])
-app.include_router(pdf.router,        dependencies=[Depends(get_current_user)])
 app.include_router(attendance.router, dependencies=[Depends(get_current_user)])
-app.include_router(yearend.router,    dependencies=[Depends(get_current_user)])
 
 
 @app.get("/")
