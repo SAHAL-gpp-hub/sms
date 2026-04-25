@@ -14,7 +14,9 @@ venv/
 
 # Test artifacts
 .pytest_cache/
+fixes/
 reports/
+sms_bugfixes/
 
 # Project-specific
 sms_tests/venv/

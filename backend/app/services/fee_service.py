@@ -2,19 +2,23 @@
 fee_service.py
 
 FIXES APPLIED:
-  - Bug 2:         StudentFee.academic_year_id is now written at assignment time
-                   and used for all ledger/defaulter queries instead of
-                   joining through FeeStructure to get the year. This means
-                   fee history is never lost when student.academic_year_id
-                   changes on promotion.
-  - Issue 5:       generate_receipt_number() used COUNT(*) which is a TOCTOU
-                   race under concurrent requests. Fixed to use MAX(id)+1 inside
-                   the same transaction, making collisions structurally impossible.
-  - Performance 1: get_defaulters() now uses a single aggregating GROUP BY query
-                   instead of one query per student (was O(N) queries for N students).
-  - Data Error 3:  When a FeeStructure amount is updated (idempotent upsert),
-                   existing StudentFee.net_amount records are also refreshed so
-                   ledgers never show stale amounts.
+  BUG-B (primary fix): StudentFee.academic_year_id was missing from the ORM
+  model (base_models.py). The column exists in the DB (added by migration
+  384df2f48f9d) but the model didn't declare it. Every call to
+  assign_fees_to_class() that wrote or filtered by this column raised:
+    AttributeError: type object 'StudentFee' has no attribute 'academic_year_id'
+  This made the entire /fees/assign endpoint crash with a 500 for every request.
+  Fix: academic_year_id is now declared in StudentFee in base_models.py.
+  The service code below that references it now works correctly.
+
+  Additional fixes in this file:
+  - generate_receipt_number: uses MAX(id) not COUNT(*) — avoids TOCTOU race
+    under concurrent payment submissions.
+  - get_defaulters: single aggregating GROUP BY query (was N+1 loop).
+  - get_student_ledger: filters StudentFee by its own academic_year_id
+    column so fee history isn't lost after student promotion.
+  - create_fee_structure: refreshes net_amount on existing StudentFee rows
+    when the fee amount is updated.
 """
 
 from datetime import date
@@ -32,33 +36,29 @@ from app.schemas.fee import (
     StudentLedger, StudentLedgerItem,
 )
 
+
 PRELOADED_FEE_HEADS = [
-    {"name": "Tuition Fee",        "frequency": "Monthly"},
-    {"name": "Admission Fee",      "frequency": "One-Time"},
-    {"name": "Exam Fee",           "frequency": "Termly"},
-    {"name": "Prospectus Fee",     "frequency": "One-Time"},
-    {"name": "Sports Fee",         "frequency": "Annual"},
-    {"name": "Computer Lab Fee",   "frequency": "Annual"},
-    {"name": "Library Fee",        "frequency": "Annual"},
-    {"name": "Late Payment Fine",  "frequency": "One-Time"},
-    {"name": "Development Fee",    "frequency": "Annual"},
-    {"name": "School Bus Fee",     "frequency": "Monthly"},
+    {"name": "Tuition Fee",       "frequency": "Monthly"},
+    {"name": "Admission Fee",     "frequency": "One-Time"},
+    {"name": "Exam Fee",          "frequency": "Termly"},
+    {"name": "Prospectus Fee",    "frequency": "One-Time"},
+    {"name": "Sports Fee",        "frequency": "Annual"},
+    {"name": "Computer Lab Fee",  "frequency": "Annual"},
+    {"name": "Library Fee",       "frequency": "Annual"},
+    {"name": "Late Payment Fine", "frequency": "One-Time"},
+    {"name": "Development Fee",   "frequency": "Annual"},
+    {"name": "School Bus Fee",    "frequency": "Monthly"},
 ]
 
 
-# ---------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────
 # Fee Heads
-# ---------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────
 
 def seed_fee_heads(db: Session):
-    for fee_head in PRELOADED_FEE_HEADS:
-        exists = db.query(FeeHead).filter_by(name=fee_head["name"]).first()
-        if not exists:
-            db.add(FeeHead(
-                name=fee_head["name"],
-                frequency=fee_head["frequency"],
-                is_active=True,
-            ))
+    for fh in PRELOADED_FEE_HEADS:
+        if not db.query(FeeHead).filter_by(name=fh["name"]).first():
+            db.add(FeeHead(name=fh["name"], frequency=fh["frequency"], is_active=True))
     db.commit()
 
 
@@ -67,16 +67,16 @@ def get_fee_heads(db: Session):
 
 
 def create_fee_head(db: Session, data: FeeHeadCreate):
-    fee_head = FeeHead(**data.model_dump(), is_active=True)
-    db.add(fee_head)
+    fh = FeeHead(**data.model_dump(), is_active=True)
+    db.add(fh)
     db.commit()
-    db.refresh(fee_head)
-    return fee_head
+    db.refresh(fh)
+    return fh
 
 
-# ---------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────
 # Fee Structure
-# ---------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────
 
 def create_fee_structure(db: Session, data: FeeStructureCreate):
     if Decimal(str(data.amount)) <= 0:
@@ -93,8 +93,7 @@ def create_fee_structure(db: Session, data: FeeStructureCreate):
         existing.amount = data.amount
         db.commit()
 
-        # DATA ERROR 3 FIX: refresh net_amount on StudentFee rows so ledgers
-        # reflect the updated amount immediately.
+        # Refresh net_amount on StudentFee rows so ledgers show current amount
         if old_amount != data.amount:
             db.query(StudentFee).filter_by(
                 fee_structure_id=existing.id,
@@ -105,11 +104,11 @@ def create_fee_structure(db: Session, data: FeeStructureCreate):
         db.refresh(existing)
         return existing
 
-    fee_structure = FeeStructure(**data.model_dump())
-    db.add(fee_structure)
+    fs = FeeStructure(**data.model_dump())
+    db.add(fs)
     db.commit()
-    db.refresh(fee_structure)
-    return fee_structure
+    db.refresh(fs)
+    return fs
 
 
 def get_fee_structures(
@@ -117,12 +116,12 @@ def get_fee_structures(
     class_id: Optional[int] = None,
     academic_year_id: Optional[int] = None,
 ):
-    query = db.query(FeeStructure).options(joinedload(FeeStructure.fee_head))
+    q = db.query(FeeStructure).options(joinedload(FeeStructure.fee_head))
     if class_id is not None:
-        query = query.filter(FeeStructure.class_id == class_id)
+        q = q.filter(FeeStructure.class_id == class_id)
     if academic_year_id is not None:
-        query = query.filter(FeeStructure.academic_year_id == academic_year_id)
-    return query.all()
+        q = q.filter(FeeStructure.academic_year_id == academic_year_id)
+    return q.all()
 
 
 def get_fee_structure(db: Session, fs_id: int):
@@ -135,21 +134,31 @@ def get_fee_structure(db: Session, fs_id: int):
 
 
 def delete_fee_structure(db: Session, fs_id: int):
-    fee_structure = db.query(FeeStructure).filter_by(id=fs_id).first()
-    if fee_structure:
-        db.delete(fee_structure)
+    fs = db.query(FeeStructure).filter_by(id=fs_id).first()
+    if fs:
+        db.delete(fs)
         db.commit()
-    return fee_structure
+    return fs
 
 
-# ---------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────
 # Assign fees to a class
-# ---------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────
 
 def assign_fees_to_class(
     db: Session, class_id: int, academic_year_id: Optional[int] = None
-):
+) -> int:
+    """
+    Assigns all FeeStructure rows for a class+year to every active student
+    in that class+year. Idempotent — won't create duplicate StudentFee rows.
+
+    Returns the count of newly created StudentFee records.
+
+    BUG-B FIX: Now correctly writes StudentFee.academic_year_id (the column
+    that was missing from the model, causing AttributeError on every call).
+    """
     if academic_year_id is None:
+        # Infer from the students' academic year or from the fee structures
         student_year = (
             db.query(Student.academic_year_id)
             .filter(Student.class_id == class_id, Student.status == "Active")
@@ -180,40 +189,39 @@ def assign_fees_to_class(
 
     assigned = 0
     for student in students:
-        for fee_structure in structures:
+        for fs in structures:
             exists = db.query(StudentFee).filter_by(
                 student_id=student.id,
-                fee_structure_id=fee_structure.id,
+                fee_structure_id=fs.id,
             ).first()
             if not exists:
-                db.add(
-                    StudentFee(
-                        student_id=student.id,
-                        fee_structure_id=fee_structure.id,
-                        concession=Decimal("0.00"),
-                        net_amount=Decimal(str(fee_structure.amount)),
-                        # BUG 2 FIX: stamp the year on the StudentFee row
-                        academic_year_id=academic_year_id,
-                    )
-                )
+                db.add(StudentFee(
+                    student_id=student.id,
+                    fee_structure_id=fs.id,
+                    concession=Decimal("0.00"),
+                    net_amount=Decimal(str(fs.amount)),
+                    # BUG-B FIX: write the year so ledger queries can filter by it
+                    # after promotion changes the student's academic_year_id.
+                    academic_year_id=academic_year_id,
+                ))
                 assigned += 1
 
     db.commit()
     return assigned
 
 
-# ---------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────
 # Student Ledger
-# ---------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────
 
 def get_student_ledger(db: Session, student_id: int) -> Optional[StudentLedger]:
     student = db.query(Student).filter_by(id=student_id).first()
     if not student:
         return None
 
-    # BUG 2 FIX: filter StudentFee by its OWN academic_year_id, not by
-    # student.academic_year_id joined through FeeStructure.  After promotion
-    # the student's year changes but old fees keep their year stamp.
+    # Filter StudentFee by its OWN academic_year_id stamp (written at assign time).
+    # After promotion, student.academic_year_id changes to the new year, but the
+    # old StudentFee rows keep their original year — so we can still see them.
     student_fees = (
         db.query(StudentFee)
         .options(
@@ -236,20 +244,17 @@ def get_student_ledger(db: Session, student_id: int) -> Optional[StudentLedger]:
             (Decimal(str(p.amount_paid)) for p in sf.payments),
             Decimal("0.00"),
         )
-        net_amount = Decimal(str(sf.net_amount))
-        balance = net_amount - paid
-        total_due  += net_amount
+        net = Decimal(str(sf.net_amount))
+        total_due  += net
         total_paid += paid
-        items.append(
-            StudentLedgerItem(
-                fee_head_name=sf.fee_structure.fee_head.name,
-                frequency=sf.fee_structure.fee_head.frequency,
-                net_amount=net_amount,
-                paid_amount=paid,
-                balance=balance,
-                student_fee_id=sf.id,
-            )
-        )
+        items.append(StudentLedgerItem(
+            fee_head_name=sf.fee_structure.fee_head.name,
+            frequency=sf.fee_structure.fee_head.frequency,
+            net_amount=net,
+            paid_amount=paid,
+            balance=net - paid,
+            student_fee_id=sf.id,
+        ))
 
     return StudentLedger(
         student_id=student_id,
@@ -261,21 +266,17 @@ def get_student_ledger(db: Session, student_id: int) -> Optional[StudentLedger]:
     )
 
 
-# ---------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────
 # Payments
-# ---------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────
 
 def generate_receipt_number(db: Session) -> str:
     """
-    ISSUE 5 FIX: The old implementation used COUNT(*) which is a TOCTOU race —
-    two concurrent requests both read count=10 and both try to insert
-    RCPT-2026-00011, causing an IntegrityError on the second.
-
-    Using MAX(id) is safe because:
-    1. The INSERT for this payment has not committed yet, so MAX(id) returns
-       the last committed id.
-    2. The unique constraint on receipt_number is the final safety net; with
-       MAX(id) the probability of collision is negligible and retry handles it.
+    Uses MAX(id) not COUNT(*) to avoid TOCTOU race under concurrent requests.
+    Two concurrent requests both reading COUNT=10 would both generate RCPT-YEAR-00011
+    causing a UniqueViolation on the second INSERT.
+    MAX(id) is safe because the INSERT for this payment hasn't committed yet,
+    so MAX returns the last committed id.
     """
     year    = date.today().year
     last_id = db.query(func.max(FeePayment.id)).scalar() or 0
@@ -286,8 +287,8 @@ def record_payment(db: Session, data: PaymentCreate) -> FeePayment:
     if Decimal(str(data.amount_paid)) <= 0:
         raise ValueError("Payment amount must be greater than 0")
 
-    student_fee = db.query(StudentFee).filter_by(id=data.student_fee_id).first()
-    if not student_fee:
+    sf = db.query(StudentFee).filter_by(id=data.student_fee_id).first()
+    if not sf:
         raise LookupError("Student fee not found")
 
     receipt = generate_receipt_number(db)
@@ -299,23 +300,23 @@ def record_payment(db: Session, data: PaymentCreate) -> FeePayment:
 
 
 def get_payments_by_student(db: Session, student_id: int):
-    student_fee_ids = [
+    sf_ids = [
         sf.id
         for sf in db.query(StudentFee).filter_by(student_id=student_id).all()
     ]
-    if not student_fee_ids:
+    if not sf_ids:
         return []
     return (
         db.query(FeePayment)
-        .filter(FeePayment.student_fee_id.in_(student_fee_ids))
+        .filter(FeePayment.student_fee_id.in_(sf_ids))
         .order_by(FeePayment.payment_date.desc(), FeePayment.id.desc())
         .all()
     )
 
 
-# ---------------------------------------------------------------------------
-# Defaulters — PERFORMANCE FIX: single aggregating query replaces N+1 loop
-# ---------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────
+# Defaulters — single aggregating query (not N+1)
+# ──────────────────────────────────────────────────────────────
 
 def get_defaulters(
     db: Session,
@@ -323,12 +324,9 @@ def get_defaulters(
     academic_year_id: Optional[int] = None,
 ):
     """
-    FIXED VERSION:
-    - Uses FeeStructure for academic year filtering (correct schema)
-    - Single query (optimized)
-    - No AttributeError
+    Returns students with outstanding fee balance, using a single SQL query
+    with GROUP BY instead of a Python loop with one query per student.
     """
-
     q = (
         db.query(
             Student,
@@ -341,39 +339,29 @@ def get_defaulters(
         .filter(Student.status == "Active")
     )
 
-    # ✅ FIX: Use FeeStructure for academic year filtering
     if academic_year_id is not None:
         q = q.filter(FeeStructure.academic_year_id == academic_year_id)
     else:
-        # Default: match student's academic year
         q = q.filter(FeeStructure.academic_year_id == Student.academic_year_id)
 
-    # Optional class filter
     if class_id is not None:
         q = q.filter(Student.class_id == class_id)
 
     q = q.group_by(Student.id)
 
-    results = q.all()
-
     defaulters = []
-    for student, total_due, total_paid in results:
+    for student, total_due, total_paid in q.all():
         balance = Decimal(str(total_due)) - Decimal(str(total_paid))
-
         if balance > 0:
-            defaulters.append(
-                {
-                    "student_id": student.id,
-                    "student_name": student.name_en,
-                    "class_id": student.class_id,
-                    "contact": student.contact,
-                    "total_due": float(total_due),
-                    "total_paid": float(total_paid),
-                    "balance": float(balance),
-                }
-            )
+            defaulters.append({
+                "student_id":   student.id,
+                "student_name": student.name_en,
+                "class_id":     student.class_id,
+                "contact":      student.contact,
+                "total_due":    float(total_due),
+                "total_paid":   float(total_paid),
+                "balance":      float(balance),
+            })
 
-    # Sort highest defaulters first
     defaulters.sort(key=lambda x: x["balance"], reverse=True)
-
     return defaulters

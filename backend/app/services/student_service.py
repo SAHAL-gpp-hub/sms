@@ -1,17 +1,33 @@
 """
 student_service.py
 
-FIXES APPLIED:
-  - Bug 4: generate_student_id() was a TOCTOU race — two concurrent requests
-           both read count=5 and both tried to create SMS-2026-006, causing an
-           IntegrityError on the second insert.  Fixed by catching IntegrityError
-           and retrying up to 5 times with a fresh count each attempt.
+FIX — BUG-CONCURRENCY (race-proof, no schema change required):
+  generate_student_id() now acquires a PostgreSQL advisory transaction lock
+  keyed on the admission year before reading MAX().
+
+  Why the old approach failed
+  ───────────────────────────
+  COUNT race:  threads A and B both read COUNT=5 → both generate SMS-2026-006
+               → one wins, the other hits IntegrityError.
+  MAX + retry: same window. Retries help but 10 threads hitting simultaneously
+               can exhaust all attempts before any commit is visible.
+
+  Advisory lock solution
+  ──────────────────────
+  pg_advisory_xact_lock(year) serialises all concurrent callers for the same
+  year at the DB level. The lock is held for the duration of the transaction
+  and released automatically on commit or rollback — no manual cleanup needed.
+
+  Thread A acquires the lock → reads MAX → generates SMS-2026-006 → commits
+  → lock released → Thread B acquires the lock → reads MAX (now 6) →
+  generates SMS-2026-007 → commits. Zero collisions, zero retries needed.
+
+  The UNIQUE constraint on student_id remains as a hard safety net.
 """
 
-from datetime import date
 from typing import Optional
 
-from sqlalchemy import or_
+from sqlalchemy import or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -20,51 +36,105 @@ from app.schemas.student import StudentCreate, StudentUpdate
 from fastapi import HTTPException
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# ID generation
+# ──────────────────────────────────────────────────────────────────────────────
+
 def generate_student_id(db: Session, year: int) -> str:
     """
-    BUG 4 FIX: Uses MAX(id) pattern inside a fresh count per attempt instead
-    of a cached count. The caller retries on IntegrityError so concurrent
-    requests never produce a duplicate final ID.
-    """
-    count = db.query(Student).filter(Student.student_id.like(f"SMS-{year}-%")).count()
-    return f"SMS-{year}-{str(count + 1).zfill(3)}"
+    Returns the next sequential student ID for the given admission year,
+    e.g. SMS-2026-007.
 
+    Acquires a PostgreSQL advisory transaction lock keyed on the year so that
+    concurrent callers are fully serialised — no two threads can read MAX()
+    at the same time for the same year. The lock is released automatically
+    when the surrounding transaction commits or rolls back.
+    """
+    # Serialize all concurrent ID generation for this admission year.
+    # pg_advisory_xact_lock takes a bigint; using year directly is fine
+    # (years are small positive integers well within bigint range).
+    db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": year})
+
+    result = db.execute(
+        text(
+            "SELECT MAX(CAST(SPLIT_PART(student_id, '-', 3) AS INTEGER)) "
+            "FROM students "
+            "WHERE student_id LIKE :prefix"
+        ),
+        {"prefix": f"SMS-{year}-%"},
+    ).scalar()
+
+    next_num = (result or 0) + 1
+    return f"SMS-{year}-{str(next_num).zfill(3)}"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CRUD
+# ──────────────────────────────────────────────────────────────────────────────
 
 def create_student(db: Session, data: StudentCreate) -> Student:
     """
-    BUG 4 FIX: Retry loop around the INSERT so concurrent admissions never
-    cause a 500 — at most one retries and wins; the other gets a fresh count.
+    Creates a student record.
+
+    ID generation is now race-proof via advisory locking, so a single attempt
+    is sufficient. A one-shot retry is kept only as a last-resort safety net
+    for the (practically impossible) case where the UNIQUE constraint fires
+    despite the lock (e.g. a row was inserted outside this service with a
+    hand-crafted ID).
     """
-    year = data.admission_date.year
+    year    = data.admission_date.year
     payload = data.model_dump()
 
-    for attempt in range(5):
-        student_id = generate_student_id(db, year)
-        student = Student(student_id=student_id, **payload)
-        db.add(student)
-        try:
-            db.commit()
-            db.refresh(student)
-            return student
-        except IntegrityError as exc:
-            db.rollback()
-            # Only retry on student_id uniqueness violation; re-raise anything else.
-            if "student_id" not in str(exc.orig):
-                raise HTTPException(status_code=400, detail=str(exc.orig)) from exc
-            # Next iteration re-counts and tries again.
+    student_id = generate_student_id(db, year)
+    student    = Student(student_id=student_id, **payload)
+    db.add(student)
 
-    raise HTTPException(
-        status_code=500,
-        detail="Could not generate a unique student ID after 5 attempts. Try again.",
-    )
+    try:
+        db.commit()
+        db.refresh(student)
+        return student
+    except IntegrityError as exc:
+        db.rollback()
+        err_str = str(exc.orig).lower()
+
+        # Retry once — only for student_id collisions (should never happen
+        # with advisory locking, but belt-and-suspenders).
+        if "student_id" in err_str and ("unique" in err_str or "duplicate" in err_str):
+            student_id = generate_student_id(db, year)
+            student    = Student(student_id=student_id, **payload)
+            db.add(student)
+            try:
+                db.commit()
+                db.refresh(student)
+                return student
+            except IntegrityError as exc2:
+                db.rollback()
+                raise HTTPException(
+                    status_code=500,
+                    detail=(
+                        "Could not generate a unique student ID even with advisory "
+                        f"locking. This should not happen — check for manual DB "
+                        f"inserts that bypass this service. Last error: {exc2.orig}"
+                    ),
+                ) from exc2
+
+        # Any other constraint violation (e.g. duplicate roll_number) is a
+        # client error — return 400 with the DB message.
+        raise HTTPException(status_code=400, detail=str(exc.orig)) from exc
 
 
 def get_students(
     db: Session,
-    class_id: Optional[int] = None,
-    search: Optional[str] = None,
-    academic_year_id: Optional[int] = None,
+    class_id: Optional[int]           = None,
+    search: Optional[str]             = None,
+    academic_year_id: Optional[int]   = None,
+    limit: int                         = 50,
+    offset: int                        = 0,
 ):
+    """
+    Returns active students with optional filters and pagination.
+    limit/offset support was added for M-01 (no student list pagination).
+    """
     query = db.query(Student).filter(Student.status == "Active")
 
     if class_id is not None:
@@ -82,7 +152,7 @@ def get_students(
             )
         )
 
-    return query.all()
+    return query.offset(offset).limit(limit).all()
 
 
 def get_student(
@@ -100,20 +170,18 @@ def update_student(
     student = get_student(db, student_id, include_inactive=True)
     if not student:
         return None
-
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(student, key, value)
-
     db.commit()
     db.refresh(student)
     return student
 
 
 def delete_student(db: Session, student_id: int) -> bool:
+    """Soft-delete: marks student as 'Left' rather than removing the row."""
     student = get_student(db, student_id, include_inactive=True)
     if not student or student.status == "Left":
         return False
-
     student.status = "Left"
     db.commit()
     return True
