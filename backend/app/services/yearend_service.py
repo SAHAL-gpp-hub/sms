@@ -17,11 +17,13 @@ FIXES APPLIED:
 
 from datetime import date
 
-from fastapi import HTTPException
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from app.models.base_models import Student, Class, AcademicYear
+from app.services.marks_service import GSEB_SUBJECTS
 
 # Canonical GSEB class progression
 CLASS_ORDER = [
@@ -113,10 +115,9 @@ def create_academic_year(
 ):
     existing = db.query(AcademicYear).filter_by(label=label).first()
     if existing:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Academic year '{label}' already exists",
-        )
+        # STEP 3.1 FIX: raise ValueError, not HTTPException.
+        # The router catches ValueError and converts to HTTP 400.
+        raise ValueError(f"Academic year '{label}' already exists")
 
     # Unset current year
     db.query(AcademicYear).filter_by(is_current=True).update({"is_current": False})
@@ -133,14 +134,11 @@ def create_academic_year(
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail=f"Academic year '{label}' already exists",
-        )
+        raise ValueError(f"Academic year '{label}' already exists")
     db.refresh(new_year)
 
     # Auto-create all standard classes for the new year
-    from app.services.marks_service import GSEB_SUBJECTS
+    # STEP 4.3 FIX: import moved to module top level (no longer inline here).
     for name in GSEB_SUBJECTS:
         exists = db.query(Class).filter_by(
             name=name, academic_year_id=new_year.id
@@ -171,8 +169,14 @@ def get_tc_data(db: Session, student_id: int, reason: str, conduct: str):
     cls  = db.query(Class).filter_by(id=student.class_id).first()
     year = db.query(AcademicYear).filter_by(id=student.academic_year_id).first()
 
-    tc_count  = db.query(Student).filter(Student.status == "TC Issued").count()
-    tc_number = f"TC-{date.today().year}-{str(tc_count).zfill(4)}"
+    # STEP 2.4 FIX: use MAX(id) + advisory lock instead of COUNT(*)
+    # to avoid TOCTOU race. Two concurrent TC requests both reading
+    # COUNT=10 would generate the same TC-YEAR-0011; MAX(id) is safe because
+    # the current transaction hasn't committed yet so it sees the last
+    # committed value. Advisory lock serialises concurrent callers.
+    db.execute(text("SELECT pg_advisory_xact_lock(202426)"))
+    last_id   = db.query(func.max(Student.id)).filter(Student.status == "TC Issued").scalar() or 0
+    tc_number = f"TC-{date.today().year}-{str(last_id + 1).zfill(4)}"
 
     # FIX (Issue 6): format dates as DD/MM/YYYY for GSEB TC
     def fmt(d):

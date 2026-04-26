@@ -60,19 +60,26 @@ def get_monthly_summary(db: Session, class_id: int, year: int, month: int):
         if date(year, month, d + 1).weekday() != 6  # not Sunday
     )
 
+    # STEP 3.2 FIX: Single bulk query replaces N+1 per-student loop.
+    # Previously each student triggered one SELECT; now one query fetches all
+    # attendance records for the class/month and we aggregate in Python.
+    all_records = db.query(Attendance).filter(
+        Attendance.class_id == class_id,
+        Attendance.date >= month_start,
+        Attendance.date <= month_end,
+    ).all()
+
+    # Build a map: {student_id: {date: status}}
+    att_by_student: dict[int, dict] = {}
+    for rec in all_records:
+        att_by_student.setdefault(rec.student_id, {})[rec.date] = rec.status
+
     results = []
     for student in students:
-        records = db.query(Attendance).filter(
-            Attendance.student_id == student.id,
-            Attendance.class_id == class_id,
-            Attendance.date >= month_start,
-            Attendance.date <= month_end
-        ).all()
-
-        status_map = {r.date: r.status for r in records}
+        status_map = att_by_student.get(student.id, {})
         present = sum(1 for s in status_map.values() if s == "P")
-        absent = sum(1 for s in status_map.values() if s == "A")
-        late = sum(1 for s in status_map.values() if s == "L")
+        absent  = sum(1 for s in status_map.values() if s == "A")
+        late    = sum(1 for s in status_map.values() if s == "L")
         percentage = round((present / working_days * 100), 1) if working_days > 0 else 0
 
         results.append({
@@ -84,7 +91,8 @@ def get_monthly_summary(db: Session, class_id: int, year: int, month: int):
             "days_absent": absent,
             "days_late": late,
             "percentage": percentage,
-            "low_attendance": percentage < 75       })
+            "low_attendance": percentage < 75,
+        })
 
     results.sort(key=lambda x: x["roll_number"] or 9999)
     return results

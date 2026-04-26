@@ -22,9 +22,11 @@ def list_students(
     class_id: Optional[int] = Query(None),
     academic_year_id: Optional[int] = Query(None),
     search: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
-    return student_service.get_students(db, class_id, search, academic_year_id)
+    return student_service.get_students(db, class_id, search, academic_year_id, limit, offset)
 
 
 @router.get("/{student_id}", response_model=StudentOut)

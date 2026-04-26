@@ -37,8 +37,14 @@ def get_subjects(
 ):
     if class_id:
         return marks_service.get_subjects(db, class_id)
-    if standard:
-        return marks_service.get_subjects(db, standard)
+    if standard is not None:
+        # STEP 3.4 FIX: `standard` is a class *name* (e.g. 7), not a DB id.
+        # Look up the Class row by name and use its primary key.
+        from app.models.base_models import Class
+        cls = db.query(Class).filter(Class.name == str(standard)).first()
+        if not cls:
+            return []
+        return marks_service.get_subjects(db, cls.id)
     return []
 
 
@@ -105,27 +111,17 @@ def get_marks(
     """Returns {students: [...], subjects: [...]}."""
     return marks_service.get_marks(db, exam_id, class_id)
 
-
-@router.get("/grid")
-def get_marks_grid(
-    exam_id:  int = Query(...),
-    class_id: int = Query(...),
-    db: Session = Depends(get_db),
-):
-    """
-    ISSUE 7 FIX: Previously stripped the 'subjects' key, returning only the
-    students list.  Now returns the full {students, subjects} object identical
-    to /entry so any consumer gets complete subject metadata.
-
-    Tests that expected a raw list from /grid are updated in test_marks.py to
-    use r.json().get("students", []) or handle both shapes.
-    """
-    return marks_service.get_marks(db, exam_id, class_id)
+# STEP 3.6: /marks/grid was identical to /marks/entry — removed to avoid
+# confusion. All consumers should use /marks/entry.
 
 
 @router.post("/bulk")
 def bulk_save_marks(entries: list[MarkEntry], db: Session = Depends(get_db)):
-    return marks_service.bulk_save_marks(db, entries)
+    # STEP 3.1 FIX: catch ValueError raised by service layer and convert to HTTP 422.
+    try:
+        return marks_service.bulk_save_marks(db, entries)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------

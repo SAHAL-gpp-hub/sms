@@ -16,10 +16,9 @@ FIXES APPLIED:
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.models.base_models import Subject, Exam, Mark, Student, Class
+from app.models.base_models import Subject, Exam, Mark, Student, Class, StudentStatusEnum
 from app.schemas.marks import SubjectCreate, ExamCreate, MarkEntry
 
 
@@ -169,24 +168,20 @@ def bulk_save_marks(db: Session, entries: list[MarkEntry]):
             subject = db.query(Subject).filter_by(id=entry.subject_id).first()
             if subject:
                 if entry.theory_marks > subject.max_theory:
-                    raise HTTPException(
-                        status_code=422,
-                        detail=(
-                            f"Theory marks {entry.theory_marks} exceed max "
-                            f"{subject.max_theory} for subject {subject.name}"
-                        ),
+                    # STEP 3.1 FIX: raise ValueError, not HTTPException.
+                    # Services should not depend on HTTP — the router converts this.
+                    raise ValueError(
+                        f"Theory marks {entry.theory_marks} exceed max "
+                        f"{subject.max_theory} for subject {subject.name}"
                     )
                 if (
                     entry.practical_marks
                     and subject.max_practical > 0
                     and entry.practical_marks > subject.max_practical
                 ):
-                    raise HTTPException(
-                        status_code=422,
-                        detail=(
-                            f"Practical marks {entry.practical_marks} exceed "
-                            f"max {subject.max_practical}"
-                        ),
+                    raise ValueError(
+                        f"Practical marks {entry.practical_marks} exceed "
+                        f"max {subject.max_practical}"
                     )
 
         existing = db.query(Mark).filter_by(
@@ -212,7 +207,21 @@ def get_marks(db: Session, exam_id: int, class_id: int):
         .all()
     )
     subjects = db.query(Subject).filter_by(class_id=class_id).all()
-    marks    = db.query(Mark).filter_by(exam_id=exam_id).all()
+    subject_ids = [s.id for s in subjects]
+
+    # STEP 2.3 FIX: scope marks to this class's subjects only.
+    # Previously filter_by(exam_id=exam_id) returned marks for ALL classes
+    # sharing the same exam_id, so students from other classes could leak in.
+    marks = (
+        db.query(Mark)
+        .filter(
+            Mark.exam_id == exam_id,
+            Mark.subject_id.in_(subject_ids),
+        )
+        .all()
+        if subject_ids
+        else []
+    )
 
     mark_map = {(m.student_id, m.subject_id): m for m in marks}
 

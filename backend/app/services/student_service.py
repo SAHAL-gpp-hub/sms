@@ -31,7 +31,7 @@ from sqlalchemy import or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.base_models import Student
+from app.models.base_models import Student, StudentStatusEnum
 from app.schemas.student import StudentCreate, StudentUpdate
 from fastapi import HTTPException
 
@@ -135,7 +135,7 @@ def get_students(
     Returns active students with optional filters and pagination.
     limit/offset support was added for M-01 (no student list pagination).
     """
-    query = db.query(Student).filter(Student.status == "Active")
+    query = db.query(Student).filter(Student.status == StudentStatusEnum.Active)
 
     if class_id is not None:
         query = query.filter(Student.class_id == class_id)
@@ -160,7 +160,7 @@ def get_student(
 ) -> Optional[Student]:
     query = db.query(Student).filter(Student.id == student_id)
     if not include_inactive:
-        query = query.filter(Student.status == "Active")
+        query = query.filter(Student.status == StudentStatusEnum.Active)
     return query.first()
 
 
@@ -180,8 +180,8 @@ def update_student(
 def delete_student(db: Session, student_id: int) -> bool:
     """Soft-delete: marks student as 'Left' rather than removing the row."""
     student = get_student(db, student_id, include_inactive=True)
-    if not student or student.status == "Left":
+    if not student or student.status == StudentStatusEnum.Left:
         return False
-    student.status = "Left"
+    student.status = StudentStatusEnum.Left
     db.commit()
     return True

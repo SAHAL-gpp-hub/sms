@@ -90,19 +90,24 @@ class StudentCreate(BaseModel):
 
 
 class StudentUpdate(BaseModel):
-    name_en:     Optional[str]              = None
-    name_gu:     Optional[str]              = None
-    dob:         Optional[date]             = None
-    gender:      Optional[GenderEnum]       = None
-    class_id:    Optional[int]              = None
-    roll_number: Optional[int]              = None
-    gr_number:   Optional[str]              = None
-    father_name: Optional[str]              = None
-    mother_name: Optional[str]              = None
-    contact:     Optional[str]              = None
-    address:     Optional[str]              = None
-    category:    Optional[str]              = None
-    status:      Optional[StudentStatusEnum] = None
+    name_en:       Optional[str]              = None
+    name_gu:       Optional[str]              = None
+    dob:           Optional[date]             = None
+    gender:        Optional[GenderEnum]       = None
+    class_id:      Optional[int]              = None
+    roll_number:   Optional[int]              = None
+    gr_number:     Optional[str]              = None
+    father_name:   Optional[str]              = None
+    mother_name:   Optional[str]              = None
+    contact:       Optional[str]              = None
+    address:       Optional[str]              = None
+    category:      Optional[str]              = None
+    status:        Optional[StudentStatusEnum] = None
+    # STEP 3.8 FIX: aadhar_last4 and admission_date were missing from
+    # StudentUpdate, so updating these fields via PUT /students/{id} was
+    # silently ignored (the field values were excluded from model_dump).
+    aadhar_last4:    Optional[str]  = None
+    admission_date:  Optional[date] = None
 
     @field_validator("contact")
     @classmethod
@@ -120,6 +125,18 @@ class StudentUpdate(BaseModel):
         if v is not None and v <= 0:
             raise ValueError("Roll number must be greater than 0")
         return v
+
+    @field_validator("aadhar_last4")
+    @classmethod
+    def validate_aadhar_last4(cls, v):
+        if v is None:
+            return v
+        v = v.strip()
+        if v == "":
+            return None
+        if not v.isdigit() or len(v) > 4:
+            raise ValueError("Aadhar last 4 digits must be exactly 4 numeric digits")
+        return v.zfill(4)
 
 
 class StudentOut(BaseModel):

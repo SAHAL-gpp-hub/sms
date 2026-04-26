@@ -21,13 +21,17 @@ FIXES:
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from app.core.database import Base, check_db_connection, engine
 from app.models.base_models import *  # noqa — registers all models with Base
 from app.routers import attendance, auth, fees, marks, pdf, setup, students, yearend
-from app.routers.auth import get_current_user
+from app.routers.auth import get_current_user, limiter
 
 logger = logging.getLogger("sms")
 logging.basicConfig(
@@ -76,6 +80,11 @@ app = FastAPI(
     description="SMS for Iqra English Medium School — Palanpur, Gujarat",
     lifespan=lifespan,
 )
+
+# STEP 4.5: Attach the rate limiter so @limiter.limit() decorators work.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # ── CORS ──────────────────────────────────────────────────────────────────
 # Allow the Vite dev server, CRA dev server, and the Docker nginx proxy.
