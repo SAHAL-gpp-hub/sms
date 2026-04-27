@@ -14,6 +14,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 from app.core.database import get_db
+from app.models.base_models import Class
 from app.schemas.marks import SubjectCreate, SubjectOut, ExamCreate, ExamOut, MarkEntry
 from app.services import marks_service
 
@@ -40,7 +41,6 @@ def get_subjects(
     if standard is not None:
         # STEP 3.4 FIX: `standard` is a class *name* (e.g. 7), not a DB id.
         # Look up the Class row by name and use its primary key.
-        from app.models.base_models import Class
         cls = db.query(Class).filter(Class.name == str(standard)).first()
         if not cls:
             return []

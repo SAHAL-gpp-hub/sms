@@ -20,9 +20,10 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.core.database import get_db
-from app.models.base_models import AcademicYear
+from app.models.base_models import AcademicYear, Class, Student, StudentStatusEnum
 from app.routers.auth import get_current_user
 from app.services import yearend_service
+from app.services.yearend_service import get_next_class_name
 from app.pdf.report_pdf import render_tc_pdf
 
 router = APIRouter(prefix="/api/v1/yearend", tags=["Year-End"])
@@ -93,13 +94,11 @@ def preview_promote_class(
     STEP 2.6 FIX: Preview how many students would be promoted without committing.
     The frontend calls this before the actual promotion to show a confirmation.
     """
-    from app.models.base_models import Student, Class, StudentStatusEnum
     current_class = db.query(Class).filter_by(id=class_id).first()
     if not current_class:
         raise HTTPException(status_code=404, detail="Class not found")
 
     try:
-        from app.services.yearend_service import get_next_class_name
         next_class_name = get_next_class_name(current_class.name)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -114,8 +113,9 @@ def preview_promote_class(
         )
 
     # STEP 4.4 FIX: use enum value instead of string literal
-    student_count = db.query(Student).filter_by(
-        class_id=class_id, status=StudentStatusEnum.Active
+    student_count = db.query(Student).filter(
+        Student.class_id == class_id,
+        Student.status == StudentStatusEnum.Active,
     ).count()
 
     return {

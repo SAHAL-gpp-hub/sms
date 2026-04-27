@@ -135,7 +135,7 @@ class StudentUpdate(BaseModel):
         if v == "":
             return None
         if not v.isdigit() or len(v) > 4:
-            raise ValueError("Aadhar last 4 digits must be exactly 4 numeric digits")
+            raise ValueError("Aadhar must be up to 4 numeric digits (last 4 of Aadhaar number)")
         return v.zfill(4)
 
 

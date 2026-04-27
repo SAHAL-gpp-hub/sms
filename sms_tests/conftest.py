@@ -90,16 +90,16 @@ def _get_auth_token() -> str | None:
                 f"\n[conftest] /auth/register returned 403 — "
                 f"REGISTRATION_ENABLED is false on the backend. "
                 f"Create the admin user manually:\n"
-                f"  docker-compose exec backend \\\n"
-                f"    python -c \"\n"
+                f"  docker-compose exec backend python -c \"\n"
                 f"from app.core.database import SessionLocal\n"
                 f"from app.models.base_models import User\n"
                 f"from app.core.security import get_password_hash\n"
                 f"db = SessionLocal()\n"
-                f"db.add(User(name='Admin', email='{TEST_EMAIL}', "
-                f"password_hash=get_password_hash('{TEST_PASSWORD}'), "
+                f"db.add(User(name='Admin', email='<email>', "
+                f"password_hash=get_password_hash('<password>'), "
                 f"role='admin', is_active=True))\n"
                 f"db.commit()\"\n"
+                f"(Replace <email> and <password> with your TEST_EMAIL and TEST_PASSWORD values.)\n"
             )
         r2 = httpx.post(
             f"{API_URL}/auth/login",

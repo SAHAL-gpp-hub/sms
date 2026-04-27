@@ -25,7 +25,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.base_models import (
@@ -284,7 +284,6 @@ def generate_receipt_number(db: Session) -> str:
     The key 202422 is an arbitrary application-level constant that identifies
     the "receipt number generation" operation.
     """
-    from sqlalchemy import text
     db.execute(text("SELECT pg_advisory_xact_lock(202422)"))
     year    = date.today().year
     last_id = db.query(func.max(FeePayment.id)).scalar() or 0
