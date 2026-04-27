@@ -1,6 +1,4 @@
-// App.jsx — Updated with all improved components
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { Toaster } from 'react-hot-toast'
 import { getToken } from './services/auth'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -15,16 +13,20 @@ import Attendance from './pages/attendance/Attendance'
 import Reports from './pages/reports/Reports'
 import YearEnd from './pages/yearend/YearEnd'
 
+// C-01 FIX: Redirect unauthenticated users to /login
 function ProtectedRoute({ children }) {
   if (!getToken()) return <Navigate to="/login" replace />
   return children
 }
 
-export default function App() {
+function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Public route */}
         <Route path="/login" element={<Login />} />
+
+        {/* All protected routes wrapped in Layout */}
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<Dashboard />} />
           <Route path="students" element={<StudentList />} />
@@ -39,48 +41,8 @@ export default function App() {
           <Route path="yearend" element={<YearEnd />} />
         </Route>
       </Routes>
-
-      <Toaster
-        position="top-right"
-        gutter={8}
-        toastOptions={{
-          duration: 4000,
-          style: {
-            fontFamily: 'var(--font-sans)',
-            fontSize: '13.5px',
-            fontWeight: 600,
-            borderRadius: '10px',
-            border: '1px solid',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-            padding: '12px 16px',
-            maxWidth: '420px',
-          },
-          success: {
-            style: {
-              background: '#f0fdf4',
-              color: '#15803d',
-              borderColor: '#bbf7d0',
-            },
-            iconTheme: { primary: '#16a34a', secondary: 'white' },
-          },
-          error: {
-            style: {
-              background: '#fff1f2',
-              color: '#be123c',
-              borderColor: '#fecdd3',
-            },
-            iconTheme: { primary: '#e11d48', secondary: 'white' },
-            duration: 6000,
-          },
-          loading: {
-            style: {
-              background: 'var(--brand-50)',
-              color: 'var(--brand-700)',
-              borderColor: 'var(--brand-200)',
-            },
-          },
-        }}
-      />
     </BrowserRouter>
   )
 }
+
+export default App

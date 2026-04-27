@@ -17,6 +17,7 @@ venv/
 fixes/
 reports/
 sms_bugfixes/
+sms-frontend-improved/
 
 # Project-specific
 sms_tests/venv/

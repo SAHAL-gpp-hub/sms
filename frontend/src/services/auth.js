@@ -1,8 +1,34 @@
-// C-01 FIX: Store JWT token in memory (NOT localStorage) to prevent XSS token theft.
-// Token is lost on page refresh — users must log in again, which is the secure pattern.
+// auth.js
+// FIX: Store JWT in sessionStorage so users survive page refreshes within
+// the same browser session. sessionStorage is cleared when the tab closes,
+// preventing long-lived token persistence (better than localStorage for
+// security, better than in-memory for UX). XSS risk is identical to
+// localStorage but acceptable for an internal school admin tool.
 
-let _token = null;
+const TOKEN_KEY = 'sms_auth_token';
 
-export const setToken = (t) => { _token = t; };
-export const getToken = () => _token;
-export const clearToken = () => { _token = null; };
+export const setToken = (t) => {
+  try {
+    sessionStorage.setItem(TOKEN_KEY, t);
+  } catch {
+    // Fallback to in-memory if sessionStorage blocked (private browsing edge case)
+    _memToken = t;
+  }
+};
+
+let _memToken = null;
+
+export const getToken = () => {
+  try {
+    return sessionStorage.getItem(TOKEN_KEY) || _memToken;
+  } catch {
+    return _memToken;
+  }
+};
+
+export const clearToken = () => {
+  try {
+    sessionStorage.removeItem(TOKEN_KEY);
+  } catch { /* */ }
+  _memToken = null;
+};
