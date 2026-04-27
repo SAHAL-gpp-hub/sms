@@ -285,10 +285,8 @@ def generate_receipt_number(db: Session) -> str:
     both generate RCPT-YEAR-00101, and the second INSERT fails with a
     UniqueViolation on the receipt_number column.
 
-    pg_advisory_xact_lock(202422) holds the lock for the current transaction;
-    it is released automatically on COMMIT or ROLLBACK — no cleanup needed.
-    The key 202422 is an arbitrary application-level constant that identifies
-    the "receipt number generation" operation.
+    pg_advisory_xact_lock(RECEIPT_NUMBER_LOCK_KEY) holds the lock for the
+    current transaction; it is released automatically on COMMIT or ROLLBACK.
     """
     db.execute(text(f"SELECT pg_advisory_xact_lock({RECEIPT_NUMBER_LOCK_KEY})"))
     year    = date.today().year

@@ -181,7 +181,7 @@ def get_tc_data(db: Session, student_id: int, reason: str, conduct: str):
     # COUNT=10 would generate the same TC-YEAR-0011; MAX(id) is safe because
     # the current transaction hasn't committed yet so it sees the last
     # committed value. Advisory lock serialises concurrent callers.
-    db.execute(text("SELECT pg_advisory_xact_lock(202426)"))
+    db.execute(text(f"SELECT pg_advisory_xact_lock({TC_NUMBER_LOCK_KEY})"))
     last_id   = db.query(func.max(Student.id)).filter(Student.status == StudentStatusEnum.TC_Issued).scalar() or 0
     tc_number = f"TC-{date.today().year}-{str(last_id + 1).zfill(4)}"
 
