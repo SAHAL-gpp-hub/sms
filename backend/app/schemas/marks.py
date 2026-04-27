@@ -28,6 +28,7 @@ class ExamCreate(BaseModel):
     class_id: int
     academic_year_id: int
     exam_date: Optional[date] = None
+    total_marks: Optional[int] = None
 
 
 class ExamOut(BaseModel):
@@ -38,6 +39,7 @@ class ExamOut(BaseModel):
     class_id: int
     academic_year_id: int
     exam_date: Optional[date]
+    total_marks: Optional[int] = None
 
 
 class MarkEntry(BaseModel):

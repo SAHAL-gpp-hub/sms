@@ -132,6 +132,7 @@ class Exam(Base):
     class_id         = Column(Integer, ForeignKey("classes.id"))
     exam_date        = Column(Date, nullable=True)
     academic_year_id = Column(Integer, ForeignKey("academic_years.id"))
+    total_marks      = Column(Integer, nullable=True)  # Optional override for exam total marks
 
 
 class Mark(Base):

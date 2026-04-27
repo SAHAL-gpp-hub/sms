@@ -119,6 +119,18 @@ def create_subject(db: Session, data: SubjectCreate):
     return s
 
 
+def update_subject(db: Session, subject_id: int, data: dict):
+    s = db.query(Subject).filter_by(id=subject_id).first()
+    if not s:
+        return None
+    for key, value in data.items():
+        if hasattr(s, key) and value is not None:
+            setattr(s, key, value)
+    db.commit()
+    db.refresh(s)
+    return s
+
+
 def delete_subject(db: Session, subject_id: int):
     s = db.query(Subject).filter_by(id=subject_id).first()
     if s:
