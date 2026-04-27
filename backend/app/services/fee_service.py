@@ -37,6 +37,12 @@ from app.schemas.fee import (
 )
 
 
+# Advisory lock key for receipt number generation (pg_advisory_xact_lock).
+# This constant serialises concurrent payment submissions so two requests
+# never read the same MAX(id) and generate the same receipt number.
+# Must be different from TC_NUMBER_LOCK_KEY in yearend_service.py.
+RECEIPT_NUMBER_LOCK_KEY = 202422
+
 PRELOADED_FEE_HEADS = [
     {"name": "Tuition Fee",       "frequency": "Monthly"},
     {"name": "Admission Fee",     "frequency": "One-Time"},
@@ -284,7 +290,7 @@ def generate_receipt_number(db: Session) -> str:
     The key 202422 is an arbitrary application-level constant that identifies
     the "receipt number generation" operation.
     """
-    db.execute(text("SELECT pg_advisory_xact_lock(202422)"))
+    db.execute(text(f"SELECT pg_advisory_xact_lock({RECEIPT_NUMBER_LOCK_KEY})"))
     year    = date.today().year
     last_id = db.query(func.max(FeePayment.id)).scalar() or 0
     return f"RCPT-{year}-{str(last_id + 1).zfill(5)}"

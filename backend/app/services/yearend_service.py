@@ -25,6 +25,12 @@ from sqlalchemy import text
 from app.models.base_models import Student, Class, AcademicYear, StudentStatusEnum
 from app.services.marks_service import GSEB_SUBJECTS
 
+# Advisory lock key for TC number generation (pg_advisory_xact_lock).
+# Serialises concurrent TC requests so two operations never read the same
+# MAX(id) and generate the same TC number.
+# Must be different from RECEIPT_NUMBER_LOCK_KEY in fee_service.py (202422).
+TC_NUMBER_LOCK_KEY = 202426
+
 # Canonical GSEB class progression
 CLASS_ORDER = [
     "Nursery", "LKG", "UKG",

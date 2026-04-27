@@ -87,19 +87,19 @@ def _get_auth_token() -> str | None:
         )
         if reg.status_code == 403:
             print(
-                f"\n[conftest] /auth/register returned 403 — "
-                f"REGISTRATION_ENABLED is false on the backend. "
-                f"Create the admin user manually:\n"
-                f"  docker-compose exec backend python -c \"\n"
-                f"from app.core.database import SessionLocal\n"
-                f"from app.models.base_models import User\n"
-                f"from app.core.security import get_password_hash\n"
-                f"db = SessionLocal()\n"
-                f"db.add(User(name='Admin', email='<email>', "
-                f"password_hash=get_password_hash('<password>'), "
-                f"role='admin', is_active=True))\n"
-                f"db.commit()\"\n"
-                f"(Replace <email> and <password> with your TEST_EMAIL and TEST_PASSWORD values.)\n"
+                "\n[conftest] /auth/register returned 403 — "
+                "REGISTRATION_ENABLED is false on the backend.\n"
+                "Create the admin user manually via the Django management shell or:\n"
+                "  docker-compose exec backend python -c \"\n"
+                "from app.core.database import SessionLocal\n"
+                "from app.models.base_models import User\n"
+                "from app.core.security import get_password_hash\n"
+                "db = SessionLocal()\n"
+                "db.add(User(name='Admin', email='admin@example.com', "
+                "password_hash=get_password_hash('your-password'), "
+                "role='admin', is_active=True))\n"
+                "db.commit()\"\n"
+                "See README.md for full setup instructions.\n"
             )
         r2 = httpx.post(
             f"{API_URL}/auth/login",
