@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     ALGORITHM:  str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours — one full school day
 
+    # ── Registration guard ────────────────────────────────────────────────
+    # Set REGISTRATION_ENABLED=true only for first-run setup (creating the
+    # first admin account). Disable immediately after.
+    REGISTRATION_ENABLED: bool = False
+
     class Config:
         env_file = ".env"
         # Allow extra env vars (e.g. POSTGRES_DB set by docker) without failing

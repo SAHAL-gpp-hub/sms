@@ -26,7 +26,7 @@ FIXES APPLIED:
 
 from sqlalchemy import (
     Column, Integer, String, Date, Boolean, ForeignKey,
-    Numeric, DateTime, Text, Enum,
+    Numeric, DateTime, Text, Enum, UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -136,6 +136,13 @@ class Exam(Base):
 
 class Mark(Base):
     __tablename__ = "marks"
+    # STEP 2.5 FIX: unique constraint prevents duplicate mark entries for the
+    # same student/subject/exam combination — previously two concurrent
+    # bulk_save_marks calls could both INSERT the same (student, subject, exam)
+    # row; the second would silently create a duplicate rather than upsert.
+    __table_args__ = (
+        UniqueConstraint("student_id", "subject_id", "exam_id", name="uq_mark_student_subject_exam"),
+    )
 
     id               = Column(Integer, primary_key=True)
     student_id       = Column(Integer, ForeignKey("students.id"))
@@ -205,6 +212,12 @@ class FeePayment(Base):
 
 class Attendance(Base):
     __tablename__ = "attendance"
+    # STEP 2.5 FIX: unique constraint prevents duplicate attendance records for
+    # the same student/class/date — without this, marking attendance twice in
+    # quick succession creates two rows for the same day instead of updating.
+    __table_args__ = (
+        UniqueConstraint("student_id", "class_id", "date", name="uq_attendance_student_class_date"),
+    )
 
     id         = Column(Integer, primary_key=True)
     student_id = Column(Integer, ForeignKey("students.id"))
@@ -226,6 +239,19 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role          = Column(String(20),  default="admin")
     is_active     = Column(Boolean,     default=True)
+
+
+class TokenBlocklist(Base):
+    """
+    STEP 4.7: JWT revocation store. On logout the token's `jti` claim is
+    persisted here; get_current_user checks this table before accepting the
+    token. Expired tokens are naturally harmless but can be pruned periodically.
+    """
+    __tablename__ = "token_blocklist"
+
+    id         = Column(Integer, primary_key=True)
+    jti        = Column(String(36), unique=True, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 # ──────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
-from app.models.base_models import Attendance, Student, Class
+from app.models.base_models import Attendance, Student, Class, StudentStatusEnum
 from app.schemas.attendance import AttendanceEntry
 from datetime import date, timedelta
 from calendar import monthrange
@@ -27,7 +27,7 @@ def mark_attendance_bulk(db: Session, entries: list[AttendanceEntry]):
 def get_attendance_for_date(db: Session, class_id: int, date: date):
     students = db.query(Student).filter_by(
         class_id=class_id
-    ).filter(Student.status == "Active").all()
+    ).filter(Student.status == StudentStatusEnum.Active).all()
 
     attendance = db.query(Attendance).filter_by(
         class_id=class_id, date=date
@@ -48,7 +48,7 @@ def get_attendance_for_date(db: Session, class_id: int, date: date):
 def get_monthly_summary(db: Session, class_id: int, year: int, month: int):
     students = db.query(Student).filter_by(
         class_id=class_id
-    ).filter(Student.status == "Active").all()
+    ).filter(Student.status == StudentStatusEnum.Active).all()
 
     _, days_in_month = monthrange(year, month)
     month_start = date(year, month, 1)
@@ -60,19 +60,26 @@ def get_monthly_summary(db: Session, class_id: int, year: int, month: int):
         if date(year, month, d + 1).weekday() != 6  # not Sunday
     )
 
+    # STEP 3.2 FIX: Single bulk query replaces N+1 per-student loop.
+    # Previously each student triggered one SELECT; now one query fetches all
+    # attendance records for the class/month and we aggregate in Python.
+    all_records = db.query(Attendance).filter(
+        Attendance.class_id == class_id,
+        Attendance.date >= month_start,
+        Attendance.date <= month_end,
+    ).all()
+
+    # Build a map: {student_id: {date: status}}
+    att_by_student: dict[int, dict] = {}
+    for rec in all_records:
+        att_by_student.setdefault(rec.student_id, {})[rec.date] = rec.status
+
     results = []
     for student in students:
-        records = db.query(Attendance).filter(
-            Attendance.student_id == student.id,
-            Attendance.class_id == class_id,
-            Attendance.date >= month_start,
-            Attendance.date <= month_end
-        ).all()
-
-        status_map = {r.date: r.status for r in records}
+        status_map = att_by_student.get(student.id, {})
         present = sum(1 for s in status_map.values() if s == "P")
-        absent = sum(1 for s in status_map.values() if s == "A")
-        late = sum(1 for s in status_map.values() if s == "L")
+        absent  = sum(1 for s in status_map.values() if s == "A")
+        late    = sum(1 for s in status_map.values() if s == "L")
         percentage = round((present / working_days * 100), 1) if working_days > 0 else 0
 
         results.append({
@@ -84,7 +91,8 @@ def get_monthly_summary(db: Session, class_id: int, year: int, month: int):
             "days_absent": absent,
             "days_late": late,
             "percentage": percentage,
-            "low_attendance": percentage < 75       })
+            "low_attendance": percentage < 75,
+        })
 
     results.sort(key=lambda x: x["roll_number"] or 9999)
     return results
@@ -98,7 +106,9 @@ def get_dashboard_stats(db: Session):
     from sqlalchemy.orm import joinedload
 
     # Total active students
-    total_students = db.query(Student).filter_by(status="Active").count()
+    total_students = db.query(Student).filter(
+        Student.status == StudentStatusEnum.Active
+    ).count()
 
     # Current academic year
     current_year = db.query(AcademicYear).filter_by(is_current=True).first()
@@ -136,15 +146,15 @@ def get_dashboard_stats(db: Session):
     ).limit(5).all()
 
     # Recent admissions (last 5)
-    recent_students = db.query(Student).filter_by(
-        status="Active"
+    recent_students = db.query(Student).filter(
+        Student.status == StudentStatusEnum.Active
     ).order_by(Student.created_at.desc()).limit(5).all()
 
     # Class-wise count
     class_counts = db.query(
         Class.name, func.count(Student.id)
     ).join(Student, Student.class_id == Class.id).filter(
-        Student.status == "Active"
+        Student.status == StudentStatusEnum.Active
     ).group_by(Class.name).all()
 
     return {

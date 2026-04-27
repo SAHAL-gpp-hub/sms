@@ -100,6 +100,8 @@ def result_report(
     db: Session = Depends(get_db)
 ):
     pdf = render_result_report(db, exam_id, class_id)
+    if not pdf:
+        raise HTTPException(status_code=404, detail="No marks found for this class")
     return Response(
         content=pdf,
         media_type="application/pdf",

@@ -89,11 +89,14 @@ export const attendanceAPI = {
 }
 
 export const yearendAPI = {
+  previewPromotion: (classId, newYearId) =>
+    api.get(`/yearend/promote/${classId}/preview?new_academic_year_id=${newYearId}`),
   promoteClass: (classId, newYearId) =>
     api.post(`/yearend/promote/${classId}?new_academic_year_id=${newYearId}`),
   createNewYear: (data) => api.post('/yearend/new-year', data),
   issueTC: (studentId) => api.post(`/yearend/issue-tc/${studentId}`),
   getCurrentYear: () => api.get('/yearend/current-year'),
+  getYears: () => api.get('/yearend/years'),
   getAllYears: () => api.get('/yearend/years'),
   tcPdfUrl: (studentId, reason = "Parent's Request", conduct = 'Good') =>
     `/api/v1/yearend/tc-pdf/${studentId}?reason=${encodeURIComponent(reason)}&conduct=${encodeURIComponent(conduct)}`,
@@ -112,7 +115,7 @@ export const setupAPI = {
   getAcademicYears: () => api.get('/setup/academic-years')
 }
 
-// FIX: Shared Indian currency formatter
+// FIX: Shared Indian currency formatter — handles null/undefined/NaN gracefully by falling back to 0.
 export const formatINR = (amount) =>
   new Intl.NumberFormat('en-IN', {
     style: 'currency',

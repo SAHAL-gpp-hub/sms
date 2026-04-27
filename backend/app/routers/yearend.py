@@ -20,8 +20,10 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.core.database import get_db
+from app.models.base_models import AcademicYear, Class, Student, StudentStatusEnum
 from app.routers.auth import get_current_user
 from app.services import yearend_service
+from app.services.yearend_service import get_next_class_name
 from app.pdf.report_pdf import render_tc_pdf
 
 router = APIRouter(prefix="/api/v1/yearend", tags=["Year-End"])
@@ -64,7 +66,6 @@ def download_tc(
 @router.get("/current-year")
 def get_current_year(db: Session = Depends(get_db)):
     """Get current academic year — public, used by sidebar."""
-    from app.models.base_models import AcademicYear
     year = db.query(AcademicYear).filter_by(is_current=True).first()
     if not year:
         raise HTTPException(status_code=404, detail="No current academic year set")
@@ -74,7 +75,6 @@ def get_current_year(db: Session = Depends(get_db)):
 @router.get("/years")
 def get_all_years(db: Session = Depends(get_db)):
     """Get all academic years — public."""
-    from app.models.base_models import AcademicYear
     years = db.query(AcademicYear).order_by(AcademicYear.id.desc()).all()
     return [{"id": y.id, "label": y.label, "is_current": y.is_current} for y in years]
 
@@ -82,6 +82,50 @@ def get_all_years(db: Session = Depends(get_db)):
 # ──────────────────────────────────────────────
 # WRITE ENDPOINTS — require JWT auth
 # ──────────────────────────────────────────────
+
+@router.get("/promote/{class_id}/preview")
+def preview_promote_class(
+    class_id:             int,
+    new_academic_year_id: int = Query(...),
+    db: Session = Depends(get_db),
+    _current_user=Depends(get_current_user),
+):
+    """
+    STEP 2.6 FIX: Preview how many students would be promoted without committing.
+    The frontend calls this before the actual promotion to show a confirmation.
+    """
+    current_class = db.query(Class).filter_by(id=class_id).first()
+    if not current_class:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    try:
+        next_class_name = get_next_class_name(current_class.name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if next_class_name is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"No class after Std {current_class.name}. "
+                "Students in Std 10 should be issued Transfer Certificates."
+            ),
+        )
+
+    # STEP 4.4 FIX: use enum value instead of string literal
+    student_count = db.query(Student).filter(
+        Student.class_id == class_id,
+        Student.status == StudentStatusEnum.Active,
+    ).count()
+
+    return {
+        "class_id":           class_id,
+        "from_class":         current_class.name,
+        "to_class":           next_class_name,
+        "new_academic_year_id": new_academic_year_id,
+        "students_to_promote": student_count,
+    }
+
 
 @router.post("/promote/{class_id}")
 def promote_class(
@@ -102,9 +146,13 @@ def create_new_year(
     db: Session = Depends(get_db),
     _current_user=Depends(get_current_user),
 ):
-    year = yearend_service.create_academic_year(
-        db, data.label, data.start_date, data.end_date
-    )
+    # STEP 3.1 FIX: service now raises ValueError; router converts to HTTP 400.
+    try:
+        year = yearend_service.create_academic_year(
+            db, data.label, data.start_date, data.end_date
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"id": year.id, "label": year.label, "is_current": year.is_current}
 
 

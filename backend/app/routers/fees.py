@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from app.core.database import get_db
+from app.models.base_models import AcademicYear
 from app.schemas.fee import (
     FeeHeadCreate, FeeHeadOut,
     FeeStructureCreate, FeeStructureOut,
@@ -95,9 +96,16 @@ def assign_fees(
     db: Session = Depends(get_db),
 ):
     if not academic_year_id:
-        from app.models.base_models import AcademicYear
         year = db.query(AcademicYear).filter_by(is_current=True).first()
-        academic_year_id = year.id if year else 1
+        if not year:
+            # STEP 3.7 FIX: raise an explicit error instead of silently
+            # falling back to academic_year_id=1, which produces confusing
+            # results when year 1 doesn't exist or is not the current year.
+            raise HTTPException(
+                status_code=422,
+                detail="No current academic year is set. Create one first via /yearend/new-year.",
+            )
+        academic_year_id = year.id
 
     count = fee_service.assign_fees_to_class(db, class_id, academic_year_id)
 
@@ -124,9 +132,13 @@ def assign_fees_body(
     if not class_id:
         raise HTTPException(status_code=422, detail="class_id required")
     if not academic_year_id:
-        from app.models.base_models import AcademicYear
         year = db.query(AcademicYear).filter_by(is_current=True).first()
-        academic_year_id = year.id if year else 1
+        if not year:
+            raise HTTPException(
+                status_code=422,
+                detail="No current academic year is set. Create one first via /yearend/new-year.",
+            )
+        academic_year_id = year.id
 
     count = fee_service.assign_fees_to_class(db, class_id, academic_year_id)
     if count == 0:

@@ -8,15 +8,18 @@ every single endpoint was open to the network with no authentication.
 
 Endpoints:
   POST /api/v1/auth/login    → { access_token, token_type }
-  POST /api/v1/auth/register → create a new admin user (first-run setup)
+  POST /api/v1/auth/register → create a new admin user (guarded by REGISTRATION_ENABLED)
+  POST /api/v1/auth/logout   → revoke the current token (jti added to blocklist)
   GET  /api/v1/auth/me       → return current user info (requires token)
 """
 
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -27,11 +30,15 @@ from app.core.security import (
     get_password_hash,
     verify_password,
 )
-from app.models.base_models import User
+from app.models.base_models import TokenBlocklist, User
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+
+# STEP 4.5: Rate limiter — max 10 login attempts per minute per IP.
+# The Limiter is created here and attached to app in main.py.
+limiter = Limiter(key_func=get_remote_address)
 
 
 # ---------------------------------------------------------------------------
@@ -79,8 +86,17 @@ def get_current_user(
     try:
         payload  = decode_access_token(token)
         user_id  = int(payload.get("sub"))
+        jti      = payload.get("jti")
     except Exception:
         raise credentials_exception
+
+    # STEP 4.7: Reject tokens whose jti has been revoked (logged out).
+    if jti and db.query(TokenBlocklist).filter_by(jti=jti).first():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked. Please log in again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     user = db.query(User).filter_by(id=user_id, is_active=True).first()
     if user is None:
@@ -93,13 +109,16 @@ def get_current_user(
 # ---------------------------------------------------------------------------
 
 @router.post("/login", response_model=Token, summary="Login and receive a JWT token")
+@limiter.limit("10/minute")  # STEP 4.5: Brute-force protection
 def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
     """
     Accepts username (email) + password via standard OAuth2 password form.
     Returns a JWT Bearer token valid for ACCESS_TOKEN_EXPIRE_MINUTES.
+    Rate-limited to 10 attempts per minute per IP.
     """
     user = db.query(User).filter_by(email=form_data.username, is_active=True).first()
 
@@ -131,9 +150,21 @@ def login(
 )
 def register(data: UserRegister, db: Session = Depends(get_db)):
     """
-    Create the first admin account.  In production, disable this endpoint
-    (or protect it with an existing admin token) after initial setup.
+    Create the first admin account.
+
+    STEP 1.2 FIX: Guarded by the REGISTRATION_ENABLED setting (default false).
+    Set REGISTRATION_ENABLED=true in .env only during first-run setup, then
+    disable immediately after creating the initial admin account.
     """
+    if not settings.REGISTRATION_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Registration is disabled. "
+                "Set REGISTRATION_ENABLED=true in .env for first-run setup only."
+            ),
+        )
+
     existing = db.query(User).filter_by(email=data.email).first()
     if existing:
         raise HTTPException(
@@ -152,6 +183,37 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
     return user
+
+
+@router.post("/logout", summary="Revoke the current access token")
+def logout(
+    token: str = Depends(oauth2_scheme),
+    db:    Session = Depends(get_db),
+):
+    """
+    STEP 4.7: Add the token's jti to the blocklist so it can no longer be used,
+    even if it hasn't expired yet. Clients should discard the token locally too.
+    """
+    try:
+        payload = decode_access_token(token)
+        jti = payload.get("jti")
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        )
+
+    if not jti:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token does not contain a jti claim and cannot be revoked.",
+        )
+
+    if not db.query(TokenBlocklist).filter_by(jti=jti).first():
+        db.add(TokenBlocklist(jti=jti))
+        db.commit()
+
+    return {"message": "Successfully logged out"}
 
 
 @router.get("/me", response_model=UserOut, summary="Get current user info")

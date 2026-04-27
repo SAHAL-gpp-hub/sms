@@ -35,12 +35,15 @@ services:
     environment:
       POSTGRES_DB:       school_sms
       POSTGRES_USER:     sms_user
-      POSTGRES_PASSWORD: sms_pass
+      # SECURITY FIX (1.1 + 1.3): password comes from .env, port not exposed.
+      # Copy .env.example → .env and set a strong POSTGRES_PASSWORD.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backups:/backups
-    ports:
-      - "5432:5432"
+    # SECURITY FIX (1.3): removed "ports: - 5432:5432" — the DB is accessed
+    # only by the backend container on the internal Docker bridge network.
+    # Exposing 5432 to the host makes the DB reachable from outside Docker.
     restart: unless-stopped
     healthcheck:
       # FIX: test the actual school_sms database, not just the process
@@ -57,16 +60,19 @@ services:
       dockerfile: Dockerfile
     container_name: sms_backend
     environment:
-      # "db" resolves to the db service inside Docker network
-      DATABASE_URL: postgresql://sms_user:sms_pass@db:5432/school_sms
-      # SECURITY: replace this with a real secret in production
-      # Generate one with: python3 -c "import secrets; print(secrets.token_hex(32))"
-      SECRET_KEY: 7f3b9c2a1e4d6f8b0a2c4e6f8a0c2e4d6f8b0a2c4e6f8a0c2e4d6f8b0a2c4e
+      # SECURITY FIX (1.1): secrets come from .env — never hardcoded.
+      # Copy .env.example → .env and fill in DATABASE_URL and SECRET_KEY.
+      DATABASE_URL: ${DATABASE_URL}
+      SECRET_KEY:   ${SECRET_KEY}
       DB_ECHO: "false"   # Set to "true" to log all SQL — useful for debugging
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
-    volumes:
-      - ./backend:/app
+      # SECURITY FIX (1.2): set REGISTRATION_ENABLED=true only for first-run
+      # setup, then set it back to false (or omit it).
+      REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-false}
+    # SECURITY FIX (3.5): removed bind-mount ./backend:/app — this overwrites
+    # the built image in production and leaks source code to the host path.
+    # Use docker-compose.dev.yml (which adds the mount) for local development.
     ports:
       - "8000:8000"
     depends_on:

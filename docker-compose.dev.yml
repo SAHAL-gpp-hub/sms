@@ -1,0 +1,22 @@
+# docker-compose.dev.yml — Development overrides
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# What this adds:
+#   - Bind-mounts ./backend:/app so code changes are reflected immediately
+#     without rebuilding the image (hot-reload via uvicorn --reload).
+#   - Exposes PostgreSQL port 5432 to the host so you can connect with
+#     psql / pgAdmin / DBeaver for local debugging.
+#
+# IMPORTANT: Never use this file in production.
+
+services:
+  backend:
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  db:
+    ports:
+      - "5432:5432"

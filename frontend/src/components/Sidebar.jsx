@@ -103,8 +103,8 @@ export default function Sidebar({ open, onClose }) {
 
   useEffect(() => {
     yearendAPI.getCurrentYear()
-      .then(r => setYearLabel(r.data?.label))
-      .catch(() => setYearLabel(null))
+      .then(res => { if (res.data?.label) setYearLabel(res.data.label) })
+      .catch(() => {})
   }, [])
 
   const handleLogout = () => {

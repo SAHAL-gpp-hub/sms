@@ -11,7 +11,7 @@ Dependencies already in requirements.txt:
   - passlib[bcrypt]            → password hashing
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Union
 
 from jose import JWTError, jwt
@@ -44,6 +44,7 @@ def create_access_token(
     subject: Union[str, Any],
     role: str = "admin",
     expires_delta: timedelta = None,
+    jti: str = None,
 ) -> str:
     """
     Create a signed JWT access token.
@@ -53,16 +54,21 @@ def create_access_token(
         role:          User role string stored in the payload.
         expires_delta: How long until the token expires. Defaults to
                        settings.ACCESS_TOKEN_EXPIRE_MINUTES.
+        jti:           JWT ID claim for token revocation support. A UUID is
+                       generated automatically if not provided.
     """
+    import uuid
     if expires_delta is None:
         expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
-    expire = datetime.utcnow() + expires_delta
+    now = datetime.now(timezone.utc)
+    expire = now + expires_delta
     payload = {
         "sub": str(subject),
         "role": role,
         "exp": expire,
-        "iat": datetime.utcnow(),
+        "iat": now,
+        "jti": jti or str(uuid.uuid4()),
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
