@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { clearToken } from '../services/auth'
 import { useNavigate } from 'react-router-dom'
+import { yearendAPI } from '../services/api'
 
 // C-04 FIX: Year-End now uses a graduation cap icon — distinct from the
 // Attendance calendar icon. All 8 nav icons are now visually different.
@@ -90,11 +91,11 @@ export default function Sidebar({ open, onClose }) {
   const navigate = useNavigate()
 
   // Minor fix M-05: fetch current year label dynamically from API
+  // Uses the configured axios instance (with auth interceptor) instead of raw fetch
   const [yearLabel, setYearLabel] = useState('Loading...')
   useEffect(() => {
-    fetch('/api/v1/yearend/current-year')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data?.label) setYearLabel(data.label) })
+    yearendAPI.getCurrentYear()
+      .then(res => { if (res.data?.label) setYearLabel(res.data.label) })
       .catch(() => setYearLabel('2025–26'))
   }, [])
 

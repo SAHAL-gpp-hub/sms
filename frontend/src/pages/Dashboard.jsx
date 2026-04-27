@@ -122,7 +122,7 @@ export default function Dashboard() {
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-slate-700">Recent Payments</h2>
-            <Link to="/fees" className="text-xs text-blue-600 hover:underline">View all →</Link>
+            <Link to="/fees/defaulters" className="text-xs text-blue-600 hover:underline">View all →</Link>
           </div>
           {loading ? (
             <div className="p-6 text-center text-slate-400 text-sm">Loading...</div>

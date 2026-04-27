@@ -107,6 +107,8 @@ export const yearendAPI = {
     issueTC: (studentId) => api.post(`/yearend/issue-tc/${studentId}`),
     tcPdfUrl: (studentId, reason, conduct) =>
         `/api/v1/yearend/tc-pdf/${studentId}?reason=${encodeURIComponent(reason)}&conduct=${encodeURIComponent(conduct)}`,
+    getCurrentYear: () => api.get('/yearend/current-year'),
+    getYears: () => api.get('/yearend/years'),
 }
 
 export const classAPI = {
@@ -123,12 +125,13 @@ export const setupAPI = {
 }
 
 // M-02 FIX: Shared Indian currency formatter — use this everywhere instead of raw .toLocaleString()
+// Handles null/undefined/NaN gracefully by falling back to 0.
 export const formatINR = (amount) =>
     new Intl.NumberFormat('en-IN', {
         style: 'currency',
         currency: 'INR',
         minimumFractionDigits: 0,
         maximumFractionDigits: 2,
-    }).format(Number(amount))
+    }).format(Number(amount) || 0)
 
 export default api

@@ -89,7 +89,7 @@ def _get_auth_token() -> str | None:
             print(
                 "\n[conftest] /auth/register returned 403 — "
                 "REGISTRATION_ENABLED is false on the backend.\n"
-                "Create the admin user manually via the Django management shell or:\n"
+                "Create the admin user manually with a one-shot Python command:\n"
                 "  docker-compose exec backend python -c \"\n"
                 "from app.core.database import SessionLocal\n"
                 "from app.models.base_models import User\n"
