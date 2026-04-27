@@ -124,24 +124,28 @@ export default function Sidebar({ open, onClose }) {
       )}
 
       <aside
-        style={{
-          width: '224px',
-          minHeight: '100vh',
-          background: 'var(--gray-900)',
-          borderRight: '1px solid rgba(255,255,255,0.06)',
-          display: 'flex',
-          flexDirection: 'column',
-          flexShrink: 0,
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          bottom: 0,
-          zIndex: 50,
-          transform: open ? 'translateX(0)' : undefined,
-          transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-        }}
-        className={!open ? 'max-md:-translate-x-full md:translate-x-0 md:static' : ''}
-      >
+  style={{
+    width: '224px',
+    minHeight: '100vh',
+    background: 'var(--gray-900)',
+    borderRight: '1px solid rgba(255,255,255,0.06)',
+    display: 'flex',
+    flexDirection: 'column',
+    flexShrink: 0,
+    // ✅ FIX: Keep position fixed unconditionally via style,
+    // but control VISIBILITY with translate classes only.
+    // Do NOT mix `position: fixed` with `md:static` — they conflict!
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    zIndex: 50,
+    transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+  }}
+  // ✅ FIX: Remove `md:static` — it fought against position:fixed in inline style.
+  // Instead: hide via -translate-x-full on mobile, show via translate-x-0.
+  className={open ? 'translate-x-0' : 'max-md:-translate-x-full'}
+>
         {/* Logo */}
         <div style={{
           padding: '20px 16px 16px',

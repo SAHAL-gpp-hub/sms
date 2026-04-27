@@ -1,4 +1,4 @@
-// Layout.jsx — Improved layout with better mobile support and page transitions
+// Layout.jsx — Fixed sidebar overlap issue
 import { useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
@@ -11,27 +11,37 @@ export default function Layout() {
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--surface-1)' }}>
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      {/* Main content — offset by sidebar width on desktop */}
-      <div style={{
-        flex: 1,
-        minWidth: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        marginLeft: 0,
-      }} className="md:ml-[224px]">
+      {/*
+        ✅ FIX: Remove `marginLeft: 0` from inline style entirely.
+        Let Tailwind's `md:ml-[224px]` handle the desktop offset.
+        Inline style was overriding the Tailwind class!
+      */}
+      <div
+        className="md:ml-[224px]"
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          // ❌ REMOVED: marginLeft: 0  ← this was the culprit
+        }}
+      >
 
         {/* Mobile top bar */}
-        <div className="md:hidden" style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 30,
-          background: 'var(--gray-900)',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
-          padding: '12px 16px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-        }}>
+        <div
+          className="md:hidden"
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 30,
+            background: 'var(--gray-900)',
+            borderBottom: '1px solid rgba(255,255,255,0.06)',
+            padding: '12px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+          }}
+        >
           <button
             onClick={() => setSidebarOpen(true)}
             style={{
@@ -47,10 +57,13 @@ export default function Layout() {
             aria-label="Open navigation"
           >
             <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 12h16M4 18h16" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
+                d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <div style={{ fontSize: '14px', fontWeight: 700, color: 'white' }}>Iqra School SMS</div>
+          <div style={{ fontSize: '14px', fontWeight: 700, color: 'white' }}>
+            Iqra School SMS
+          </div>
         </div>
 
         {/* Page content */}
@@ -62,6 +75,8 @@ export default function Layout() {
             padding: '28px 32px',
             maxWidth: '1400px',
             width: '100%',
+            // ✅ Centers content when viewport is very wide
+            // but doesn't break the layout
           }}
         >
           <Outlet />
