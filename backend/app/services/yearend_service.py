@@ -22,7 +22,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from app.models.base_models import Student, Class, AcademicYear
+from app.models.base_models import Student, Class, AcademicYear, StudentStatusEnum
 from app.services.marks_service import GSEB_SUBJECTS
 
 # Canonical GSEB class progression
@@ -74,8 +74,9 @@ def bulk_promote_students(db: Session, class_id: int, new_academic_year_id: int)
             "promoted": 0,
         }
 
-    students = db.query(Student).filter_by(
-        class_id=class_id, status="Active"
+    students = db.query(Student).filter(
+        Student.class_id == class_id,
+        Student.status == StudentStatusEnum.Active,
     ).all()
 
     next_class = db.query(Class).filter_by(
@@ -175,7 +176,7 @@ def get_tc_data(db: Session, student_id: int, reason: str, conduct: str):
     # the current transaction hasn't committed yet so it sees the last
     # committed value. Advisory lock serialises concurrent callers.
     db.execute(text("SELECT pg_advisory_xact_lock(202426)"))
-    last_id   = db.query(func.max(Student.id)).filter(Student.status == "TC Issued").scalar() or 0
+    last_id   = db.query(func.max(Student.id)).filter(Student.status == StudentStatusEnum.TC_Issued).scalar() or 0
     tc_number = f"TC-{date.today().year}-{str(last_id + 1).zfill(4)}"
 
     # FIX (Issue 6): format dates as DD/MM/YYYY for GSEB TC

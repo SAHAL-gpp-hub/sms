@@ -93,7 +93,7 @@ def preview_promote_class(
     STEP 2.6 FIX: Preview how many students would be promoted without committing.
     The frontend calls this before the actual promotion to show a confirmation.
     """
-    from app.models.base_models import Student, Class
+    from app.models.base_models import Student, Class, StudentStatusEnum
     current_class = db.query(Class).filter_by(id=class_id).first()
     if not current_class:
         raise HTTPException(status_code=404, detail="Class not found")
@@ -113,8 +113,9 @@ def preview_promote_class(
             ),
         )
 
+    # STEP 4.4 FIX: use enum value instead of string literal
     student_count = db.query(Student).filter_by(
-        class_id=class_id, status="Active"
+        class_id=class_id, status=StudentStatusEnum.Active
     ).count()
 
     return {

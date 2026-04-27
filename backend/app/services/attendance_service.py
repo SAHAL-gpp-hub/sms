@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
-from app.models.base_models import Attendance, Student, Class
+from app.models.base_models import Attendance, Student, Class, StudentStatusEnum
 from app.schemas.attendance import AttendanceEntry
 from datetime import date, timedelta
 from calendar import monthrange
@@ -27,7 +27,7 @@ def mark_attendance_bulk(db: Session, entries: list[AttendanceEntry]):
 def get_attendance_for_date(db: Session, class_id: int, date: date):
     students = db.query(Student).filter_by(
         class_id=class_id
-    ).filter(Student.status == "Active").all()
+    ).filter(Student.status == StudentStatusEnum.Active).all()
 
     attendance = db.query(Attendance).filter_by(
         class_id=class_id, date=date
@@ -48,7 +48,7 @@ def get_attendance_for_date(db: Session, class_id: int, date: date):
 def get_monthly_summary(db: Session, class_id: int, year: int, month: int):
     students = db.query(Student).filter_by(
         class_id=class_id
-    ).filter(Student.status == "Active").all()
+    ).filter(Student.status == StudentStatusEnum.Active).all()
 
     _, days_in_month = monthrange(year, month)
     month_start = date(year, month, 1)
@@ -106,7 +106,9 @@ def get_dashboard_stats(db: Session):
     from sqlalchemy.orm import joinedload
 
     # Total active students
-    total_students = db.query(Student).filter_by(status="Active").count()
+    total_students = db.query(Student).filter(
+        Student.status == StudentStatusEnum.Active
+    ).count()
 
     # Current academic year
     current_year = db.query(AcademicYear).filter_by(is_current=True).first()
@@ -144,15 +146,15 @@ def get_dashboard_stats(db: Session):
     ).limit(5).all()
 
     # Recent admissions (last 5)
-    recent_students = db.query(Student).filter_by(
-        status="Active"
+    recent_students = db.query(Student).filter(
+        Student.status == StudentStatusEnum.Active
     ).order_by(Student.created_at.desc()).limit(5).all()
 
     # Class-wise count
     class_counts = db.query(
         Class.name, func.count(Student.id)
     ).join(Student, Student.class_id == Class.id).filter(
-        Student.status == "Active"
+        Student.status == StudentStatusEnum.Active
     ).group_by(Class.name).all()
 
     return {

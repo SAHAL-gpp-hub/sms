@@ -29,7 +29,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.base_models import (
-    Class, FeeHead, FeePayment, FeeStructure, Student, StudentFee,
+    Class, FeeHead, FeePayment, FeeStructure, Student, StudentFee, StudentStatusEnum,
 )
 from app.schemas.fee import (
     FeeHeadCreate, FeeStructureCreate, PaymentCreate,
@@ -161,7 +161,7 @@ def assign_fees_to_class(
         # Infer from the students' academic year or from the fee structures
         student_year = (
             db.query(Student.academic_year_id)
-            .filter(Student.class_id == class_id, Student.status == "Active")
+            .filter(Student.class_id == class_id, Student.status == StudentStatusEnum.Active)
             .first()
         )
         structure_year = (
@@ -183,7 +183,7 @@ def assign_fees_to_class(
     students = (
         db.query(Student)
         .filter_by(class_id=class_id, academic_year_id=academic_year_id)
-        .filter(Student.status == "Active")
+        .filter(Student.status == StudentStatusEnum.Active)
         .all()
     )
 
@@ -272,12 +272,20 @@ def get_student_ledger(db: Session, student_id: int) -> Optional[StudentLedger]:
 
 def generate_receipt_number(db: Session) -> str:
     """
-    Uses MAX(id) not COUNT(*) to avoid TOCTOU race under concurrent requests.
-    Two concurrent requests both reading COUNT=10 would both generate RCPT-YEAR-00011
-    causing a UniqueViolation on the second INSERT.
-    MAX(id) is safe because the INSERT for this payment hasn't committed yet,
-    so MAX returns the last committed id.
+    STEP 2.2 FIX: Acquires a PostgreSQL advisory transaction lock before
+    reading MAX(id) so concurrent payment submissions are fully serialised.
+
+    Without this lock two concurrent requests can both read MAX(id)=100,
+    both generate RCPT-YEAR-00101, and the second INSERT fails with a
+    UniqueViolation on the receipt_number column.
+
+    pg_advisory_xact_lock(202422) holds the lock for the current transaction;
+    it is released automatically on COMMIT or ROLLBACK — no cleanup needed.
+    The key 202422 is an arbitrary application-level constant that identifies
+    the "receipt number generation" operation.
     """
+    from sqlalchemy import text
+    db.execute(text("SELECT pg_advisory_xact_lock(202422)"))
     year    = date.today().year
     last_id = db.query(func.max(FeePayment.id)).scalar() or 0
     return f"RCPT-{year}-{str(last_id + 1).zfill(5)}"
@@ -336,7 +344,7 @@ def get_defaulters(
         .join(StudentFee, StudentFee.student_id == Student.id, isouter=True)
         .join(FeeStructure, StudentFee.fee_structure_id == FeeStructure.id, isouter=True)
         .outerjoin(FeePayment, FeePayment.student_fee_id == StudentFee.id)
-        .filter(Student.status == "Active")
+        .filter(Student.status == StudentStatusEnum.Active)
     )
 
     if academic_year_id is not None:

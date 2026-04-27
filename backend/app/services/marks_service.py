@@ -203,7 +203,7 @@ def get_marks(db: Session, exam_id: int, class_id: int):
     students = (
         db.query(Student)
         .filter_by(class_id=class_id)
-        .filter(Student.status == "Active")
+        .filter(Student.status == StudentStatusEnum.Active)
         .all()
     )
     subjects = db.query(Subject).filter_by(class_id=class_id).all()
@@ -264,7 +264,7 @@ def get_class_results(db: Session, exam_id: int, class_id: int):
     students = (
         db.query(Student)
         .filter_by(class_id=class_id)
-        .filter(Student.status == "Active")
+        .filter(Student.status == StudentStatusEnum.Active)
         .all()
     )
     subjects = db.query(Subject).filter_by(class_id=class_id).all()

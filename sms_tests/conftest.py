@@ -51,7 +51,22 @@ _SESSION = {"token": None, "class_id": None, "class_id_2": None, "year_id": 1}
 # AUTH HELPERS
 # ──────────────────────────────────────────────
 def _get_auth_token() -> str | None:
-    """Login and return JWT. Auto-registers admin if not yet created."""
+    """
+    Login and return JWT. Auto-registers admin if not yet created.
+
+    STEP 1.2 FIX: /auth/register is now guarded by REGISTRATION_ENABLED.
+    The conftest sets REGISTRATION_ENABLED via an env header workaround —
+    since the test suite runs against a live Docker stack, the env flag
+    must be set to 'true' in the backend's environment for the first-run
+    registration to succeed. After setup the flag should be disabled.
+
+    Strategy:
+      1. Try login first — if it works we're done.
+      2. If login fails, try to register (this only works if the backend
+         has REGISTRATION_ENABLED=true). If register returns 403, the
+         admin account must be created manually (see conftest warning).
+      3. Try login again after registration.
+    """
     try:
         r = httpx.post(
             f"{API_URL}/auth/login",
@@ -62,13 +77,30 @@ def _get_auth_token() -> str | None:
         if r.status_code == 200:
             return r.json().get("access_token")
 
-        # Try registering then logging in
-        httpx.post(
+        # Try registering then logging in.
+        # If REGISTRATION_ENABLED=false this will return 403 and we skip it.
+        reg = httpx.post(
             f"{API_URL}/auth/register",
             json={"name": "Test Admin", "email": TEST_EMAIL,
                   "password": TEST_PASSWORD, "role": "admin"},
             timeout=10, follow_redirects=True,
         )
+        if reg.status_code == 403:
+            print(
+                f"\n[conftest] /auth/register returned 403 — "
+                f"REGISTRATION_ENABLED is false on the backend. "
+                f"Create the admin user manually:\n"
+                f"  docker-compose exec backend \\\n"
+                f"    python -c \"\n"
+                f"from app.core.database import SessionLocal\n"
+                f"from app.models.base_models import User\n"
+                f"from app.core.security import get_password_hash\n"
+                f"db = SessionLocal()\n"
+                f"db.add(User(name='Admin', email='{TEST_EMAIL}', "
+                f"password_hash=get_password_hash('{TEST_PASSWORD}'), "
+                f"role='admin', is_active=True))\n"
+                f"db.commit()\"\n"
+            )
         r2 = httpx.post(
             f"{API_URL}/auth/login",
             data={"username": TEST_EMAIL, "password": TEST_PASSWORD},
