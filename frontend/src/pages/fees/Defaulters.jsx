@@ -1,14 +1,17 @@
+// Defaulters.jsx — Fixed class_name bug (API returns class_id, not class_name)
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { feeAPI, setupAPI } from '../../services/api'
+import toast from 'react-hot-toast'
+import { feeAPI, setupAPI, formatINR, extractError } from '../../services/api'
+import { PageHeader, FilterRow, Select, EmptyState, TableSkeleton } from '../../components/UI'
 
 export default function Defaulters() {
   const [defaulters, setDefaulters] = useState([])
-  const [classes, setClasses] = useState([])
-  const [years, setYears] = useState([])
+  const [classes, setClasses]       = useState([])
+  const [years, setYears]           = useState([])
   const [classFilter, setClassFilter] = useState('')
-  const [yearFilter, setYearFilter] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [yearFilter, setYearFilter]   = useState('')
+  const [loading, setLoading]       = useState(false)
 
   useEffect(() => {
     setupAPI.getClasses().then(r => setClasses(r.data))
@@ -23,94 +26,200 @@ export default function Defaulters() {
     setLoading(true)
     const params = {}
     if (classFilter) params.class_id = classFilter
-    if (yearFilter) params.academic_year_id = yearFilter
-    feeAPI.getDefaulters(params).then(r => {
-      setDefaulters(r.data)
-      setLoading(false)
-    }).catch(() => setLoading(false))
+    if (yearFilter)  params.academic_year_id = yearFilter
+    feeAPI.getDefaulters(params)
+      .then(r => setDefaulters(r.data))
+      .catch(() => toast.error('Failed to load defaulters'))
+      .finally(() => setLoading(false))
   }, [classFilter, yearFilter])
 
-  const totalBalance = defaulters.reduce((s, d) => s + d.balance, 0)
+  // FIX: API returns class_id (int), not class_name (string).
+  // Resolve the class name from the classes list using class_id.
+  const resolveClassName = (classId) => {
+    const cls = classes.find(c => c.id === classId)
+    return cls ? `Class ${cls.name} — ${cls.division}` : `Class ${classId}`
+  }
+
+  const totalBalance    = defaulters.reduce((s, d) => s + (d.balance || 0), 0)
+  const totalOutstanding = defaulters.reduce((s, d) => s + (d.total_due || 0), 0)
+  const totalCollected  = defaulters.reduce((s, d) => s + (d.total_paid || 0), 0)
+
+  const classOptions = classes.map(c => ({ value: String(c.id), label: `Class ${c.name} — ${c.division}` }))
+  const yearOptions  = years.map(y => ({ value: String(y.id), label: y.label + (y.is_current ? ' (Current)' : '') }))
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-slate-800">Fee Defaulters</h1>
-        <p className="text-slate-500 text-sm mt-1">Students with outstanding fee balance</p>
-      </div>
+      <PageHeader
+        title="Fee Defaulters"
+        subtitle="Students with outstanding fee balance"
+        actions={
+          defaulters.length > 0 && (
+            <a
+              href={`/api/v1/pdf/report/defaulters${yearFilter ? `?academic_year_id=${yearFilter}` : ''}`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-secondary"
+              style={{ textDecoration: 'none' }}
+            >
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Download PDF Report
+            </a>
+          )
+        }
+      />
 
-      {/* Filters */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 mb-5 flex gap-4 flex-wrap">
-        <div className="flex-1 min-w-40">
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Class</label>
-          <select value={classFilter} onChange={e => setClassFilter(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="">All Classes</option>
-            {classes.map(c => <option key={c.id} value={c.id}>Class {c.name}</option>)}
-          </select>
-        </div>
-        <div className="flex-1 min-w-40">
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Academic Year</label>
-          <select value={yearFilter} onChange={e => setYearFilter(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="">All Years</option>
-            {years.map(y => <option key={y.id} value={y.id}>{y.label}</option>)}
-          </select>
-        </div>
-      </div>
+      <FilterRow>
+        <Select
+          value={classFilter}
+          onChange={e => setClassFilter(e.target.value)}
+          options={classOptions}
+          placeholder="All Classes"
+          style={{ flex: 1, minWidth: '180px' }}
+        />
+        <Select
+          value={yearFilter}
+          onChange={e => setYearFilter(e.target.value)}
+          options={yearOptions}
+          placeholder="All Years"
+          style={{ flex: 1, minWidth: '180px' }}
+        />
+        {(classFilter || yearFilter) && (
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => { setClassFilter(''); setYearFilter('') }}
+          >
+            Clear
+          </button>
+        )}
+      </FilterRow>
 
-      {/* Summary */}
-      {defaulters.length > 0 && (
-        <div className="grid grid-cols-2 gap-4 mb-5">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-            <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Total Defaulters</p>
-            <p className="text-3xl font-bold text-rose-600 mt-1">{defaulters.length}</p>
-          </div>
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-            <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Total Outstanding</p>
-            <p className="text-3xl font-bold text-rose-600 mt-1">₹{totalBalance.toLocaleString()}</p>
-          </div>
+      {/* Summary cards — only show when there are defaulters */}
+      {!loading && defaulters.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+          {[
+            { label: 'Total Defaulters',  value: defaulters.length,        color: 'var(--danger-600)',  bg: 'var(--danger-50)',   border: 'var(--danger-100)' },
+            { label: 'Total Outstanding', value: formatINR(totalBalance),  color: 'var(--danger-600)',  bg: 'var(--danger-50)',   border: 'var(--danger-100)' },
+            { label: 'Total Billed',      value: formatINR(totalOutstanding), color: 'var(--text-primary)', bg: 'var(--surface-0)', border: 'var(--border-default)' },
+            { label: 'Total Collected',   value: formatINR(totalCollected), color: 'var(--success-600)', bg: 'var(--success-50)', border: 'var(--success-100)' },
+          ].map(s => (
+            <div key={s.label} style={{
+              background: s.bg, border: `1px solid ${s.border}`,
+              borderRadius: '12px', padding: '16px 18px',
+              boxShadow: 'var(--shadow-xs)',
+            }}>
+              <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-tertiary)', marginBottom: '6px' }}>
+                {s.label}
+              </div>
+              <div style={{ fontSize: '20px', fontWeight: 800, color: s.color, letterSpacing: '-0.03em' }}>
+                {s.value}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="card">
         {loading ? (
-          <div className="p-10 text-center text-slate-400">Loading...</div>
+          <table className="data-table"><TableSkeleton rows={6} cols={7} /></table>
         ) : defaulters.length === 0 ? (
-          <div className="p-10 text-center text-slate-400">
-            <p className="text-3xl mb-2">✅</p>
-            <p className="font-medium text-slate-600">No defaulters found!</p>
-            <p className="text-sm mt-1">All fees are cleared for the selected filters.</p>
-          </div>
+          <EmptyState
+            icon={
+              <svg width="28" height="28" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            }
+            title="No defaulters found!"
+            description="All fees are cleared for the selected filters. Great job!"
+          />
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 border-b border-slate-100">
-              <tr>
-                {['Student', 'Class', 'Contact', 'Total Due', 'Paid', 'Balance', 'Action'].map(h => (
-                  <th key={h} className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {defaulters.map(d => (
-                <tr key={d.student_id} className="hover:bg-slate-50">
-                  <td className="px-5 py-3 font-medium text-slate-700">{d.student_name}</td>
-                  <td className="px-5 py-3 text-slate-500">Class {d.class_name}</td>
-                  <td className="px-5 py-3 text-slate-500">{d.contact}</td>
-                  <td className="px-5 py-3 text-slate-700">₹{d.total_due.toLocaleString()}</td>
-                  <td className="px-5 py-3 text-emerald-600">₹{d.total_paid.toLocaleString()}</td>
-                  <td className="px-5 py-3 font-bold text-rose-600">₹{d.balance.toLocaleString()}</td>
-                  <td className="px-5 py-3">
-                    <Link to={`/fees/student/${d.student_id}`}
-                      className="text-blue-600 hover:underline text-xs font-medium">
-                      View Ledger →
-                    </Link>
-                  </td>
+          <>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Student Name</th>
+                  <th>Class</th>
+                  <th>Contact</th>
+                  <th>Total Due</th>
+                  <th>Paid</th>
+                  <th>Balance</th>
+                  <th>Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {defaulters.map((d, i) => {
+                  const balancePct = d.total_due > 0 ? ((d.balance / d.total_due) * 100).toFixed(0) : 0
+                  return (
+                    <tr key={d.student_id}>
+                      <td style={{ color: 'var(--text-tertiary)', fontWeight: 600, fontSize: '12px' }}>
+                        {i + 1}
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '13.5px' }}>
+                          {d.student_name}
+                        </div>
+                      </td>
+                      <td style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                        {/* FIX: was d.class_name (undefined) — now resolves from classes array using class_id */}
+                        {resolveClassName(d.class_id)}
+                      </td>
+                      <td>
+                        <span className="mono" style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+                          {d.contact}
+                        </span>
+                      </td>
+                      <td style={{ fontSize: '13.5px', color: 'var(--text-primary)', fontWeight: 600 }}>
+                        ₹{(d.total_due || 0).toLocaleString('en-IN')}
+                      </td>
+                      <td style={{ fontSize: '13.5px', color: 'var(--success-700)', fontWeight: 600 }}>
+                        ₹{(d.total_paid || 0).toLocaleString('en-IN')}
+                      </td>
+                      <td>
+                        <div>
+                          <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--danger-600)', letterSpacing: '-0.02em' }}>
+                            ₹{(d.balance || 0).toLocaleString('en-IN')}
+                          </div>
+                          <div style={{ marginTop: '4px', height: '4px', background: 'var(--danger-100)', borderRadius: '2px', width: '80px' }}>
+                            <div style={{ height: '100%', background: 'var(--danger-500)', borderRadius: '2px', width: `${balancePct}%` }} />
+                          </div>
+                          <div style={{ fontSize: '10.5px', color: 'var(--danger-500)', fontWeight: 600, marginTop: '2px' }}>
+                            {balancePct}% unpaid
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <Link
+                          to={`/fees/student/${d.student_id}`}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                            padding: '5px 11px', borderRadius: '7px',
+                            fontSize: '12px', fontWeight: 600,
+                            color: 'var(--brand-700)',
+                            background: 'var(--brand-50)',
+                            border: '1px solid var(--brand-200)',
+                            textDecoration: 'none', transition: 'all 0.12s',
+                          }}
+                        >
+                          View Ledger →
+                        </Link>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            <div style={{
+              padding: '10px 16px',
+              borderTop: '1px solid var(--border-subtle)',
+              fontSize: '12px', color: 'var(--text-tertiary)',
+            }}>
+              {defaulters.length} defaulter{defaulters.length !== 1 ? 's' : ''} · Total outstanding: <strong style={{ color: 'var(--danger-600)' }}>{formatINR(totalBalance)}</strong>
+            </div>
+          </>
         )}
       </div>
     </div>

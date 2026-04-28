@@ -1,16 +1,43 @@
+// FeeStructure.jsx — Fixed alert() bug, improved UX with toasts + confirm modal
 import { useState, useEffect } from 'react'
-import { feeAPI, setupAPI } from '../../services/api'
+import toast from 'react-hot-toast'
+import { feeAPI, setupAPI, extractError } from '../../services/api'
+import { PageHeader, FilterRow, Select, EmptyState, TableSkeleton, ConfirmModal, InlineBanner, Field } from '../../components/UI'
+
+const FREQ_COLORS = {
+  Monthly:  { bg: 'var(--brand-50)',   color: 'var(--brand-700)',   border: 'var(--brand-200)' },
+  'One-Time':{ bg: 'var(--purple-50)', color: 'var(--purple-600)', border: 'var(--purple-100)' },
+  Termly:   { bg: 'var(--warning-50)', color: 'var(--warning-600)', border: '#fde68a' },
+  Annual:   { bg: 'var(--success-50)', color: 'var(--success-700)', border: 'var(--success-100)' },
+}
+
+function FreqBadge({ freq }) {
+  const s = FREQ_COLORS[freq] || { bg: 'var(--gray-100)', color: 'var(--gray-600)', border: 'var(--border-default)' }
+  return (
+    <span style={{
+      fontSize: '11px', fontWeight: 700,
+      padding: '2px 8px', borderRadius: '20px',
+      background: s.bg, color: s.color, border: `1px solid ${s.border}`,
+    }}>
+      {freq}
+    </span>
+  )
+}
 
 export default function FeeStructure() {
-  const [classes, setClasses] = useState([])
-  const [years, setYears] = useState([])
-  const [feeHeads, setFeeHeads] = useState([])
+  const [classes, setClasses]       = useState([])
+  const [years, setYears]           = useState([])
+  const [feeHeads, setFeeHeads]     = useState([])
   const [structures, setStructures] = useState([])
   const [selectedClass, setSelectedClass] = useState('')
-  const [selectedYear, setSelectedYear] = useState('')
-  const [seeding, setSeeding] = useState(false)
+  const [selectedYear, setSelectedYear]   = useState('')
+  const [seeding, setSeeding]       = useState(false)
+  const [adding, setAdding]         = useState(false)
+  const [assigning, setAssigning]   = useState(false)
+  const [loadingStructures, setLoadingStructures] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting]     = useState(false)
   const [form, setForm] = useState({ fee_head_id: '', amount: '', due_date: '' })
-  const [adding, setAdding] = useState(false)
 
   useEffect(() => {
     setupAPI.getClasses().then(r => setClasses(r.data))
@@ -24,163 +51,290 @@ export default function FeeStructure() {
 
   useEffect(() => {
     if (selectedClass && selectedYear) {
-      feeAPI.getFeeStructures({
-        class_id: selectedClass,
-        academic_year_id: selectedYear
-      }).then(r => setStructures(r.data))
+      setLoadingStructures(true)
+      feeAPI.getFeeStructures({ class_id: selectedClass, academic_year_id: selectedYear })
+        .then(r => setStructures(r.data))
+        .finally(() => setLoadingStructures(false))
+    } else {
+      setStructures([])
     }
   }, [selectedClass, selectedYear])
 
   const handleSeedHeads = async () => {
     setSeeding(true)
-    await feeAPI.seedFeeHeads()
-    const r = await feeAPI.getFeeHeads()
-    setFeeHeads(r.data)
-    setSeeding(false)
+    try {
+      await feeAPI.seedFeeHeads()
+      const r = await feeAPI.getFeeHeads()
+      setFeeHeads(r.data)
+      toast.success('GSEB fee heads loaded successfully')
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setSeeding(false)
+    }
   }
 
   const handleAdd = async () => {
-    if (!form.fee_head_id || !form.amount || !selectedClass || !selectedYear) return
+    if (!form.fee_head_id) { toast.error('Please select a fee head'); return }
+    if (!form.amount || parseFloat(form.amount) <= 0) { toast.error('Amount must be greater than ₹0'); return }
+    if (!selectedClass) { toast.error('Please select a class first'); return }
+    if (!selectedYear)  { toast.error('Please select an academic year first'); return }
     setAdding(true)
-    await feeAPI.createFeeStructure({
-      class_id: parseInt(selectedClass),
-      fee_head_id: parseInt(form.fee_head_id),
-      amount: parseFloat(form.amount),
-      due_date: form.due_date || null,
-      academic_year_id: parseInt(selectedYear)
-    })
-    setForm({ fee_head_id: '', amount: '', due_date: '' })
-    const r = await feeAPI.getFeeStructures({ class_id: selectedClass, academic_year_id: selectedYear })
-    setStructures(r.data)
-    setAdding(false)
+    try {
+      await feeAPI.createFeeStructure({
+        class_id:         parseInt(selectedClass),
+        fee_head_id:      parseInt(form.fee_head_id),
+        amount:           parseFloat(form.amount),
+        due_date:         form.due_date || null,
+        academic_year_id: parseInt(selectedYear),
+      })
+      setForm({ fee_head_id: '', amount: '', due_date: '' })
+      const r = await feeAPI.getFeeStructures({ class_id: selectedClass, academic_year_id: selectedYear })
+      setStructures(r.data)
+      toast.success('Fee added to structure')
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setAdding(false)
+    }
   }
 
-  const handleDelete = async (id) => {
-    if (!confirm('Remove this fee from the structure?')) return
-    await feeAPI.deleteFeeStructure(id)
-    setStructures(s => s.filter(x => x.id !== id))
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      await feeAPI.deleteFeeStructure(deleteTarget.id)
+      setStructures(s => s.filter(x => x.id !== deleteTarget.id))
+      toast.success('Fee removed from structure')
+      setDeleteTarget(null)
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setDeleting(false)
+    }
   }
 
+  // FIX: was using alert() — now uses toast
   const handleAssign = async () => {
     if (!selectedClass || !selectedYear) return
-    const r = await feeAPI.assignFees(selectedClass, selectedYear)
-    alert(r.data.message)
+    if (structures.length === 0) {
+      toast.error('No fee structure defined for this class. Add fees first.')
+      return
+    }
+    setAssigning(true)
+    try {
+      const r = await feeAPI.assignFees(selectedClass, selectedYear)
+      const { assigned, message } = r.data
+      if (assigned === 0) {
+        toast('No new records created — fees may already be assigned, or no students in this class.', { icon: 'ℹ️' })
+      } else {
+        toast.success(`Fees assigned to ${assigned} student records`)
+      }
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setAssigning(false)
+    }
   }
 
-  const totalAmount = structures.reduce((s, x) => s + parseFloat(x.amount), 0)
+  const selectedClassName = classes.find(c => String(c.id) === selectedClass)
+  const totalAmount = structures.reduce((s, x) => s + parseFloat(x.amount || 0), 0)
+  const classOptions = classes.map(c => ({ value: String(c.id), label: `Class ${c.name} — Div ${c.division}` }))
+  const yearOptions  = years.map(y => ({ value: String(y.id), label: y.label + (y.is_current ? ' (Current)' : '') }))
+  const headOptions  = feeHeads.map(fh => ({ value: String(fh.id), label: `${fh.name} (${fh.frequency})` }))
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-slate-800">Fee Structure</h1>
-        <p className="text-slate-500 text-sm mt-1">Define fee heads and amounts per class per year</p>
-      </div>
+      <PageHeader
+        title="Fee Structure"
+        subtitle="Define fees per class and academic year, then assign to students"
+      />
 
-      {/* Seed fee heads banner */}
+      {/* No fee heads warning */}
       {feeHeads.length === 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-amber-800">No fee heads found</p>
-            <p className="text-xs text-amber-600 mt-0.5">Load the pre-configured GSEB fee heads to get started</p>
-          </div>
-          <button onClick={handleSeedHeads} disabled={seeding}
-            className="px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600">
-            {seeding ? 'Loading...' : 'Load Fee Heads'}
-          </button>
-        </div>
+        <InlineBanner
+          type="warning"
+          title="No fee heads found"
+          message="Load the pre-configured GSEB fee heads to get started quickly."
+          action={
+            <button className="btn btn-sm" onClick={handleSeedHeads} disabled={seeding}
+              style={{ background: '#92400e', color: 'white', border: 'none', marginLeft: '8px' }}>
+              {seeding ? 'Loading...' : 'Load GSEB Fee Heads'}
+            </button>
+          }
+        />
       )}
 
-      {/* Filters */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 mb-5 flex gap-4 flex-wrap items-end">
-        <div className="flex-1 min-w-40">
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Class</label>
-          <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="">Select class...</option>
-            {classes.map(c => <option key={c.id} value={c.id}>Class {c.name} — Div {c.division}</option>)}
-          </select>
-        </div>
-        <div className="flex-1 min-w-40">
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Academic Year</label>
-          <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="">Select year...</option>
-            {years.map(y => <option key={y.id} value={y.id}>{y.label}</option>)}
-          </select>
-        </div>
+      {/* Filters + Assign */}
+      <FilterRow>
+        <Select
+          value={selectedClass}
+          onChange={e => setSelectedClass(e.target.value)}
+          options={classOptions}
+          placeholder="Select class…"
+          style={{ flex: 1, minWidth: '200px' }}
+        />
+        <Select
+          value={selectedYear}
+          onChange={e => setSelectedYear(e.target.value)}
+          options={yearOptions}
+          placeholder="Select year…"
+          style={{ flex: 1, minWidth: '180px' }}
+        />
         {selectedClass && selectedYear && (
-          <button onClick={handleAssign}
-            className="px-4 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">
-            Assign to Students
+          <button
+            className="btn btn-success"
+            onClick={handleAssign}
+            disabled={assigning}
+          >
+            {assigning
+              ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Assigning…</>
+              : <>
+                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Assign to Students
+                </>
+            }
           </button>
         )}
-      </div>
+      </FilterRow>
 
       {selectedClass && selectedYear && (
         <>
           {/* Add fee row */}
-          <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 mb-5">
-            <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-3">Add Fee to Structure</p>
-            <div className="flex gap-3 flex-wrap items-end">
-              <div className="flex-1 min-w-40">
-                <label className="block text-xs text-slate-500 mb-1">Fee Head</label>
-                <select value={form.fee_head_id} onChange={e => setForm(f => ({...f, fee_head_id: e.target.value}))}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="">Select fee head...</option>
-                  {feeHeads.map(fh => <option key={fh.id} value={fh.id}>{fh.name} ({fh.frequency})</option>)}
+          <div className="card" style={{ marginBottom: '16px' }}>
+            <div className="card-header">
+              <div className="card-title">Add Fee to Structure</div>
+            </div>
+            <div style={{ padding: '18px 20px', display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div style={{ flex: '2', minWidth: '200px' }}>
+                <label className="label">Fee Head</label>
+                <select
+                  className="input"
+                  value={form.fee_head_id}
+                  onChange={e => setForm(f => ({ ...f, fee_head_id: e.target.value }))}
+                >
+                  <option value="">Select fee head…</option>
+                  {feeHeads.map(fh => (
+                    <option key={fh.id} value={fh.id}>{fh.name} ({fh.frequency})</option>
+                  ))}
                 </select>
               </div>
-              <div className="w-36">
-                <label className="block text-xs text-slate-500 mb-1">Amount (₹)</label>
-                <input type="number" value={form.amount} onChange={e => setForm(f => ({...f, amount: e.target.value}))}
-                  placeholder="0.00"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+
+              <div style={{ width: '140px' }}>
+                <label className="label">Amount (₹)</label>
+                <input
+                  type="number"
+                  className="input"
+                  value={form.amount}
+                  onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+                  placeholder="0"
+                  min="1"
+                />
               </div>
-              <div className="w-40">
-                <label className="block text-xs text-slate-500 mb-1">Due Date (optional)</label>
-                <input type="date" value={form.due_date} onChange={e => setForm(f => ({...f, due_date: e.target.value}))}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+
+              <div style={{ width: '160px' }}>
+                <label className="label">Due Date (optional)</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={form.due_date}
+                  onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))}
+                />
               </div>
-              <button onClick={handleAdd} disabled={adding}
-                className="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-                {adding ? 'Adding...' : '+ Add'}
+
+              <button
+                className="btn btn-primary"
+                onClick={handleAdd}
+                disabled={adding}
+              >
+                {adding
+                  ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Adding…</>
+                  : <>
+                      <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Add Fee
+                    </>
+                }
               </button>
             </div>
           </div>
 
           {/* Structure table */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-700">
-                Fee Structure — Class {classes.find(c => String(c.id) === selectedClass)?.name}
-              </h2>
-              <span className="text-sm font-bold text-slate-800">Total: ₹{totalAmount.toLocaleString()}</span>
-            </div>
-            {structures.length === 0 ? (
-              <div className="p-10 text-center text-slate-400">
-                <p className="text-3xl mb-2">💰</p>
-                <p className="text-sm">No fee structure defined yet. Add fees above.</p>
+          <div className="card">
+            <div className="card-header">
+              <div>
+                <div className="card-title">
+                  {selectedClassName ? `Class ${selectedClassName.name} — Div ${selectedClassName.division}` : 'Fee Structure'}
+                </div>
+                {structures.length > 0 && (
+                  <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                    {structures.length} fee item{structures.length !== 1 ? 's' : ''}
+                  </div>
+                )}
               </div>
+              {structures.length > 0 && (
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Total Annual</div>
+                  <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.03em' }}>
+                    ₹{totalAmount.toLocaleString('en-IN')}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {loadingStructures ? (
+              <table className="data-table"><TableSkeleton rows={4} cols={5} /></table>
+            ) : structures.length === 0 ? (
+              <EmptyState
+                icon={
+                  <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                      d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                }
+                title="No fees defined yet"
+                description="Use the form above to add fees to this class structure"
+              />
             ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b border-slate-100">
+              <table className="data-table">
+                <thead>
                   <tr>
-                    {['Fee Head', 'Frequency', 'Amount', 'Due Date', ''].map(h => (
-                      <th key={h} className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
-                    ))}
+                    <th>Fee Head</th>
+                    <th>Frequency</th>
+                    <th>Amount</th>
+                    <th>Due Date</th>
+                    <th style={{ textAlign: 'right' }}>Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50">
+                <tbody>
                   {structures.map(s => (
-                    <tr key={s.id} className="hover:bg-slate-50">
-                      <td className="px-5 py-3 font-medium text-slate-700">{s.fee_head?.name}</td>
-                      <td className="px-5 py-3">
-                        <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-xs">{s.fee_head?.frequency}</span>
+                    <tr key={s.id}>
+                      <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {s.fee_head?.name}
                       </td>
-                      <td className="px-5 py-3 font-semibold text-slate-800">₹{parseFloat(s.amount).toLocaleString()}</td>
-                      <td className="px-5 py-3 text-slate-500">{s.due_date || '—'}</td>
-                      <td className="px-5 py-3">
-                        <button onClick={() => handleDelete(s.id)} className="text-rose-500 hover:text-rose-700 text-xs font-medium">Remove</button>
+                      <td><FreqBadge freq={s.fee_head?.frequency} /></td>
+                      <td style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '14px' }}>
+                        ₹{parseFloat(s.amount).toLocaleString('en-IN')}
+                      </td>
+                      <td style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>
+                        {s.due_date || '—'}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button
+                          onClick={() => setDeleteTarget({ id: s.id, name: s.fee_head?.name })}
+                          style={{
+                            background: 'var(--danger-50)', color: 'var(--danger-600)',
+                            border: '1px solid var(--danger-100)',
+                            borderRadius: '6px', padding: '4px 10px',
+                            fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+                            fontFamily: 'var(--font-sans)',
+                          }}
+                        >
+                          Remove
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -190,6 +344,32 @@ export default function FeeStructure() {
           </div>
         </>
       )}
+
+      {!selectedClass && (
+        <div className="card">
+          <EmptyState
+            icon={
+              <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                  d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+              </svg>
+            }
+            title="Select a class to view fee structure"
+            description="Choose a class and academic year from the filters above"
+          />
+        </div>
+      )}
+
+      <ConfirmModal
+        open={!!deleteTarget}
+        title="Remove Fee"
+        message={`Remove "${deleteTarget?.name}" from the fee structure? This will not affect existing payment records.`}
+        confirmLabel="Remove"
+        confirmVariant="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteTarget(null)}
+        loading={deleting}
+      />
     </div>
   )
 }

@@ -1,90 +1,78 @@
+// Dashboard.jsx — Redesigned with skeletons, better layout, improved stats
 import { useState, useEffect } from 'react'
-import { attendanceAPI, formatINR } from '../services/api'
 import { Link } from 'react-router-dom'
+import { attendanceAPI, formatINR } from '../services/api'
+import { StatCard, EmptyState, Skeleton } from '../components/UI'
+
+const STAT_ICONS = {
+  students: (
+    <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  ),
+  fees: (
+    <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+        d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+    </svg>
+  ),
+  outstanding: (
+    <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  ),
+  defaulters: (
+    <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+    </svg>
+  ),
+}
+
+const QUICK_ACTIONS = [
+  { label: 'Add Student',     to: '/students/new',     color: 'var(--brand-600)',   bg: 'var(--brand-50)',   border: 'var(--brand-200)' },
+  { label: 'Mark Attendance', to: '/attendance',        color: '#7c3aed',            bg: 'var(--purple-50)',  border: 'var(--purple-100)' },
+  { label: 'Enter Marks',     to: '/marks',             color: '#0891b2',            bg: '#ecfeff',           border: '#cffafe' },
+  { label: 'Fee Structure',   to: '/fees',              color: 'var(--success-600)', bg: 'var(--success-50)', border: 'var(--success-100)' },
+  { label: 'View Defaulters', to: '/fees/defaulters',   color: 'var(--danger-600)',  bg: 'var(--danger-50)',  border: 'var(--danger-100)' },
+  { label: 'Reports',         to: '/reports',           color: '#b45309',            bg: 'var(--warning-50)', border: '#fde68a' },
+]
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
-  // C-09 FIX: Add explicit error state so admin sees a retry banner, not blank dashes
   const [error, setError] = useState(null)
 
   useEffect(() => {
     attendanceAPI.getDashboardStats()
       .then(r => { setStats(r.data); setLoading(false) })
-      .catch(() => {
-        setError('Could not load dashboard data. Check backend connection.')
-        setLoading(false)
-      })
+      .catch(() => { setError(true); setLoading(false) })
   }, [])
 
-  const statCards = [
-    {
-      label: 'Total Students',
-      value: loading ? '...' : (stats?.total_students ?? 0),
-      sub: 'Active enrollments',
-      color: 'text-blue-600',
-      bg: 'bg-blue-50',
-      border: 'border-blue-100',
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-        </svg>
-      )
-    },
-    {
-      label: 'Collected This Month',
-      // M-02 FIX: Use formatINR instead of raw number / fmt()
-      value: loading ? '...' : formatINR(stats?.fees_this_month ?? 0),
-      sub: 'Fee payments received',
-      color: 'text-emerald-600',
-      bg: 'bg-emerald-50',
-      border: 'border-emerald-100',
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      )
-    },
-    {
-      label: 'Outstanding Dues',
-      value: loading ? '...' : formatINR(stats?.total_outstanding ?? 0),
-      sub: 'Total pending fees',
-      color: 'text-rose-600',
-      bg: 'bg-rose-50',
-      border: 'border-rose-100',
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-        </svg>
-      )
-    },
-    {
-      label: 'Fee Defaulters',
-      value: loading ? '...' : (stats?.defaulter_count ?? 0),
-      sub: 'Students with balance due',
-      color: 'text-amber-600',
-      bg: 'bg-amber-50',
-      border: 'border-amber-100',
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-      )
-    },
-  ]
+  const today = new Date().toLocaleDateString('en-IN', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  })
 
-  // C-09 FIX: Show retry banner when backend is unreachable
   if (error) return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-slate-800">Dashboard</h1>
+      <div style={{ marginBottom: '24px' }}>
+        <h1 className="page-title">Dashboard</h1>
+        <p className="page-subtitle">{today}</p>
       </div>
-      <div className="bg-rose-50 border border-rose-200 rounded-xl p-8 text-center">
-        <p className="text-rose-700 font-semibold mb-4">{error}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="px-4 py-2 bg-rose-600 text-white rounded-lg text-sm font-medium hover:bg-rose-700"
-        >
+      <div style={{
+        background: 'var(--surface-0)', border: '1px solid var(--danger-100)',
+        borderRadius: '14px', padding: '40px', textAlign: 'center',
+      }}>
+        <div style={{ fontSize: '32px', marginBottom: '12px' }}>⚠️</div>
+        <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '6px' }}>
+          Could not load dashboard data
+        </div>
+        <div style={{ fontSize: '13.5px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
+          The backend may be unreachable. Check that Docker is running.
+        </div>
+        <button className="btn btn-primary" onClick={() => window.location.reload()}>
           Retry
         </button>
       </div>
@@ -93,51 +81,137 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-slate-800">Dashboard</h1>
-        <p className="text-slate-500 mt-1 text-sm">
-          Welcome to Iqra School Management System —{' '}
-          {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-        </p>
+      {/* Header */}
+      <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h1 className="page-title">Dashboard</h1>
+          <p className="page-subtitle">{today}</p>
+        </div>
+        <Link to="/students/new" className="btn btn-primary" style={{ textDecoration: 'none' }}>
+          <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+          </svg>
+          Add Student
+        </Link>
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-2 gap-5 mb-6">
-        {statCards.map(s => (
-          <div key={s.label} className={`bg-white rounded-xl border ${s.border} shadow-sm p-5`}>
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-slate-500 font-medium">{s.label}</p>
-                <p className={`text-3xl font-bold mt-1 ${s.color}`}>{s.value}</p>
-                <p className="text-xs text-slate-400 mt-1">{s.sub}</p>
-              </div>
-              <div className={`${s.bg} ${s.color} p-2.5 rounded-lg`}>{s.icon}</div>
-            </div>
-          </div>
-        ))}
+      {/* Stats grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginBottom: '20px' }}>
+        <StatCard
+          label="Total Students"
+          value={loading ? null : (stats?.total_students ?? 0).toLocaleString()}
+          sub="Active enrollments"
+          color="var(--brand-600)"
+          icon={STAT_ICONS.students}
+          loading={loading}
+        />
+        <StatCard
+          label="Collected This Month"
+          value={loading ? null : formatINR(stats?.fees_this_month ?? 0)}
+          sub="Payments received"
+          color="var(--success-600)"
+          icon={STAT_ICONS.fees}
+          loading={loading}
+        />
+        <StatCard
+          label="Outstanding Dues"
+          value={loading ? null : formatINR(stats?.total_outstanding ?? 0)}
+          sub="Total pending fees"
+          color="var(--danger-600)"
+          icon={STAT_ICONS.outstanding}
+          loading={loading}
+        />
+        <StatCard
+          label="Fee Defaulters"
+          value={loading ? null : (stats?.defaulter_count ?? 0)}
+          sub="Students with balance due"
+          color="var(--warning-600)"
+          icon={STAT_ICONS.defaulters}
+          loading={loading}
+        />
       </div>
 
-      <div className="grid grid-cols-2 gap-5 mb-6">
+      {/* Quick Actions */}
+      <div className="card" style={{ marginBottom: '20px' }}>
+        <div className="card-header">
+          <div className="card-title">Quick Actions</div>
+        </div>
+        <div style={{ padding: '16px 20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          {QUICK_ACTIONS.map(a => (
+            <Link
+              key={a.label}
+              to={a.to}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
+                borderRadius: '9px',
+                border: `1px solid ${a.border}`,
+                background: a.bg,
+                color: a.color,
+                fontSize: '13px',
+                fontWeight: 700,
+                textDecoration: 'none',
+                transition: 'all 0.15s',
+                fontFamily: 'var(--font-sans)',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.opacity = '0.8'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)' }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none' }}
+            >
+              {a.label}
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      {/* Bottom grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
         {/* Recent Payments */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-700">Recent Payments</h2>
-            <Link to="/fees/defaulters" className="text-xs text-blue-600 hover:underline">View all →</Link>
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title">Recent Payments</div>
+            <Link to="/fees/defaulters" style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--brand-600)', textDecoration: 'none' }}>
+              View all →
+            </Link>
           </div>
           {loading ? (
-            <div className="p-6 text-center text-slate-400 text-sm">Loading...</div>
-          ) : !stats?.recent_payments?.length ? (
-            <div className="p-6 text-center text-slate-400 text-sm">No payments yet</div>
-          ) : (
-            <div className="divide-y divide-slate-50">
-              {stats.recent_payments.map((p, i) => (
-                <div key={i} className="px-5 py-3 flex items-center justify-between">
+            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {[1, 2, 3].map(i => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <p className="text-xs font-mono text-blue-600">{p.receipt_number}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{p.date} · {p.mode}</p>
+                    <Skeleton height="12px" width="100px" style={{ marginBottom: '5px' }} />
+                    <Skeleton height="11px" width="70px" />
                   </div>
-                  {/* M-02 FIX: formatINR */}
-                  <p className="text-sm font-bold text-emerald-600">{formatINR(p.amount)}</p>
+                  <Skeleton height="14px" width="60px" />
+                </div>
+              ))}
+            </div>
+          ) : !stats?.recent_payments?.length ? (
+            <EmptyState
+              icon={<svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>}
+              title="No payments yet"
+              description="Payments will appear here once recorded"
+            />
+          ) : (
+            <div style={{ padding: '4px 0' }}>
+              {stats.recent_payments.map((p, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 20px',
+                  borderBottom: i < stats.recent_payments.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+                }}>
+                  <div>
+                    <div className="mono" style={{ color: 'var(--brand-600)', fontSize: '12px', fontWeight: 600, marginBottom: '2px' }}>
+                      {p.receipt_number}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                      {p.date} · <span style={{ background: 'var(--gray-100)', padding: '1px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>{p.mode}</span>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--success-600)' }}>
+                    {formatINR(p.amount)}
+                  </div>
                 </div>
               ))}
             </div>
@@ -145,45 +219,49 @@ export default function Dashboard() {
         </div>
 
         {/* Class-wise enrollment */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100">
-            <h2 className="text-sm font-semibold text-slate-700">Class-wise Enrollment</h2>
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title">Class Enrollment</div>
+            <Link to="/students" style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--brand-600)', textDecoration: 'none' }}>
+              View all →
+            </Link>
           </div>
           {loading ? (
-            <div className="p-6 text-center text-slate-400 text-sm">Loading...</div>
+            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {[1, 2, 3, 4].map(i => <Skeleton key={i} height="13px" width={`${60 + i * 8}%`} />)}
+            </div>
           ) : !stats?.class_counts?.length ? (
-            <div className="p-6 text-center text-slate-400 text-sm">No students enrolled yet</div>
+            <EmptyState
+              icon={<svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 14l9-5-9-5-9 5 9 5z" /></svg>}
+              title="No students enrolled"
+              description="Add students to see class-wise counts"
+            />
           ) : (
-            <div className="divide-y divide-slate-50">
-              {stats.class_counts.map((c, i) => (
-                <div key={i} className="px-5 py-3 flex items-center justify-between">
-                  <p className="text-sm text-slate-700 font-medium">Class {c.class_name}</p>
-                  <span className="px-2.5 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">
-                    {c.count} students
-                  </span>
-                </div>
-              ))}
+            <div style={{ padding: '4px 0' }}>
+              {stats.class_counts.slice(0, 8).map((c, i) => {
+                const maxCount = Math.max(...stats.class_counts.map(x => x.count))
+                const pct = maxCount > 0 ? (c.count / maxCount) * 100 : 0
+                return (
+                  <div key={i} style={{
+                    padding: '8px 20px',
+                    borderBottom: i < Math.min(stats.class_counts.length, 8) - 1 ? '1px solid var(--border-subtle)' : 'none',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '5px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        Class {c.class_name}
+                      </span>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--brand-600)' }}>
+                        {c.count} students
+                      </span>
+                    </div>
+                    <div className="progress-bar">
+                      <div className="progress-fill" style={{ width: `${pct}%`, background: 'var(--brand-500)' }} />
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-        <h2 className="text-sm font-semibold text-slate-700 mb-4">Quick Actions</h2>
-        <div className="flex gap-3 flex-wrap">
-          {[
-            { label: '+ Add Student', to: '/students/new', style: 'bg-blue-600 text-white hover:bg-blue-700' },
-            { label: '📅 Mark Attendance', to: '/attendance', style: 'bg-slate-100 text-slate-700 hover:bg-slate-200' },
-            { label: '💰 Fee Structure', to: '/fees', style: 'bg-slate-100 text-slate-700 hover:bg-slate-200' },
-            { label: '⚠️ View Defaulters', to: '/fees/defaulters', style: 'bg-rose-50 text-rose-700 hover:bg-rose-100' },
-            { label: '📝 Enter Marks', to: '/marks', style: 'bg-slate-100 text-slate-700 hover:bg-slate-200' },
-          ].map(a => (
-            <Link key={a.label} to={a.to}
-              className={`${a.style} px-4 py-2 rounded-lg text-sm font-medium transition-colors`}>
-              {a.label}
-            </Link>
-          ))}
         </div>
       </div>
     </div>
