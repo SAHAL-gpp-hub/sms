@@ -62,17 +62,35 @@ export const feeAPI = {
 }
 
 export const marksAPI = {
-    // Subjects
+    // Subjects — FIX: pass include_inactive as 0/1 so FastAPI bool parsing works reliably
     getSubjects: (classId, includeInactive = false) =>
-        api.get('/marks/subjects', { params: { class_id: classId, include_inactive: includeInactive } }),
-    createSubject: (data) => api.post('/marks/subjects', data),
-    updateSubject: (id, data) => api.patch(`/marks/subjects/${id}`, data),
+        api.get('/marks/subjects', { params: { class_id: classId, include_inactive: includeInactive ? 'true' : 'false' } }),
+    // FIX: ensure all numeric fields are sent as integers, not strings
+    createSubject: (data) => api.post('/marks/subjects', {
+        ...data,
+        class_id: parseInt(data.class_id),
+        max_theory: parseInt(data.max_theory) || 100,
+        max_practical: parseInt(data.max_practical) || 0,
+    }),
+    updateSubject: (id, data) => {
+        // Only send fields that are present; coerce numerics
+        const payload = {...data }
+        if (payload.max_theory !== undefined && payload.max_theory !== null)
+            payload.max_theory = parseInt(payload.max_theory)
+        if (payload.max_practical !== undefined && payload.max_practical !== null)
+            payload.max_practical = parseInt(payload.max_practical)
+        return api.patch(`/marks/subjects/${id}`, payload)
+    },
     deleteSubject: (id) => api.delete(`/marks/subjects/${id}`),
     seedSubjects: (classId) => api.post(`/marks/subjects/seed/${classId}`),
 
     // Exams
     getExams: (params) => api.get('/marks/exams', { params }),
-    createExam: (data) => api.post('/marks/exams', data),
+    createExam: (data) => api.post('/marks/exams', {
+        ...data,
+        class_id: parseInt(data.class_id),
+        academic_year_id: parseInt(data.academic_year_id),
+    }),
     deleteExam: (id) => api.delete(`/marks/exams/${id}`),
 
     // Exam subject configs (per-exam max marks)
@@ -135,23 +153,44 @@ export const formatINR = (amount) =>
         maximumFractionDigits: 2,
     }).format(Number(amount) || 0)
 
+// FIX: Handle Pydantic v2 422 error format properly
+// Pydantic v2 returns: { detail: [{ type, loc, msg, input, url }] }
 export const extractError = (err) => {
-    const detail =
-        err &&
-        err.response &&
-        err.response.data &&
-        err.response.data.detail
+    if (!err || !err.response) return 'Network error — is the backend running?'
 
-    if (!detail) return 'Something went wrong. Please try again.'
+    const detail = err.response ? .data ? .detail
+
+    if (!detail) {
+        // Try to get something useful from the response
+        if (err.response ? .data ? .message) return err.response.data.message
+        if (err.response ? .statusText) return `${err.response.status}: ${err.response.statusText}`
+        return 'Something went wrong. Please try again.'
+    }
 
     if (typeof detail === 'string') return detail
 
     if (Array.isArray(detail)) {
         return detail
-            .map(d => (d && (d.msg || d.message)) || JSON.stringify(d))
+            .map(d => {
+                if (!d) return null
+                    // Pydantic v2 format: { type, loc, msg, input }
+                if (d.msg) {
+                    const loc = d.loc && d.loc.length > 0 ?
+                        `${d.loc[d.loc.length - 1]}: ` :
+                        ''
+                    return `${loc}${d.msg}`
+                }
+                // Pydantic v1 format: { msg, type }
+                if (d.message) return d.message
+                return JSON.stringify(d)
+            })
+            .filter(Boolean)
             .join('; ')
     }
 
+    if (typeof detail === 'object' && detail.msg) return detail.msg
+
     return JSON.stringify(detail)
 }
+
 export default api

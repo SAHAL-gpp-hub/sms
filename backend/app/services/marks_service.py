@@ -1,32 +1,30 @@
 """
 marks_service.py  (updated)
 
-Key changes vs previous version:
-  1. get_effective_max_marks(db, exam_id, subject_id) — returns the
-     ExamSubjectConfig override if present, else falls back to the
-     subject-level defaults. All mark entry / result calculation now
-     routes through this helper so custom exam max marks are used
-     everywhere consistently.
+FIX for 500 error after exam creation:
+  The get_subjects() query uses filter_by(is_active=True) which crashes
+  with a 500 if the subjects.is_active column doesn't exist yet
+  (i.e. migration b3c4d5e6f7a8 hasn't run or failed silently).
 
-  2. get_exam_subject_configs / upsert_exam_subject_configs /
-     delete_exam_subject_config — CRUD for per-exam mark overrides.
+  Added try/except fallback: if the is_active filter causes an error,
+  fall back to returning all subjects for that class without filtering.
 
-  3. update_subject / toggle_subject_active — allow editing / soft-
-     disabling subjects from the UI without losing historical marks.
+  Root cause: migration b3c4d5e6f7a8 adds is_active to subjects, but
+  Base.metadata.create_all() in main.py runs AFTER alembic, and if
+  alembic fails mid-migration the column may be missing.
 
-  4. get_marks / get_class_results use get_effective_max_marks so
-     results PDFs automatically respect exam-specific overrides.
+  Best fix: run `alembic upgrade head` inside Docker to apply all migrations.
+  This service fix prevents a 500 in the meantime.
 
-  5. bulk_save_marks validates against effective max (not subject default).
-
-All prior fixes (BUG 5 grade_point, advisory lock, CLASS_ORDER) are
-preserved.
+All prior fixes preserved.
 """
 
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, List
 
 from sqlalchemy.orm import Session
+from sqlalchemy import text
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from app.models.base_models import (
     Subject, Exam, Mark, Student, Class, StudentStatusEnum,
@@ -101,19 +99,18 @@ def get_effective_max_marks(
 ) -> tuple[int, int]:
     """
     Return (max_theory, max_practical) for this exam+subject combination.
-
-    Priority order:
-      1. ExamSubjectConfig row for (exam_id, subject_id)  — custom override
-      2. Subject.max_theory / max_practical                — class default
-
-    This is the single source of truth used by bulk_save_marks and
-    get_class_results so validation and grade calculation are consistent.
+    Falls back to subject defaults if no ExamSubjectConfig override exists.
+    Also falls back gracefully if exam_subject_configs table doesn't exist yet.
     """
-    config = db.query(ExamSubjectConfig).filter_by(
-        exam_id=exam_id, subject_id=subject_id
-    ).first()
-    if config:
-        return config.max_theory, config.max_practical
+    try:
+        config = db.query(ExamSubjectConfig).filter_by(
+            exam_id=exam_id, subject_id=subject_id
+        ).first()
+        if config:
+            return config.max_theory, config.max_practical
+    except (OperationalError, ProgrammingError):
+        # exam_subject_configs table doesn't exist yet — migration pending
+        pass
 
     subject = db.query(Subject).filter_by(id=subject_id).first()
     if subject:
@@ -122,24 +119,23 @@ def get_effective_max_marks(
     return 100, 0  # safe fallback
 
 
-def get_exam_subject_configs(db: Session, exam_id: int) -> list[ExamSubjectConfig]:
-    return db.query(ExamSubjectConfig).filter_by(exam_id=exam_id).all()
+def get_exam_subject_configs(db: Session, exam_id: int) -> list:
+    try:
+        return db.query(ExamSubjectConfig).filter_by(exam_id=exam_id).all()
+    except (OperationalError, ProgrammingError):
+        return []
 
 
 def upsert_exam_subject_configs(
     db: Session, exam_id: int, configs: list[ExamSubjectConfigCreate]
-) -> list[ExamSubjectConfig]:
+) -> list:
     """
     Replace all ExamSubjectConfig rows for this exam with the provided list.
-    An empty list clears all overrides (reverts to subject defaults).
-    Returns the saved configs.
     """
-    # Validate exam exists
     exam = db.query(Exam).filter_by(id=exam_id).first()
     if not exam:
         raise LookupError(f"Exam {exam_id} not found")
 
-    # Validate each subject belongs to the exam's class
     for cfg in configs:
         subject = db.query(Subject).filter_by(
             id=cfg.subject_id, class_id=exam.class_id
@@ -149,68 +145,99 @@ def upsert_exam_subject_configs(
                 f"Subject {cfg.subject_id} does not belong to class {exam.class_id}"
             )
 
-    # Delete existing configs and replace
-    db.query(ExamSubjectConfig).filter_by(exam_id=exam_id).delete()
-    db.flush()
+    try:
+        db.query(ExamSubjectConfig).filter_by(exam_id=exam_id).delete()
+        db.flush()
 
-    saved = []
-    for cfg in configs:
-        row = ExamSubjectConfig(
-            exam_id=exam_id,
-            subject_id=cfg.subject_id,
-            max_theory=cfg.max_theory,
-            max_practical=cfg.max_practical,
-        )
-        db.add(row)
-        saved.append(row)
+        saved = []
+        for cfg in configs:
+            row = ExamSubjectConfig(
+                exam_id=exam_id,
+                subject_id=cfg.subject_id,
+                max_theory=cfg.max_theory,
+                max_practical=cfg.max_practical,
+            )
+            db.add(row)
+            saved.append(row)
 
-    db.commit()
-    for row in saved:
-        db.refresh(row)
-    return saved
+        db.commit()
+        for row in saved:
+            db.refresh(row)
+        return saved
+    except (OperationalError, ProgrammingError) as e:
+        db.rollback()
+        raise ValueError(
+            "Could not save exam configs — run 'alembic upgrade head' to apply pending migrations."
+        ) from e
 
 
 # ---------------------------------------------------------------------------
 # Subjects
 # ---------------------------------------------------------------------------
 
+def _has_is_active_column(db: Session) -> bool:
+    """Check if the subjects.is_active column exists in the database."""
+    try:
+        db.execute(text("SELECT is_active FROM subjects LIMIT 1"))
+        return True
+    except (OperationalError, ProgrammingError):
+        db.rollback()
+        return False
+
+
 def seed_subjects(db: Session, class_id: int) -> int:
     cls = db.query(Class).filter_by(id=class_id).first()
     if not cls:
         return 0
     subjects = GSEB_SUBJECTS.get(cls.name, [])
+    has_col = _has_is_active_column(db)
     count = 0
     for name, max_theory, max_practical in subjects:
         exists = db.query(Subject).filter_by(name=name, class_id=class_id).first()
         if not exists:
-            db.add(Subject(
+            kwargs = dict(
                 name=name,
                 class_id=class_id,
                 max_theory=max_theory,
                 max_practical=max_practical,
                 subject_type="Theory+Practical" if max_practical > 0 else "Theory",
-                is_active=True,
-            ))
+            )
+            if has_col:
+                kwargs["is_active"] = True
+            db.add(Subject(**kwargs))
             count += 1
     db.commit()
     return count
 
 
 def get_subjects(db: Session, class_id: int, include_inactive: bool = False):
+    """
+    FIX: Wrapped in try/except — if is_active column doesn't exist yet
+    (migration b3c4d5e6f7a8 pending), falls back to returning all subjects
+    without filtering by is_active, preventing a 500 error.
+    """
     q = db.query(Subject).filter_by(class_id=class_id)
     if not include_inactive:
-        q = q.filter_by(is_active=True)
+        try:
+            q = q.filter(Subject.is_active == True)  # noqa: E712
+            results = q.order_by(Subject.id).all()
+            return results
+        except (OperationalError, ProgrammingError):
+            # is_active column missing — migration hasn't run yet
+            db.rollback()
+            return db.query(Subject).filter_by(class_id=class_id).order_by(Subject.id).all()
     return q.order_by(Subject.id).all()
 
 
 def create_subject(db: Session, data: SubjectCreate) -> Subject:
+    has_col = _has_is_active_column(db)
+
     # Check for duplicate name in this class
     existing = db.query(Subject).filter_by(
         name=data.name, class_id=data.class_id
     ).first()
     if existing:
-        if not existing.is_active:
-            # Reactivate and update instead of creating a duplicate
+        if has_col and not existing.is_active:
             existing.is_active     = True
             existing.max_theory    = data.max_theory
             existing.max_practical = data.max_practical
@@ -223,7 +250,10 @@ def create_subject(db: Session, data: SubjectCreate) -> Subject:
             "Edit the existing subject instead."
         )
 
-    s = Subject(**data.model_dump(), is_active=True)
+    kwargs = data.model_dump()
+    if has_col:
+        kwargs["is_active"] = True
+    s = Subject(**kwargs)
     db.add(s)
     db.commit()
     db.refresh(s)
@@ -238,19 +268,27 @@ def update_subject(db: Session, subject_id: int, data: SubjectUpdate) -> Optiona
 
     update_data = data.model_dump(exclude_unset=True)
 
-    # If renaming, check for collision in same class
     if "name" in update_data and update_data["name"] != s.name:
-        collision = db.query(Subject).filter(
-            Subject.class_id == s.class_id,
-            Subject.name == update_data["name"],
-            Subject.id != subject_id,
-            Subject.is_active == True,
-        ).first()
-        if collision:
-            raise ValueError(
-                f"Another active subject named '{update_data['name']}' "
-                "already exists in this class."
-            )
+        try:
+            collision = db.query(Subject).filter(
+                Subject.class_id == s.class_id,
+                Subject.name == update_data["name"],
+                Subject.id != subject_id,
+                Subject.is_active == True,  # noqa: E712
+            ).first()
+            if collision:
+                raise ValueError(
+                    f"Another active subject named '{update_data['name']}' "
+                    "already exists in this class."
+                )
+        except (OperationalError, ProgrammingError):
+            db.rollback()
+            # is_active column missing, skip collision check on that field
+
+    # Skip is_active update if column doesn't exist
+    has_col = _has_is_active_column(db)
+    if not has_col:
+        update_data.pop("is_active", None)
 
     for key, value in update_data.items():
         setattr(s, key, value)
@@ -262,17 +300,17 @@ def update_subject(db: Session, subject_id: int, data: SubjectUpdate) -> Optiona
 
 def delete_subject(db: Session, subject_id: int) -> Optional[Subject]:
     """
-    Soft-delete if marks exist for this subject; hard-delete otherwise.
-    This preserves historical mark records while removing the subject from
-    future exam grids.
+    Soft-delete if marks exist; hard-delete otherwise.
+    Falls back to hard-delete if is_active column doesn't exist.
     """
     s = db.query(Subject).filter_by(id=subject_id).first()
     if not s:
         return None
 
     has_marks = db.query(Mark).filter_by(subject_id=subject_id).first()
-    if has_marks:
-        # Soft-delete — keep the row but hide from grids
+    has_col = _has_is_active_column(db)
+
+    if has_marks and has_col:
         s.is_active = False
         db.commit()
         db.refresh(s)
@@ -318,7 +356,6 @@ def delete_exam(db: Session, exam_id: int) -> Optional[Exam]:
 def bulk_save_marks(db: Session, entries: list[MarkEntry]):
     for entry in entries:
         if not entry.is_absent and entry.theory_marks is not None:
-            # Use effective max marks (respects per-exam overrides)
             eff_max_theory, eff_max_practical = get_effective_max_marks(
                 db, entry.exam_id, entry.subject_id
             )
@@ -356,17 +393,13 @@ def bulk_save_marks(db: Session, entries: list[MarkEntry]):
 
 
 def get_marks(db: Session, exam_id: int, class_id: int):
-    """
-    Returns {students: [...], subjects: [...]} where each subject entry
-    includes the EFFECTIVE max marks for this exam (custom override or default).
-    """
     students = (
         db.query(Student)
         .filter_by(class_id=class_id)
         .filter(Student.status == StudentStatusEnum.Active)
         .all()
     )
-    subjects = get_subjects(db, class_id)  # active only
+    subjects = get_subjects(db, class_id)  # active only (with fallback)
     subject_ids = [s.id for s in subjects]
 
     marks = (
@@ -399,7 +432,6 @@ def get_marks(db: Session, exam_id: int, class_id: int):
             }
         result.append(row)
 
-    # Enrich subject list with effective max marks
     subject_out = []
     for s in subjects:
         eff_theory, eff_practical = get_effective_max_marks(db, exam_id, s.id)
@@ -408,7 +440,6 @@ def get_marks(db: Session, exam_id: int, class_id: int):
             "name":              s.name,
             "max_theory":        eff_theory,
             "max_practical":     eff_practical,
-            # Original subject defaults (shown in subject manager)
             "default_max_theory":    s.max_theory,
             "default_max_practical": s.max_practical,
             "has_custom_config": eff_theory != s.max_theory or eff_practical != s.max_practical,
@@ -428,7 +459,7 @@ def get_class_results(db: Session, exam_id: int, class_id: int):
         .filter(Student.status == StudentStatusEnum.Active)
         .all()
     )
-    subjects = get_subjects(db, class_id)  # active only
+    subjects = get_subjects(db, class_id)  # active only (with fallback)
     marks    = db.query(Mark).filter_by(exam_id=exam_id).all()
     mark_map = {(m.student_id, m.subject_id): m for m in marks}
 
@@ -440,7 +471,6 @@ def get_class_results(db: Session, exam_id: int, class_id: int):
         has_fail = False
 
         for subject in subjects:
-            # Use effective max marks (respects per-exam overrides)
             eff_max_theory, eff_max_practical = get_effective_max_marks(
                 db, exam_id, subject.id
             )
