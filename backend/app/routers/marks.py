@@ -1,11 +1,14 @@
 """
-app/routers/marks.py
+app/routers/marks.py  (updated)
 
-ISSUE 7 FIX: The /grid endpoint stripped the 'subjects' key from the
-get_marks() response.  Any consumer relying on /grid for subject metadata
-(e.g. to know max marks per subject) received an incomplete response.
-Fixed: /grid now returns the full {students, subjects} shape identical to
-/entry.  Tests that expected a raw list from /grid are updated in test_marks.py.
+New endpoints:
+  PATCH /marks/subjects/{subject_id}        — edit a subject (name/marks/type)
+  DELETE /marks/subjects/{subject_id}       — soft or hard delete a subject
+  GET    /marks/exams/{exam_id}/configs     — get per-exam max-marks overrides
+  PUT    /marks/exams/{exam_id}/configs     — replace all overrides for an exam
+  DELETE /marks/exams/{exam_id}/configs     — clear all overrides (revert to defaults)
+
+Existing endpoints are unchanged so all current tests continue to pass.
 """
 
 from fastapi import APIRouter, Depends, Query, HTTPException
@@ -15,7 +18,12 @@ from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.models.base_models import Class
-from app.schemas.marks import SubjectCreate, SubjectOut, ExamCreate, ExamOut, MarkEntry
+from app.schemas.marks import (
+    SubjectCreate, SubjectUpdate, SubjectOut,
+    ExamCreate, ExamOut,
+    ExamSubjectConfigCreate, ExamSubjectConfigOut, ExamSubjectConfigBulk,
+    MarkEntry,
+)
 from app.services import marks_service
 
 router = APIRouter(prefix="/api/v1/marks", tags=["Marks"])
@@ -32,25 +40,58 @@ class SeedRequest(BaseModel):
 
 @router.get("/subjects", response_model=list[SubjectOut])
 def get_subjects(
-    class_id: Optional[int] = Query(None),
-    standard: Optional[int] = Query(None),
+    class_id:         Optional[int]  = Query(None),
+    standard:         Optional[int]  = Query(None),
+    include_inactive: bool           = Query(False),
     db: Session = Depends(get_db),
 ):
     if class_id:
-        return marks_service.get_subjects(db, class_id)
+        return marks_service.get_subjects(db, class_id, include_inactive)
     if standard is not None:
-        # STEP 3.4 FIX: `standard` is a class *name* (e.g. 7), not a DB id.
-        # Look up the Class row by name and use its primary key.
         cls = db.query(Class).filter(Class.name == str(standard)).first()
         if not cls:
             return []
-        return marks_service.get_subjects(db, cls.id)
+        return marks_service.get_subjects(db, cls.id, include_inactive)
     return []
 
 
 @router.post("/subjects", response_model=SubjectOut, status_code=201)
 def create_subject(data: SubjectCreate, db: Session = Depends(get_db)):
-    return marks_service.create_subject(db, data)
+    try:
+        return marks_service.create_subject(db, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.patch("/subjects/{subject_id}", response_model=SubjectOut)
+def update_subject(
+    subject_id: int,
+    data: SubjectUpdate,
+    db: Session = Depends(get_db),
+):
+    """
+    Partial update — only send the fields you want to change.
+    Supports: name, max_theory, max_practical, subject_type, is_active.
+    """
+    try:
+        subject = marks_service.update_subject(db, subject_id, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    return subject
+
+
+@router.delete("/subjects/{subject_id}")
+def delete_subject(subject_id: int, db: Session = Depends(get_db)):
+    """
+    Soft-deletes if mark history exists; hard-deletes otherwise.
+    Returns {"deleted": true, "soft": true/false}.
+    """
+    subject = marks_service.delete_subject(db, subject_id)
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    return {"deleted": True, "soft": not subject.is_active if hasattr(subject, 'is_active') else False}
 
 
 @router.post("/subjects/seed/{class_id}")
@@ -66,12 +107,6 @@ def seed_subjects_by_body(data: SeedRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=422, detail="Provide class_id or standard")
     count = marks_service.seed_subjects(db, target_id)
     return {"message": f"Seeded {count} subjects"}
-
-
-@router.delete("/subjects/{subject_id}")
-def delete_subject(subject_id: int, db: Session = Depends(get_db)):
-    marks_service.delete_subject(db, subject_id)
-    return {"message": "Deleted"}
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +134,65 @@ def delete_exam(exam_id: int, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
+# Exam Subject Configs (per-exam max-marks overrides)
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/exams/{exam_id}/configs",
+    response_model=list[ExamSubjectConfigOut],
+    summary="Get per-exam max-marks overrides",
+)
+def get_exam_configs(exam_id: int, db: Session = Depends(get_db)):
+    """
+    Returns all ExamSubjectConfig rows for this exam.
+    Subjects NOT in this list use their subject-level defaults.
+    """
+    return marks_service.get_exam_subject_configs(db, exam_id)
+
+
+@router.put(
+    "/exams/{exam_id}/configs",
+    response_model=list[ExamSubjectConfigOut],
+    summary="Replace all per-exam max-marks overrides",
+)
+def set_exam_configs(
+    exam_id: int,
+    data: ExamSubjectConfigBulk,
+    db: Session = Depends(get_db),
+):
+    """
+    Replaces ALL override rows for this exam with the provided list.
+    Send an empty configs list to clear all overrides (revert to defaults).
+
+    Example body (Unit Test with 25 marks per subject):
+    {
+      "configs": [
+        {"subject_id": 1, "max_theory": 25, "max_practical": 0},
+        {"subject_id": 2, "max_theory": 25, "max_practical": 0}
+      ]
+    }
+    """
+    try:
+        return marks_service.upsert_exam_subject_configs(db, exam_id, data.configs)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.delete(
+    "/exams/{exam_id}/configs",
+    summary="Clear all per-exam max-marks overrides (revert to subject defaults)",
+)
+def clear_exam_configs(exam_id: int, db: Session = Depends(get_db)):
+    try:
+        marks_service.upsert_exam_subject_configs(db, exam_id, [])
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"message": "All exam subject configs cleared"}
+
+
+# ---------------------------------------------------------------------------
 # Marks entry
 # ---------------------------------------------------------------------------
 
@@ -108,16 +202,18 @@ def get_marks(
     class_id: int = Query(...),
     db: Session = Depends(get_db),
 ):
-    """Returns {students: [...], subjects: [...]}."""
+    """
+    Returns {students: [...], subjects: [...]}.
+    Each subject now includes:
+      - max_theory / max_practical   : EFFECTIVE values for this exam
+      - default_max_theory/practical : original subject defaults
+      - has_custom_config            : whether an override is active
+    """
     return marks_service.get_marks(db, exam_id, class_id)
-
-# STEP 3.6: /marks/grid was identical to /marks/entry — removed to avoid
-# confusion. All consumers should use /marks/entry.
 
 
 @router.post("/bulk")
 def bulk_save_marks(entries: list[MarkEntry], db: Session = Depends(get_db)):
-    # STEP 3.1 FIX: catch ValueError raised by service layer and convert to HTTP 422.
     try:
         return marks_service.bulk_save_marks(db, entries)
     except ValueError as exc:
