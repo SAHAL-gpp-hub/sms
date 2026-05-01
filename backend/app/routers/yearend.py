@@ -21,7 +21,7 @@ from typing import Optional
 
 from app.core.database import get_db
 from app.models.base_models import AcademicYear, Class, Student, StudentStatusEnum
-from app.routers.auth import get_current_user
+from app.routers.auth import CurrentUser, require_role
 from app.services import yearend_service
 from app.services.yearend_service import get_next_class_name
 from app.pdf.report_pdf import render_tc_pdf
@@ -88,7 +88,7 @@ def preview_promote_class(
     class_id:             int,
     new_academic_year_id: int = Query(...),
     db: Session = Depends(get_db),
-    _current_user=Depends(get_current_user),
+    _: CurrentUser = Depends(require_role("admin")),
 ):
     """
     STEP 2.6 FIX: Preview how many students would be promoted without committing.
@@ -132,7 +132,7 @@ def promote_class(
     class_id:             int,
     new_academic_year_id: int = Query(...),
     db: Session = Depends(get_db),
-    _current_user=Depends(get_current_user),
+    _: CurrentUser = Depends(require_role("admin")),
 ):
     result = yearend_service.bulk_promote_students(db, class_id, new_academic_year_id)
     if "error" in result:
@@ -144,7 +144,7 @@ def promote_class(
 def create_new_year(
     data: NewYearRequest,
     db: Session = Depends(get_db),
-    _current_user=Depends(get_current_user),
+    _: CurrentUser = Depends(require_role("admin")),
 ):
     # STEP 3.1 FIX: service now raises ValueError; router converts to HTTP 400.
     try:
@@ -160,7 +160,7 @@ def create_new_year(
 def issue_tc(
     student_id: int,
     db: Session = Depends(get_db),
-    _current_user=Depends(get_current_user),
+    _: CurrentUser = Depends(require_role("admin")),
 ):
     student = yearend_service.issue_tc(db, student_id)
     if not student:

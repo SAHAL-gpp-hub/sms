@@ -6,6 +6,7 @@
 // localStorage but acceptable for an internal school admin tool.
 
 const TOKEN_KEY = 'sms_auth_token';
+const USER_KEY = 'sms_auth_user';
 
 export const setToken = (t) => {
   try {
@@ -15,6 +16,23 @@ export const setToken = (t) => {
     _memToken = t;
   }
 };
+
+export const setAuthUser = (user) => {
+  try {
+    sessionStorage.setItem(USER_KEY, JSON.stringify(user || null));
+  } catch { /* */ }
+};
+
+export const getAuthUser = () => {
+  try {
+    const raw = sessionStorage.getItem(USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+export const getRole = () => getAuthUser()?.role || null;
 
 let _memToken = null;
 
@@ -29,6 +47,7 @@ export const getToken = () => {
 export const clearToken = () => {
   try {
     sessionStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(USER_KEY);
   } catch { /* */ }
   _memToken = null;
 };

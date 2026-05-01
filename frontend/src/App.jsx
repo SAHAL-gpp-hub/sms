@@ -1,7 +1,7 @@
 // App.jsx — Updated with all improved components
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
-import { getToken } from './services/auth'
+import { getRole, getToken } from './services/auth'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -14,9 +14,17 @@ import MarksEntry from './pages/marks/MarksEntry'
 import Attendance from './pages/attendance/Attendance'
 import Reports from './pages/reports/Reports'
 import YearEnd from './pages/yearend/YearEnd'
+import ComingSoon from './pages/ComingSoon'
+import UserManagement from './pages/admin/UserManagement'
 
 function ProtectedRoute({ children }) {
   if (!getToken()) return <Navigate to="/login" replace />
+  return children
+}
+
+function RoleRoute({ roles, children }) {
+  const role = getRole()
+  if (!role || !roles.includes(role)) return <Navigate to="/unauthorized" replace />
   return children
 }
 
@@ -28,15 +36,18 @@ export default function App() {
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<Dashboard />} />
           <Route path="students" element={<StudentList />} />
-          <Route path="students/new" element={<StudentForm />} />
-          <Route path="students/:id/edit" element={<StudentForm />} />
-          <Route path="fees" element={<FeeStructure />} />
-          <Route path="fees/defaulters" element={<Defaulters />} />
+          <Route path="students/new" element={<RoleRoute roles={['admin']}><StudentForm /></RoleRoute>} />
+          <Route path="students/:id/edit" element={<RoleRoute roles={['admin']}><StudentForm /></RoleRoute>} />
+          <Route path="fees" element={<RoleRoute roles={['admin']}><FeeStructure /></RoleRoute>} />
+          <Route path="fees/defaulters" element={<RoleRoute roles={['admin']}><Defaulters /></RoleRoute>} />
           <Route path="fees/student/:id" element={<StudentFees />} />
-          <Route path="marks" element={<MarksEntry />} />
-          <Route path="attendance" element={<Attendance />} />
+          <Route path="marks" element={<RoleRoute roles={['admin', 'teacher']}><MarksEntry /></RoleRoute>} />
+          <Route path="attendance" element={<RoleRoute roles={['admin', 'teacher']}><Attendance /></RoleRoute>} />
           <Route path="reports" element={<Reports />} />
-          <Route path="yearend" element={<YearEnd />} />
+          <Route path="yearend" element={<RoleRoute roles={['admin']}><YearEnd /></RoleRoute>} />
+          <Route path="admin/users" element={<RoleRoute roles={['admin']}><UserManagement /></RoleRoute>} />
+          <Route path="unauthorized" element={<ComingSoon title="Unauthorized" description="You do not have access to this section." />} />
+          <Route path="portal" element={<ComingSoon title="Portal" description="Student and parent portal begins in Sprint 10." />} />
         </Route>
       </Routes>
 

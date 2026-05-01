@@ -12,7 +12,7 @@ academic_year_id, BUG-C aadhar_last4) are preserved unchanged.
 
 from sqlalchemy import (
     Column, Integer, String, Date, Boolean, ForeignKey,
-    Numeric, DateTime, Text, Enum, UniqueConstraint,
+    Numeric, DateTime, Text, Enum, UniqueConstraint, CheckConstraint,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -84,6 +84,8 @@ class Student(Base):
     aadhar_last4     = Column(String(4),  nullable=True)
     admission_date   = Column(Date, nullable=False)
     academic_year_id = Column(Integer, ForeignKey("academic_years.id"), nullable=False)
+    student_user_id  = Column(Integer, ForeignKey("users.id"), nullable=True)
+    parent_user_id   = Column(Integer, ForeignKey("users.id"), nullable=True)
     status           = Column(Enum(StudentStatusEnum), default=StudentStatusEnum.Active)
     photo_path       = Column(String(255), nullable=True)
     created_at       = Column(DateTime(timezone=True), server_default=func.now())
@@ -241,6 +243,12 @@ class Attendance(Base):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('admin', 'teacher', 'student', 'parent')",
+            name="users_role_check",
+        ),
+    )
 
     id            = Column(Integer, primary_key=True)
     name          = Column(String(100), nullable=False)
@@ -248,6 +256,26 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role          = Column(String(20),  default="admin")
     is_active     = Column(Boolean,     default=True)
+
+
+class TeacherClassAssignment(Base):
+    __tablename__ = "teacher_class_assignments"
+    __table_args__ = (
+        UniqueConstraint(
+            "teacher_id",
+            "class_id",
+            "academic_year_id",
+            "subject_id",
+            name="uq_teacher_class_year_subject",
+        ),
+    )
+
+    id               = Column(Integer, primary_key=True)
+    teacher_id       = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    class_id         = Column(Integer, ForeignKey("classes.id", ondelete="CASCADE"), nullable=False)
+    academic_year_id = Column(Integer, ForeignKey("academic_years.id"), nullable=False)
+    subject_id       = Column(Integer, ForeignKey("subjects.id"), nullable=True)
+    created_at       = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class TokenBlocklist(Base):

@@ -1,16 +1,34 @@
 // Sidebar.jsx — Fully responsive with proper mobile drawer behavior
 import { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { clearToken } from '../services/auth'
+import { clearToken, getRole } from '../services/auth'
 import { yearendAPI } from '../services/api'
 
 const navGroups = [
+  {
+    label: 'Admin',
+    items: [
+      {
+        to: '/admin/users',
+        label: 'User Management',
+        roles: ['admin'],
+        icon: (
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        ),
+      },
+    ],
+  },
   {
     label: 'Students',
     items: [
       {
         to: '/students',
         label: 'Students',
+        roles: ['admin', 'teacher', 'student', 'parent'],
         icon: (
           <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -26,6 +44,7 @@ const navGroups = [
       {
         to: '/marks',
         label: 'Marks',
+        roles: ['admin', 'teacher'],
         icon: (
           <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -36,6 +55,7 @@ const navGroups = [
       {
         to: '/attendance',
         label: 'Attendance',
+        roles: ['admin', 'teacher'],
         icon: (
           <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -51,6 +71,7 @@ const navGroups = [
       {
         to: '/fees',
         label: 'Fee Structure',
+        roles: ['admin'],
         icon: (
           <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -61,6 +82,7 @@ const navGroups = [
       {
         to: '/fees/defaulters',
         label: 'Defaulters',
+        roles: ['admin'],
         icon: (
           <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -76,6 +98,7 @@ const navGroups = [
       {
         to: '/reports',
         label: 'Reports',
+        roles: ['admin', 'teacher'],
         icon: (
           <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -86,6 +109,7 @@ const navGroups = [
       {
         to: '/yearend',
         label: 'Year-End',
+        roles: ['admin'],
         icon: (
           <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -100,6 +124,7 @@ const navGroups = [
 export default function Sidebar({ open, onClose }) {
   const navigate = useNavigate()
   const [yearLabel, setYearLabel] = useState(null)
+  const role = getRole() || 'admin'
 
   useEffect(() => {
     yearendAPI.getCurrentYear()
@@ -272,7 +297,7 @@ export default function Sidebar({ open, onClose }) {
               }}>
                 {group.label}
               </div>
-              {group.items.map(item => (
+              {group.items.filter(item => !item.roles || item.roles.includes(role)).map(item => (
                 <NavLink
                   key={item.to}
                   to={item.to}

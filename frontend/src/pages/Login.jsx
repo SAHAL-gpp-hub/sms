@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authAPI, extractError } from '../services/api'
-import { setToken } from '../services/auth'
+import { setAuthUser, setToken } from '../services/auth'
 
 // Animated SVG tile pattern — Islamic geometric / Gujarat craft inspiration
 function GeometricPattern() {
@@ -82,7 +82,15 @@ export default function Login() {
     try {
       const r = await authAPI.login(email, password)
       setToken(r.data.access_token)
-      navigate('/')
+      setAuthUser({
+        id: r.data.user_id,
+        name: r.data.user_name,
+        role: r.data.role,
+        assignedClassIds: r.data.assigned_class_ids || [],
+        linkedStudentId: r.data.linked_student_id || null,
+        linkedStudentIds: r.data.linked_student_ids || [],
+      })
+      navigate(r.data.role === 'student' || r.data.role === 'parent' ? '/portal' : '/')
     } catch (err) {
       setError(extractError(err))
     } finally {

@@ -13,6 +13,7 @@ Endpoints:
   GET  /api/v1/auth/me       → return current user info (requires token)
 """
 
+from dataclasses import dataclass, field
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -30,7 +31,7 @@ from app.core.security import (
     get_password_hash,
     verify_password,
 )
-from app.models.base_models import TokenBlocklist, User
+from app.models.base_models import Student, TeacherClassAssignment, TokenBlocklist, User
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
 
@@ -51,6 +52,9 @@ class Token(BaseModel):
     user_id:      int
     user_name:    str
     role:         str
+    assigned_class_ids: list[int] = []
+    linked_student_id: int | None = None
+    linked_student_ids: list[int] = []
 
 
 class UserRegister(BaseModel):
@@ -66,8 +70,55 @@ class UserOut(BaseModel):
     email:    str
     role:     str
     is_active: bool
+    assigned_class_ids: list[int] = []
+    linked_student_id: int | None = None
+    linked_student_ids: list[int] = []
 
     model_config = {"from_attributes": True}
+
+
+@dataclass
+class CurrentUser:
+    id: int
+    name: str
+    email: str
+    role: str
+    is_active: bool
+    assigned_class_ids: list[int] = field(default_factory=list)
+    linked_student_id: int | None = None
+    linked_student_ids: list[int] = field(default_factory=list)
+
+
+def build_current_user(db: Session, user: User) -> CurrentUser:
+    assigned_class_ids: list[int] = []
+    linked_student_id = None
+    linked_student_ids: list[int] = []
+
+    if user.role == "teacher":
+        assignments = (
+            db.query(TeacherClassAssignment)
+            .filter_by(teacher_id=user.id)
+            .all()
+        )
+        assigned_class_ids = sorted({a.class_id for a in assignments})
+    elif user.role == "student":
+        student = db.query(Student).filter_by(student_user_id=user.id).first()
+        if student:
+            linked_student_id = student.id
+    elif user.role == "parent":
+        students = db.query(Student).filter_by(parent_user_id=user.id).all()
+        linked_student_ids = [s.id for s in students]
+
+    return CurrentUser(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        role=user.role,
+        is_active=user.is_active,
+        assigned_class_ids=assigned_class_ids,
+        linked_student_id=linked_student_id,
+        linked_student_ids=linked_student_ids,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +128,7 @@ class UserOut(BaseModel):
 def get_current_user(
     token: str = Depends(oauth2_scheme),
     db:    Session = Depends(get_db),
-) -> User:
+) -> CurrentUser:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -101,7 +152,51 @@ def get_current_user(
     user = db.query(User).filter_by(id=user_id, is_active=True).first()
     if user is None:
         raise credentials_exception
-    return user
+    return build_current_user(db, user)
+
+
+def require_role(*allowed_roles: str):
+    def dep(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+        if current_user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Access denied. Required roles: "
+                    f"{', '.join(allowed_roles)}. Your role: {current_user.role}"
+                ),
+            )
+        return current_user
+
+    return dep
+
+
+def ensure_class_access(current_user: CurrentUser, class_id: int | None) -> None:
+    if current_user.role == "teacher" and class_id not in current_user.assigned_class_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not assigned to this class",
+        )
+
+
+def ensure_student_access(db: Session, current_user: CurrentUser, student_id: int) -> Student:
+    student = db.query(Student).filter_by(id=student_id).first()
+    if not student:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found")
+
+    if current_user.role == "admin":
+        return student
+    if current_user.role == "teacher":
+        ensure_class_access(current_user, student.class_id)
+        return student
+    if current_user.role == "student" and current_user.linked_student_id == student_id:
+        return student
+    if current_user.role == "parent" and student_id in current_user.linked_student_ids:
+        return student
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="You do not have access to this student",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -134,11 +229,15 @@ def login(
         role=user.role,
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
+    current_user = build_current_user(db, user)
     return Token(
         access_token=token,
         user_id=user.id,
         user_name=user.name,
         role=user.role,
+        assigned_class_ids=current_user.assigned_class_ids,
+        linked_student_id=current_user.linked_student_id,
+        linked_student_ids=current_user.linked_student_ids,
     )
 
 
@@ -217,6 +316,6 @@ def logout(
 
 
 @router.get("/me", response_model=UserOut, summary="Get current user info")
-def get_me(current_user: User = Depends(get_current_user)):
+def get_me(current_user: CurrentUser = Depends(get_current_user)):
     """Return the profile of the currently authenticated user."""
     return current_user

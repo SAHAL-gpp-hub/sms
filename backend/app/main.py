@@ -30,7 +30,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.core.database import Base, check_db_connection, engine
 from app.models.base_models import *  # noqa — registers all models with Base
-from app.routers import attendance, auth, fees, marks, pdf, setup, students, yearend
+from app.routers import admin_users, attendance, auth, fees, marks, pdf, setup, students, yearend
 from app.routers.auth import get_current_user, limiter
 
 logger = logging.getLogger("sms")
@@ -127,6 +127,7 @@ app.include_router(setup.router,      dependencies=_auth)
 app.include_router(fees.router,       dependencies=_auth)
 app.include_router(marks.router,      dependencies=_auth)
 app.include_router(attendance.router, dependencies=_auth)
+app.include_router(admin_users.router, dependencies=_auth)
 
 
 # ── Utility endpoints ──────────────────────────────────────────────────────

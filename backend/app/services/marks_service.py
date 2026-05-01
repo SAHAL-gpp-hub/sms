@@ -356,16 +356,23 @@ def delete_exam(db: Session, exam_id: int) -> Optional[Exam]:
 def bulk_save_marks(db: Session, entries: list[MarkEntry]):
     for entry in entries:
         if not entry.is_absent and entry.theory_marks is not None:
+            subject = db.query(Subject).filter_by(id=entry.subject_id).first()
+            if subject is None:
+                raise ValueError(f"Subject {entry.subject_id} not found")
+            if entry.theory_marks < 0:
+                raise ValueError("Theory marks cannot be negative")
+            if entry.practical_marks is not None and entry.practical_marks < 0:
+                raise ValueError("Practical marks cannot be negative")
+
             eff_max_theory, eff_max_practical = get_effective_max_marks(
                 db, entry.exam_id, entry.subject_id
             )
 
             if entry.theory_marks > eff_max_theory:
-                subject = db.query(Subject).filter_by(id=entry.subject_id).first()
                 raise ValueError(
                     f"Theory marks {entry.theory_marks} exceed max "
                     f"{eff_max_theory} for subject "
-                    f"'{subject.name if subject else entry.subject_id}'"
+                    f"'{subject.name}'"
                 )
             if (
                 entry.practical_marks

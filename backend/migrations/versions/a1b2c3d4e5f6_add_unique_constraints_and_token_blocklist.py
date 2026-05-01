@@ -26,6 +26,8 @@ depends_on: Union[str, Sequence[str], None] = None
 def _constraint_exists(table: str, constraint_name: str) -> bool:
     conn = op.get_bind()
     inspector = inspect(conn)
+    if table not in inspector.get_table_names():
+        return False
     constraints = inspector.get_unique_constraints(table)
     return any(c["name"] == constraint_name for c in constraints)
 
@@ -38,7 +40,7 @@ def _table_exists(table: str) -> bool:
 
 def upgrade() -> None:
     # ── marks: unique constraint ─────────────────────────────────────────
-    if not _constraint_exists("marks", "uq_mark_student_subject_exam"):
+    if _table_exists("marks") and not _constraint_exists("marks", "uq_mark_student_subject_exam"):
         op.create_unique_constraint(
             "uq_mark_student_subject_exam",
             "marks",
@@ -46,7 +48,7 @@ def upgrade() -> None:
         )
 
     # ── attendance: unique constraint ────────────────────────────────────
-    if not _constraint_exists("attendance", "uq_attendance_student_class_date"):
+    if _table_exists("attendance") and not _constraint_exists("attendance", "uq_attendance_student_class_date"):
         op.create_unique_constraint(
             "uq_attendance_student_class_date",
             "attendance",

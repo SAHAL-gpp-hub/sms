@@ -17,7 +17,8 @@ from typing import Optional
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.models.base_models import Class
+from app.models.base_models import Class, Exam, Student
+from app.routers.auth import CurrentUser, ensure_class_access, ensure_student_access, require_role
 from app.schemas.marks import (
     SubjectCreate, SubjectUpdate, SubjectOut,
     ExamCreate, ExamOut,
@@ -44,7 +45,14 @@ def get_subjects(
     standard:         Optional[int]  = Query(None),
     include_inactive: bool           = Query(False),
     db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_role("admin", "teacher")),
 ):
+    if class_id:
+        ensure_class_access(current_user, class_id)
+    if standard is not None:
+        cls = db.query(Class).filter(Class.name == str(standard)).first()
+        if cls:
+            ensure_class_access(current_user, cls.id)
     if class_id:
         return marks_service.get_subjects(db, class_id, include_inactive)
     if standard is not None:
@@ -56,7 +64,11 @@ def get_subjects(
 
 
 @router.post("/subjects", response_model=SubjectOut, status_code=201)
-def create_subject(data: SubjectCreate, db: Session = Depends(get_db)):
+def create_subject(
+    data: SubjectCreate,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
     try:
         return marks_service.create_subject(db, data)
     except ValueError as exc:
@@ -68,6 +80,7 @@ def update_subject(
     subject_id: int,
     data: SubjectUpdate,
     db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
 ):
     """
     Partial update — only send the fields you want to change.
@@ -83,7 +96,11 @@ def update_subject(
 
 
 @router.delete("/subjects/{subject_id}")
-def delete_subject(subject_id: int, db: Session = Depends(get_db)):
+def delete_subject(
+    subject_id: int,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
     """
     Soft-deletes if mark history exists; hard-deletes otherwise.
     Returns {"deleted": true, "soft": true/false}.
@@ -95,13 +112,21 @@ def delete_subject(subject_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/subjects/seed/{class_id}")
-def seed_subjects_by_path(class_id: int, db: Session = Depends(get_db)):
+def seed_subjects_by_path(
+    class_id: int,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
     count = marks_service.seed_subjects(db, class_id)
     return {"message": f"Seeded {count} subjects"}
 
 
 @router.post("/subjects/seed")
-def seed_subjects_by_body(data: SeedRequest, db: Session = Depends(get_db)):
+def seed_subjects_by_body(
+    data: SeedRequest,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
     target_id = data.class_id or data.standard
     if not target_id:
         raise HTTPException(status_code=422, detail="Provide class_id or standard")
@@ -118,17 +143,28 @@ def get_exams(
     class_id:         Optional[int] = Query(None),
     academic_year_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_role("admin", "teacher")),
 ):
+    if class_id:
+        ensure_class_access(current_user, class_id)
     return marks_service.get_exams(db, class_id, academic_year_id)
 
 
 @router.post("/exams", response_model=ExamOut, status_code=201)
-def create_exam(data: ExamCreate, db: Session = Depends(get_db)):
+def create_exam(
+    data: ExamCreate,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
     return marks_service.create_exam(db, data)
 
 
 @router.delete("/exams/{exam_id}")
-def delete_exam(exam_id: int, db: Session = Depends(get_db)):
+def delete_exam(
+    exam_id: int,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
     marks_service.delete_exam(db, exam_id)
     return {"message": "Deleted"}
 
@@ -142,7 +178,15 @@ def delete_exam(exam_id: int, db: Session = Depends(get_db)):
     response_model=list[ExamSubjectConfigOut],
     summary="Get per-exam max-marks overrides",
 )
-def get_exam_configs(exam_id: int, db: Session = Depends(get_db)):
+def get_exam_configs(
+    exam_id: int,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_role("admin", "teacher")),
+):
+    exam = db.query(Exam).filter_by(id=exam_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    ensure_class_access(current_user, exam.class_id)
     """
     Returns all ExamSubjectConfig rows for this exam.
     Subjects NOT in this list use their subject-level defaults.
@@ -159,6 +203,7 @@ def set_exam_configs(
     exam_id: int,
     data: ExamSubjectConfigBulk,
     db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
 ):
     """
     Replaces ALL override rows for this exam with the provided list.
@@ -184,7 +229,11 @@ def set_exam_configs(
     "/exams/{exam_id}/configs",
     summary="Clear all per-exam max-marks overrides (revert to subject defaults)",
 )
-def clear_exam_configs(exam_id: int, db: Session = Depends(get_db)):
+def clear_exam_configs(
+    exam_id: int,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
     try:
         marks_service.upsert_exam_subject_configs(db, exam_id, [])
     except LookupError as exc:
@@ -201,7 +250,9 @@ def get_marks(
     exam_id:  int = Query(...),
     class_id: int = Query(...),
     db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_role("admin", "teacher")),
 ):
+    ensure_class_access(current_user, class_id)
     """
     Returns {students: [...], subjects: [...]}.
     Each subject now includes:
@@ -213,7 +264,20 @@ def get_marks(
 
 
 @router.post("/bulk")
-def bulk_save_marks(entries: list[MarkEntry], db: Session = Depends(get_db)):
+def bulk_save_marks(
+    entries: list[MarkEntry],
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_role("admin", "teacher")),
+):
+    if current_user.role == "teacher":
+        student_ids = {entry.student_id for entry in entries}
+        students = db.query(Student).filter(Student.id.in_(student_ids)).all()
+        found_ids = {student.id for student in students}
+        missing_ids = student_ids - found_ids
+        if missing_ids:
+            raise HTTPException(status_code=404, detail=f"Students not found: {sorted(missing_ids)}")
+        for student in students:
+            ensure_class_access(current_user, student.class_id)
     try:
         return marks_service.bulk_save_marks(db, entries)
     except ValueError as exc:
@@ -230,11 +294,15 @@ def get_results(
     class_id:   Optional[int]  = Query(None),
     student_id: Optional[int]  = Query(None),
     db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_role("admin", "teacher", "student", "parent")),
 ):
     if class_id:
+        if current_user.role not in ("admin", "teacher"):
+            raise HTTPException(status_code=403, detail="Use student_id to view scoped results")
+        ensure_class_access(current_user, class_id)
         return marks_service.get_class_results(db, exam_id, class_id)
     if student_id:
-        from app.models.base_models import Student
+        ensure_student_access(db, current_user, student_id)
         student = db.query(Student).filter_by(id=student_id).first()
         if not student:
             raise HTTPException(status_code=404, detail="Student not found")

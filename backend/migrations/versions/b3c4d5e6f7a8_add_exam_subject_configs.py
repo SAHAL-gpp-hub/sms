@@ -28,6 +28,8 @@ def _table_exists(table: str) -> bool:
 def _column_exists(table: str, column: str) -> bool:
     conn = op.get_bind()
     inspector = inspect(conn)
+    if table not in inspector.get_table_names():
+        return False
     cols = [c["name"] for c in inspector.get_columns(table)]
     return column in cols
 
@@ -38,7 +40,11 @@ def upgrade() -> None:
     # If a row exists here, marks_service uses these values instead of the
     # subject-level defaults. This allows "Unit Test 1 = 25 marks" while
     # the subject still has max_theory = 100 for annual exams.
-    if not _table_exists("exam_subject_configs"):
+    if (
+        _table_exists("exams")
+        and _table_exists("subjects")
+        and not _table_exists("exam_subject_configs")
+    ):
         op.create_table(
             "exam_subject_configs",
             sa.Column("id", sa.Integer(), nullable=False),
@@ -58,7 +64,7 @@ def upgrade() -> None:
         )
 
     # ── subjects: add is_active if missing ──────────────────────────────
-    if not _column_exists("subjects", "is_active"):
+    if _table_exists("subjects") and not _column_exists("subjects", "is_active"):
         op.add_column(
             "subjects",
             sa.Column("is_active", sa.Boolean(), nullable=False, server_default="true"),

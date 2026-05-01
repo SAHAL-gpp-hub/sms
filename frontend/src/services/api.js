@@ -132,6 +132,21 @@ export const yearendAPI = {
         `/api/v1/yearend/tc-pdf/${studentId}?reason=${encodeURIComponent(reason)}&conduct=${encodeURIComponent(conduct)}`,
 }
 
+export const adminAPI = {
+    listUsers: (params) => api.get('/admin/users', { params }),
+    createUser: (data) => api.post('/admin/users', data),
+    updateUser: (id, data) => api.put(`/admin/users/${id}`, data),
+    resetPassword: (id, newPassword) =>
+        api.post(`/admin/users/${id}/reset-password`, { new_password: newPassword }),
+    deleteUser: (id) => api.delete(`/admin/users/${id}`),
+    listTeacherAssignments: (id) => api.get(`/admin/teachers/${id}/assignments`),
+    assignTeacherClass: (id, data) => api.post(`/admin/teachers/${id}/assign-class`, data),
+    removeTeacherClass: (id, classId, params) =>
+        api.delete(`/admin/teachers/${id}/assign-class/${classId}`, { params }),
+    linkStudent: (data) => api.post('/admin/portal/link-student', data),
+    listPortalAccounts: () => api.get('/admin/portal/accounts'),
+}
+
 export const classAPI = {
     create: (data) => api.post('/setup/classes', data),
     delete: (id) => api.delete(`/setup/classes/${id}`),

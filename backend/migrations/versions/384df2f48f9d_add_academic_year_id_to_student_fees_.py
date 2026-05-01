@@ -32,6 +32,8 @@ def _column_exists(table: str, column: str) -> bool:
     """Return True if the column already exists in the table."""
     conn = op.get_bind()
     inspector = inspect(conn)
+    if table not in inspector.get_table_names():
+        return False
     cols = [c["name"] for c in inspector.get_columns(table)]
     return column in cols
 
@@ -39,14 +41,17 @@ def _column_exists(table: str, column: str) -> bool:
 def upgrade() -> None:
     # ── students: rename aadhar → aadhar_last4 ────────────────────────────
     # Step 1: add the new column if it doesn't exist
-    if not _column_exists("students", "aadhar_last4"):
+    inspector = inspect(op.get_bind())
+    tables = inspector.get_table_names()
+
+    if "students" in tables and not _column_exists("students", "aadhar_last4"):
         op.add_column(
             "students",
             sa.Column("aadhar_last4", sa.String(length=4), nullable=True),
         )
 
     # Step 2: migrate data — copy last 4 chars of any existing aadhar value
-    if _column_exists("students", "aadhar"):
+    if "students" in tables and _column_exists("students", "aadhar"):
         op.execute(
             """
             UPDATE students
@@ -62,7 +67,7 @@ def upgrade() -> None:
     # This is the critical missing column — fee_service.py writes and filters
     # by this column; without it every /fees/assign call crashed with
     # AttributeError: type object 'StudentFee' has no attribute 'academic_year_id'
-    if not _column_exists("student_fees", "academic_year_id"):
+    if "student_fees" in tables and not _column_exists("student_fees", "academic_year_id"):
         op.add_column(
             "student_fees",
             sa.Column("academic_year_id", sa.Integer(), nullable=True),
