@@ -1,4 +1,4 @@
-// components/UI.jsx — Shared reusable UI primitives
+// components/UI.jsx — Fully responsive shared UI primitives
 import { useState } from 'react'
 
 // ── Skeleton Loader ───────────────────────────────────────────────────────
@@ -44,9 +44,7 @@ export function CardSkeleton({ lines = 3 }) {
 export function EmptyState({ icon, title, description, action }) {
   return (
     <div className="empty-state">
-      <div className="empty-state-icon">
-        {icon}
-      </div>
+      <div className="empty-state-icon">{icon}</div>
       <div className="empty-state-title">{title}</div>
       {description && <div className="empty-state-desc">{description}</div>}
       {action && <div style={{ marginTop: '12px' }}>{action}</div>}
@@ -59,13 +57,18 @@ export function ConfirmModal({ open, title, message, confirmLabel = 'Confirm', c
   if (!open) return null
   return (
     <div style={{
-      position: 'fixed', inset: 0, zIndex: 200,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: '16px',
+      position: 'fixed',
+      inset: 0,
+      zIndex: 200,
+      display: 'flex',
+      alignItems: 'flex-end',
+      justifyContent: 'center',
+      padding: '0',
     }}>
       <div
         style={{
-          position: 'absolute', inset: 0,
+          position: 'absolute',
+          inset: 0,
           background: 'rgba(15,23,42,0.55)',
           backdropFilter: 'blur(4px)',
         }}
@@ -74,13 +77,14 @@ export function ConfirmModal({ open, title, message, confirmLabel = 'Confirm', c
       <div style={{
         position: 'relative',
         background: 'var(--surface-0)',
-        borderRadius: '16px',
-        padding: '28px',
-        maxWidth: '420px',
+        borderRadius: '16px 16px 0 0',
+        padding: '24px 20px 28px',
         width: '100%',
+        maxWidth: '480px',
         boxShadow: 'var(--shadow-xl)',
         border: '1px solid var(--border-default)',
-      }}>
+        borderBottom: 'none',
+      }} className="confirm-modal-inner">
         <h3 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '8px' }}>
           {title}
         </h3>
@@ -100,6 +104,18 @@ export function ConfirmModal({ open, title, message, confirmLabel = 'Confirm', c
           </button>
         </div>
       </div>
+      <style>{`
+        @media (min-width: 640px) {
+          .confirm-modal-inner {
+            border-radius: 16px !important;
+            border-bottom: 1px solid var(--border-default) !important;
+          }
+          [style*="align-items: flex-end"] {
+            align-items: center !important;
+            padding: 16px !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }
@@ -107,14 +123,25 @@ export function ConfirmModal({ open, title, message, confirmLabel = 'Confirm', c
 // ── Page Header ───────────────────────────────────────────────────────────
 export function PageHeader({ title, subtitle, actions, back }) {
   return (
-    <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+    <div className="page-header" style={{
+      display: 'flex',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: '12px',
+      flexWrap: 'wrap',
+      marginBottom: '20px',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
         {back && (
           <button
             onClick={back}
             style={{
-              width: '34px', height: '34px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: '36px',
+              height: '36px',
+              minWidth: '36px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               background: 'var(--surface-0)',
               border: '1px solid var(--border-default)',
               borderRadius: '8px',
@@ -122,21 +149,24 @@ export function PageHeader({ title, subtitle, actions, back }) {
               color: 'var(--text-secondary)',
               transition: 'all 0.15s',
               flexShrink: 0,
+              touchAction: 'manipulation',
             }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-100)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'var(--surface-0)'}
           >
             <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         )}
-        <div>
-          <h1 className="page-title">{title}</h1>
+        <div style={{ minWidth: 0 }}>
+          <h1 className="page-title" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</h1>
           {subtitle && <p className="page-subtitle">{subtitle}</p>}
         </div>
       </div>
-      {actions && <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>{actions}</div>}
+      {actions && (
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
+          {actions}
+        </div>
+      )}
     </div>
   )
 }
@@ -162,7 +192,7 @@ export function Select({ label, value, onChange, options, placeholder, required,
   )
 }
 
-// ── Input Field ───────────────────────────────────────────────────────────
+// ── Field ────────────────────────────────────────────────────────────────
 export function Field({ label, required, error, hint, children }) {
   return (
     <div>
@@ -205,7 +235,7 @@ export function StatusBadge({ status }) {
   )
 }
 
-// ── Loading Spinner (full page) ───────────────────────────────────────────
+// ── Loading Page ───────────────────────────────────────────────────────────
 export function LoadingPage() {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '300px', gap: '12px', color: 'var(--text-tertiary)', fontSize: '14px' }}>
@@ -219,20 +249,25 @@ export function LoadingPage() {
 export function StatCard({ label, value, sub, color = 'var(--brand-600)', icon, loading }) {
   return (
     <div className="stat-card">
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="stat-label">{label}</div>
-          <div className="stat-value" style={{ color }}>
-            {loading ? <Skeleton height="32px" width="100px" /> : value}
+          <div className="stat-value" style={{ color, wordBreak: 'break-word' }}>
+            {loading ? <Skeleton height="28px" width="90px" /> : value}
           </div>
-          {sub && <div className="stat-sub">{loading ? <Skeleton height="12px" width="80px" style={{ marginTop: '4px' }} /> : sub}</div>}
+          {sub && <div className="stat-sub">{loading ? <Skeleton height="12px" width="70px" style={{ marginTop: '4px' }} /> : sub}</div>}
         </div>
         {icon && (
           <div style={{
-            width: '40px', height: '40px', borderRadius: '10px',
+            width: '38px',
+            height: '38px',
+            borderRadius: '10px',
             background: color + '18',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color, flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color,
+            flexShrink: 0,
           }}>
             {icon}
           </div>
@@ -245,47 +280,57 @@ export function StatCard({ label, value, sub, color = 'var(--brand-600)', icon, 
 // ── Tab Bar ───────────────────────────────────────────────────────────────
 export function TabBar({ tabs, active, onChange }) {
   return (
-    <div style={{
-      display: 'flex',
-      gap: '2px',
-      background: 'var(--gray-100)',
-      padding: '3px',
-      borderRadius: '10px',
-      width: 'fit-content',
-    }}>
-      {tabs.map(tab => (
-        <button
-          key={tab.value}
-          onClick={() => onChange(tab.value)}
-          style={{
-            padding: '6px 14px',
-            borderRadius: '7px',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '13px',
-            fontWeight: active === tab.value ? 700 : 500,
-            color: active === tab.value ? 'var(--text-primary)' : 'var(--text-secondary)',
-            background: active === tab.value ? 'var(--surface-0)' : 'transparent',
-            boxShadow: active === tab.value ? 'var(--shadow-sm)' : 'none',
-            transition: 'all 0.15s',
-            fontFamily: 'var(--font-sans)',
-            display: 'flex', alignItems: 'center', gap: '6px',
-          }}
-        >
-          {tab.icon && <span>{tab.icon}</span>}
-          {tab.label}
-          {tab.count !== undefined && (
-            <span style={{
-              fontSize: '11px', fontWeight: 700,
-              background: active === tab.value ? 'var(--brand-100)' : 'var(--gray-200)',
-              color: active === tab.value ? 'var(--brand-700)' : 'var(--text-tertiary)',
-              padding: '1px 6px', borderRadius: '20px',
-            }}>
-              {tab.count}
-            </span>
-          )}
-        </button>
-      ))}
+    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxWidth: '100%' }}>
+      <div style={{
+        display: 'flex',
+        gap: '2px',
+        background: 'var(--gray-100)',
+        padding: '3px',
+        borderRadius: '10px',
+        width: 'fit-content',
+        minWidth: 'max-content',
+      }}>
+        {tabs.map(tab => (
+          <button
+            key={tab.value}
+            onClick={() => onChange(tab.value)}
+            style={{
+              padding: '7px 14px',
+              borderRadius: '7px',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: active === tab.value ? 700 : 500,
+              color: active === tab.value ? 'var(--text-primary)' : 'var(--text-secondary)',
+              background: active === tab.value ? 'var(--surface-0)' : 'transparent',
+              boxShadow: active === tab.value ? 'var(--shadow-sm)' : 'none',
+              transition: 'all 0.15s',
+              fontFamily: 'var(--font-sans)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              whiteSpace: 'nowrap',
+              touchAction: 'manipulation',
+              minHeight: '36px',
+            }}
+          >
+            {tab.icon && <span style={{ fontSize: '14px' }}>{tab.icon}</span>}
+            {tab.label}
+            {tab.count !== undefined && (
+              <span style={{
+                fontSize: '11px',
+                fontWeight: 700,
+                background: active === tab.value ? 'var(--brand-100)' : 'var(--gray-200)',
+                color: active === tab.value ? 'var(--brand-700)' : 'var(--text-tertiary)',
+                padding: '1px 6px',
+                borderRadius: '20px',
+              }}>
+                {tab.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -293,8 +338,8 @@ export function TabBar({ tabs, active, onChange }) {
 // ── Filter Row ────────────────────────────────────────────────────────────
 export function FilterRow({ children }) {
   return (
-    <div className="card" style={{ padding: '16px 20px', marginBottom: '16px' }}>
-      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+    <div className="card" style={{ padding: '14px 16px', marginBottom: '14px' }}>
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
         {children}
       </div>
     </div>
@@ -317,13 +362,13 @@ export function SearchInput({ value, onChange, placeholder = 'Search...', style 
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        style={{ paddingLeft: '34px', ...style.input }}
+        style={{ paddingLeft: '34px' }}
       />
     </div>
   )
 }
 
-// ── Inline Alert Banner ───────────────────────────────────────────────────
+// ── Inline Banner ─────────────────────────────────────────────────────────
 export function InlineBanner({ type = 'info', title, message, onDismiss }) {
   const styles = {
     info:    { bg: 'var(--brand-50)',   border: 'var(--brand-200)',  color: 'var(--brand-700)',   icon: 'ℹ️' },
@@ -334,18 +379,22 @@ export function InlineBanner({ type = 'info', title, message, onDismiss }) {
   const s = styles[type]
   return (
     <div style={{
-      background: s.bg, border: `1px solid ${s.border}`,
-      borderRadius: '10px', padding: '12px 16px',
-      display: 'flex', alignItems: 'flex-start', gap: '10px',
-      marginBottom: '16px',
+      background: s.bg,
+      border: `1px solid ${s.border}`,
+      borderRadius: '10px',
+      padding: '12px 14px',
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: '10px',
+      marginBottom: '14px',
     }}>
       <span style={{ fontSize: '14px', flexShrink: 0, lineHeight: 1.4 }}>{s.icon}</span>
-      <div style={{ flex: 1 }}>
-        {title && <div style={{ fontSize: '13.5px', fontWeight: 700, color: s.color, marginBottom: '2px' }}>{title}</div>}
-        <div style={{ fontSize: '13px', color: s.color, lineHeight: 1.5 }}>{message}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {title && <div style={{ fontSize: '13px', fontWeight: 700, color: s.color, marginBottom: '2px' }}>{title}</div>}
+        <div style={{ fontSize: '12.5px', color: s.color, lineHeight: 1.5 }}>{message}</div>
       </div>
       {onDismiss && (
-        <button onClick={onDismiss} style={{ background: 'none', border: 'none', cursor: 'pointer', color: s.color, opacity: 0.6, padding: '0', lineHeight: 1, fontSize: '16px' }}>×</button>
+        <button onClick={onDismiss} style={{ background: 'none', border: 'none', cursor: 'pointer', color: s.color, opacity: 0.6, padding: '0', lineHeight: 1, fontSize: '18px', flexShrink: 0 }}>×</button>
       )}
     </div>
   )

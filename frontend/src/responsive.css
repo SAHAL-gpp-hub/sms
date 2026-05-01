@@ -1,0 +1,316 @@
+/* responsive.css — Mobile-first responsive design system additions */
+
+
+/* ── Responsive breakpoints used throughout ───────────────────────────────
+   xs:  < 480px   (small phones)
+   sm:  < 640px   (phones)
+   md:  < 768px   (tablets portrait)
+   lg:  < 1024px  (tablets landscape / small laptops)
+   xl:  ≥ 1024px  (desktops)
+──────────────────────────────────────────────────────────────────────────── */
+
+
+/* ── Touch-friendly base overrides ─────────────────────────────────────── */
+
+@media (max-width: 640px) {
+    .btn {
+        min-height: 44px;
+        padding: 10px 16px;
+    }
+    .btn-sm {
+        min-height: 36px;
+        padding: 7px 12px;
+        font-size: 12.5px;
+    }
+    .input,
+    select.input,
+    textarea.input {
+        min-height: 44px;
+        font-size: 16px;
+        /* prevents iOS zoom */
+    }
+    .label {
+        font-size: 11px;
+    }
+}
+
+
+/* ── Layout helpers ─────────────────────────────────────────────────────── */
+
+.responsive-grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
+@media (max-width: 640px) {
+    .responsive-grid-2 {
+        grid-template-columns: 1fr;
+    }
+}
+
+.responsive-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+@media (max-width: 768px) {
+    .responsive-grid-3 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 480px) {
+    .responsive-grid-3 {
+        grid-template-columns: 1fr;
+    }
+}
+
+.responsive-grid-4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+}
+
+@media (max-width: 1024px) {
+    .responsive-grid-4 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 480px) {
+    .responsive-grid-4 {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* ── Table responsiveness ─────────────────────────────────────────────── */
+
+.table-scroll-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+.table-scroll-wrapper::-webkit-scrollbar {
+    height: 4px;
+}
+
+
+/* Mobile card-style table rows */
+
+@media (max-width: 640px) {
+    .data-table-responsive thead {
+        display: none;
+    }
+    .data-table-responsive tbody tr {
+        display: flex;
+        flex-direction: column;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border-default);
+        gap: 6px;
+    }
+    .data-table-responsive tbody td {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        padding: 0;
+        border: none;
+        font-size: 13px;
+    }
+    .data-table-responsive tbody td::before {
+        content: attr(data-label);
+        font-size: 10.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-tertiary);
+        min-width: 90px;
+        flex-shrink: 0;
+    }
+}
+
+
+/* ── Card responsive padding ──────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+    .card-header {
+        padding: 13px 16px;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .card-header .card-title {
+        font-size: 13.5px;
+    }
+}
+
+
+/* ── Page header responsive ─────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+    .page-header {
+        margin-bottom: 16px;
+    }
+    .page-title {
+        font-size: 18px;
+    }
+    .page-subtitle {
+        font-size: 12.5px;
+    }
+}
+
+
+/* ── Filter row responsive ──────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+    .filter-row-inner {
+        flex-direction: column !important;
+    }
+    .filter-row-inner>* {
+        width: 100% !important;
+        min-width: unset !important;
+    }
+}
+
+
+/* ── Stat cards responsive ─────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+    .stat-card {
+        padding: 14px 16px;
+    }
+    .stat-value {
+        font-size: 22px;
+    }
+}
+
+
+/* ── Tab bar responsive ──────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+    .tab-bar-responsive {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .tab-bar-responsive>div {
+        min-width: max-content;
+    }
+}
+
+
+/* ── Page content padding ─────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+    main.page-content {
+        padding: 20px 16px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    main.page-content {
+        padding: 16px 12px !important;
+    }
+}
+
+
+/* ── Modal responsive ────────────────────────────────────────────────── */
+
+@media (max-width: 480px) {
+    .modal-inner {
+        padding: 20px 16px !important;
+        border-radius: 12px !important;
+    }
+}
+
+
+/* ── Attendance grid ─────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+    .attendance-status-toggle {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .attendance-status-toggle button {
+        min-width: 44px;
+        min-height: 36px;
+    }
+}
+
+
+/* ── Marks entry grid ────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+    .marks-input {
+        width: 48px !important;
+        font-size: 13px !important;
+    }
+}
+
+
+/* ── Quick actions wrap ─────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+    .quick-actions-grid {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 8px !important;
+    }
+    .quick-actions-grid a {
+        justify-content: center !important;
+        text-align: center !important;
+    }
+}
+
+
+/* ── Year-end step cards ─────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+    .step-card-content {
+        padding: 16px !important;
+    }
+    .step-card-header {
+        padding: 14px 16px !important;
+    }
+}
+
+
+/* ── Form grid responsive ────────────────────────────────────────────── */
+
+@media (max-width: 480px) {
+    .form-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+
+/* ── Sidebar overlay z-index fix ──────────────────────────────────────── */
+
+.sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgba(15, 23, 42, 0.5);
+    backdrop-filter: blur(2px);
+}
+
+
+/* ── Horizontal scroll hint shadow ──────────────────────────────────── */
+
+.scroll-shadow-right {
+    background: linear-gradient(to right, white 30%, transparent) center left, linear-gradient(to left, white 30%, transparent) center right, radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, 0.1), transparent) center left, radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.1), transparent) center right;
+    background-repeat: no-repeat;
+    background-size: 40px 100%, 40px 100%, 14px 100%, 14px 100%;
+    background-attachment: local, local, scroll, scroll;
+}
+
+
+/* ── Bottom safe area for mobile browsers ────────────────────────────── */
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+    .sidebar-footer {
+        padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    }
+}

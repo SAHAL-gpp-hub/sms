@@ -1,120 +1,91 @@
 <!DOCTYPE html>
 <html>
-
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fee Defaulter Report</title>
     <style>
-        @page {
-            size: A4;
-            margin: 15mm;
-        }
-        
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-        
-        body {
-            font-family: Arial, sans-serif;
-            font-size: 11px;
-            color: #1a1a1a;
-        }
-        
+        @page { size: A4; margin: 15mm; }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body { font-family: Arial, sans-serif; font-size: 11px; color: #1a1a1a; }
+
         .header {
-            text-align: center;
-            border-bottom: 2px solid #1a3a6b;
-            padding-bottom: 10px;
-            margin-bottom: 16px;
+            text-align: center; border-bottom: 2px solid #1a3a6b;
+            padding-bottom: 10px; margin-bottom: 16px;
         }
-        
-        .school-name {
-            font-size: 20px;
-            font-weight: bold;
-            color: #1a3a6b;
-        }
-        
+        .school-name { font-size: 20px; font-weight: bold; color: #1a3a6b; }
         .report-title {
-            font-size: 14px;
-            font-weight: bold;
-            color: #c0392b;
-            margin-top: 6px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
+            font-size: 14px; font-weight: bold; color: #c0392b;
+            margin-top: 6px; text-transform: uppercase; letter-spacing: 2px;
         }
-        
-        .meta {
-            font-size: 10px;
-            color: #666;
-            margin-top: 4px;
-        }
-        
+        .meta { font-size: 10px; color: #666; margin-top: 4px; }
+
         .summary-box {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 10px;
             margin-bottom: 16px;
         }
-        
         .sum-card {
-            border: 1px solid #e0e0e0;
-            border-radius: 4px;
-            padding: 10px;
-            text-align: center;
+            border: 1px solid #e0e0e0; border-radius: 4px;
+            padding: 10px; text-align: center;
         }
-        
-        .sum-value {
-            font-size: 20px;
-            font-weight: bold;
-            color: #c0392b;
-        }
-        
-        .sum-label {
-            font-size: 9px;
-            color: #666;
-            text-transform: uppercase;
-            margin-top: 2px;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        
-        th {
-            background: #1a3a6b;
-            color: white;
-            padding: 7px 8px;
-            text-align: left;
-            font-size: 10px;
-        }
-        
-        td {
-            padding: 6px 8px;
-            border-bottom: 1px solid #f0f0f0;
-            font-size: 10px;
-        }
-        
-        tr:nth-child(even) {
-            background: #f9f9f9;
-        }
-        
-        .balance {
-            color: #c0392b;
-            font-weight: bold;
-        }
-        
+        .sum-value { font-size: 20px; font-weight: bold; color: #c0392b; word-break: break-word; }
+        .sum-label { font-size: 9px; color: #666; text-transform: uppercase; margin-top: 2px; }
+
+        .table-wrap { width: 100%; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #1a3a6b; color: white; padding: 7px 8px; text-align: left; font-size: 10px; }
+        td { padding: 6px 8px; border-bottom: 1px solid #f0f0f0; font-size: 10px; }
+        tr:nth-child(even) { background: #f9f9f9; }
+
+        .balance { color: #c0392b; font-weight: bold; }
+
         .footer {
-            margin-top: 20px;
-            text-align: center;
-            font-size: 9px;
-            color: #999;
-            border-top: 1px solid #eee;
-            padding-top: 8px;
+            margin-top: 20px; text-align: center;
+            font-size: 9px; color: #999;
+            border-top: 1px solid #eee; padding-top: 8px;
+        }
+
+        /* ===== SCREEN-ONLY RESPONSIVE LAYER ===== */
+        @media screen {
+            body {
+                max-width: 1100px;
+                margin: 0 auto;
+                padding: 16px;
+                background: #f4f6fa;
+            }
+            .header, .summary-box, .table-wrap, .footer {
+                background: #fff;
+                padding: 16px;
+                border-radius: 8px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+                margin-bottom: 14px;
+            }
+            .summary-box { padding: 10px; background: transparent; box-shadow: none; }
+            .sum-card { background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+            .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            table { min-width: 720px; }
+        }
+
+        @media screen and (max-width: 720px) {
+            .summary-box { grid-template-columns: 1fr 1fr; }
+            .sum-value { font-size: 17px; }
+            .school-name { font-size: 17px; }
+            .report-title { font-size: 12px; letter-spacing: 1px; }
+        }
+
+        @media screen and (max-width: 460px) {
+            .summary-box { grid-template-columns: 1fr; gap: 8px; }
+            body { padding: 8px; }
+            .header, .footer { padding: 12px; }
+            .school-name { font-size: 15px; }
+            .sum-value { font-size: 18px; }
         }
     </style>
 </head>
-
 <body>
     <div class="header">
         <div class="school-name">IQRA ENGLISH MEDIUM SCHOOL</div>
@@ -137,36 +108,37 @@
         </div>
     </div>
 
-    <table>
-        <thead>
-            <tr>
-                <th>#</th>
-                <th>Student Name</th>
-                <th>Class</th>
-                <th>Contact</th>
-                <th>Total Due</th>
-                <th>Paid</th>
-                <th>Balance</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for d in defaulters %}
-            <tr>
-                <td>{{ loop.index }}</td>
-                <td>{{ d.student_name }}</td>
-                <td>{{ d.class_name }}</td>
-                <td>{{ d.contact }}</td>
-                <td>₹{{ "{:,.0f}".format(d.total_due) }}</td>
-                <td>₹{{ "{:,.0f}".format(d.total_paid) }}</td>
-                <td class="balance">₹{{ "{:,.0f}".format(d.balance) }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Student Name</th>
+                    <th>Class</th>
+                    <th>Contact</th>
+                    <th>Total Due</th>
+                    <th>Paid</th>
+                    <th>Balance</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in defaulters %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>{{ d.student_name }}</td>
+                    <td>{{ d.class_name }}</td>
+                    <td>{{ d.contact }}</td>
+                    <td>₹{{ "{:,.0f}".format(d.total_due) }}</td>
+                    <td>₹{{ "{:,.0f}".format(d.total_paid) }}</td>
+                    <td class="balance">₹{{ "{:,.0f}".format(d.balance) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 
     <div class="footer">
         Iqra English Medium School · This is a computer-generated report · {{ generated_date }}
     </div>
 </body>
-
 </html>

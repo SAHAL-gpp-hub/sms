@@ -1,9 +1,138 @@
-// StudentList.jsx — Redesigned with skeletons, confirm modal, better table
+// StudentList.jsx — Fully responsive with mobile card view
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { studentAPI, setupAPI, extractError } from '../../services/api'
 import { PageHeader, SearchInput, Select, TableSkeleton, EmptyState, ConfirmModal, StatusBadge, FilterRow } from '../../components/UI'
+
+function StudentCard({ student, cls, onDelete }) {
+  return (
+    <div style={{
+      background: 'var(--surface-0)',
+      border: '1px solid var(--border-default)',
+      borderRadius: '12px',
+      padding: '14px 16px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '10px',
+    }}>
+      {/* Top row */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {student.name_en}
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '1px' }}>
+            {student.name_gu}
+          </div>
+        </div>
+        <StatusBadge status={student.status} />
+      </div>
+
+      {/* Meta info */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+        <div>
+          <div style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-tertiary)', marginBottom: '2px' }}>ID</div>
+          <div className="mono" style={{ fontSize: '12px', color: 'var(--brand-600)', fontWeight: 600 }}>{student.student_id}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-tertiary)', marginBottom: '2px' }}>Class</div>
+          <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+            {cls ? `${cls.name} — ${cls.division}` : `#${student.class_id}`}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-tertiary)', marginBottom: '2px' }}>Father</div>
+          <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{student.father_name}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-tertiary)', marginBottom: '2px' }}>Contact</div>
+          <div className="mono" style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>{student.contact}</div>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingTop: '4px', borderTop: '1px solid var(--border-subtle)' }}>
+        <Link
+          to={`/students/${student.id}/edit`}
+          style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '8px',
+            borderRadius: '8px',
+            fontSize: '12.5px',
+            fontWeight: 600,
+            color: 'var(--brand-600)',
+            background: 'var(--brand-50)',
+            border: '1px solid var(--brand-100)',
+            textDecoration: 'none',
+            touchAction: 'manipulation',
+          }}
+        >
+          Edit
+        </Link>
+        <Link
+          to={`/fees/student/${student.id}`}
+          style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '8px',
+            borderRadius: '8px',
+            fontSize: '12.5px',
+            fontWeight: 600,
+            color: 'var(--success-700)',
+            background: 'var(--success-50)',
+            border: '1px solid var(--success-100)',
+            textDecoration: 'none',
+            touchAction: 'manipulation',
+          }}
+        >
+          Fees
+        </Link>
+        <button
+          onClick={() => window.open(`/api/v1/yearend/tc-pdf/${student.id}`, '_blank')}
+          style={{
+            flex: 1,
+            padding: '8px',
+            borderRadius: '8px',
+            fontSize: '12.5px',
+            fontWeight: 600,
+            color: 'var(--text-secondary)',
+            background: 'var(--gray-100)',
+            border: '1px solid var(--border-default)',
+            cursor: 'pointer',
+            fontFamily: 'var(--font-sans)',
+            touchAction: 'manipulation',
+          }}
+        >
+          TC
+        </button>
+        <button
+          onClick={() => onDelete({ id: student.id, name: student.name_en })}
+          style={{
+            flex: 1,
+            padding: '8px',
+            borderRadius: '8px',
+            fontSize: '12.5px',
+            fontWeight: 600,
+            color: 'var(--danger-600)',
+            background: 'var(--danger-50)',
+            border: '1px solid var(--danger-100)',
+            cursor: 'pointer',
+            fontFamily: 'var(--font-sans)',
+            touchAction: 'manipulation',
+          }}
+        >
+          Remove
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export default function StudentList() {
   const [students, setStudents] = useState([])
@@ -12,8 +141,15 @@ export default function StudentList() {
   const [classFilter, setClassFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [seeding, setSeeding] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState(null) // { id, name }
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 640)
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 640)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const fetchStudents = useCallback(async () => {
     setLoading(true)
@@ -23,7 +159,7 @@ export default function StudentList() {
       if (classFilter) params.class_id = classFilter
       const res = await studentAPI.list(params)
       setStudents(res.data)
-    } catch (err) {
+    } catch {
       toast.error('Failed to load students')
     } finally {
       setLoading(false)
@@ -41,7 +177,7 @@ export default function StudentList() {
     try {
       await setupAPI.seed()
       await setupAPI.getClasses().then(r => setClasses(r.data))
-      toast.success('Classes and academic year created successfully!')
+      toast.success('Classes and academic year created!')
     } catch (err) {
       toast.error(extractError(err))
     } finally {
@@ -70,19 +206,19 @@ export default function StudentList() {
     <div>
       <PageHeader
         title="Students"
-        subtitle={loading ? 'Loading...' : `${students.length} active students${classFilter ? ' in selected class' : ''}`}
+        subtitle={loading ? 'Loading...' : `${students.length} active student${students.length !== 1 ? 's' : ''}${classFilter ? ' in selected class' : ''}`}
         actions={
           <>
             {classes.length === 0 && (
-              <button className="btn btn-secondary" onClick={handleSeed} disabled={seeding}>
-                {seeding ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Setting up...</> : '⚙ Setup Classes'}
+              <button className="btn btn-secondary btn-sm" onClick={handleSeed} disabled={seeding}>
+                {seeding ? <><span className="spinner" style={{ width: '12px', height: '12px' }} /> Setup...</> : '⚙ Setup'}
               </button>
             )}
             <Link to="/students/new" className="btn btn-primary" style={{ textDecoration: 'none' }}>
               <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
               </svg>
-              Add Student
+              <span className="btn-add-label">Add Student</span>
             </Link>
           </>
         }
@@ -92,191 +228,173 @@ export default function StudentList() {
         <SearchInput
           value={search}
           onChange={setSearch}
-          placeholder="Search by name, GR no, contact, ID…"
-          style={{ flex: 1, minWidth: '220px' }}
+          placeholder="Search by name, GR, contact…"
+          style={{ flex: 1, minWidth: '180px' }}
         />
         <Select
           value={classFilter}
           onChange={e => setClassFilter(e.target.value)}
           options={classOptions}
           placeholder="All Classes"
-          style={{ minWidth: '180px' }}
+          style={{ minWidth: '160px', flex: '0 0 auto' }}
         />
         {(search || classFilter) && (
           <button
             className="btn btn-ghost btn-sm"
             onClick={() => { setSearch(''); setClassFilter('') }}
+            style={{ whiteSpace: 'nowrap' }}
           >
-            Clear filters
+            Clear
           </button>
         )}
       </FilterRow>
 
-      <div className="card">
-        <div style={{ overflowX: 'auto' }}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Student ID</th>
-                <th>Name</th>
-                <th>Class</th>
-                <th>Father</th>
-                <th>Contact</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            {loading ? (
-              <TableSkeleton rows={8} cols={7} />
-            ) : students.length === 0 ? (
-              <tbody>
-                <tr>
-                  <td colSpan={7} style={{ padding: 0, border: 'none' }}>
-                    <EmptyState
-                      icon={
-                        <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                            d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                      }
-                      title={search || classFilter ? 'No students match your filters' : 'No students yet'}
-                      description={search || classFilter ? 'Try clearing your search or filters' : 'Add your first student to get started'}
-                      action={
-                        search || classFilter
-                          ? <button className="btn btn-secondary btn-sm" onClick={() => { setSearch(''); setClassFilter('') }}>Clear filters</button>
-                          : <Link to="/students/new" className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>Add First Student</Link>
-                      }
-                    />
-                  </td>
-                </tr>
-              </tbody>
-            ) : (
-              <tbody>
-                {students.map(s => {
-                  const cls = classes.find(c => c.id === s.class_id)
-                  return (
-                    <tr key={s.id}>
-                      <td>
-                        <span className="mono" style={{ color: 'var(--brand-600)', fontWeight: 600 }}>
-                          {s.student_id}
-                        </span>
-                      </td>
-                      <td>
-                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '13.5px' }}>
-                          {s.name_en}
-                        </div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '1px' }}>
-                          {s.name_gu}
-                        </div>
-                      </td>
-                      <td>
-                        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                          {cls ? `${cls.name} — ${cls.division}` : `Class ${s.class_id}`}
-                        </span>
-                      </td>
-                      <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
-                        {s.father_name}
-                      </td>
-                      <td>
-                        <span className="mono" style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>
-                          {s.contact}
-                        </span>
-                      </td>
-                      <td>
-                        <StatusBadge status={s.status} />
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Link
-                            to={`/students/${s.id}/edit`}
-                            style={{
-                              display: 'inline-flex', alignItems: 'center', gap: '4px',
-                              padding: '4px 10px', borderRadius: '6px',
-                              fontSize: '12px', fontWeight: 600, color: 'var(--brand-600)',
-                              background: 'var(--brand-50)', border: '1px solid var(--brand-100)',
-                              textDecoration: 'none', transition: 'all 0.12s',
-                            }}
-                          >
-                            Edit
-                          </Link>
-                          <Link
-                            to={`/fees/student/${s.id}`}
-                            style={{
-                              display: 'inline-flex', alignItems: 'center', gap: '4px',
-                              padding: '4px 10px', borderRadius: '6px',
-                              fontSize: '12px', fontWeight: 600, color: 'var(--success-700)',
-                              background: 'var(--success-50)', border: '1px solid var(--success-100)',
-                              textDecoration: 'none', transition: 'all 0.12s',
-                            }}
-                          >
-                            Fees
-                          </Link>
-                          <button
-                            onClick={() => window.open(`/api/v1/yearend/tc-pdf/${s.id}`, '_blank')}
-                            style={{
-                              padding: '4px 10px', borderRadius: '6px',
-                              fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)',
-                              background: 'var(--gray-100)', border: '1px solid var(--border-default)',
-                              cursor: 'pointer', transition: 'all 0.12s',
-                              fontFamily: 'var(--font-sans)',
-                            }}
-                          >
-                            TC
-                          </button>
-                          <button
-                            onClick={() => setDeleteTarget({ id: s.id, name: s.name_en })}
-                            style={{
-                              padding: '4px 10px', borderRadius: '6px',
-                              fontSize: '12px', fontWeight: 600, color: 'var(--danger-600)',
-                              background: 'var(--danger-50)', border: '1px solid var(--danger-100)',
-                              cursor: 'pointer', transition: 'all 0.12s',
-                              fontFamily: 'var(--font-sans)',
-                            }}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            )}
-          </table>
+      {/* Mobile: card layout */}
+      {isMobile ? (
+        <div>
+          {loading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {[1, 2, 3].map(i => (
+                <div key={i} className="card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <span className="skeleton" style={{ display: 'inline-block', width: '140px', height: '16px', borderRadius: '6px' }} />
+                      <span className="skeleton" style={{ display: 'inline-block', width: '100px', height: '12px', borderRadius: '6px' }} />
+                    </div>
+                    <span className="skeleton" style={{ display: 'inline-block', width: '60px', height: '22px', borderRadius: '20px' }} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    {[1, 2, 3, 4].map(j => <span key={j} className="skeleton" style={{ display: 'block', height: '32px', borderRadius: '6px' }} />)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : students.length === 0 ? (
+            <div className="card">
+              <EmptyState
+                icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>}
+                title={search || classFilter ? 'No students match' : 'No students yet'}
+                description={search || classFilter ? 'Try clearing filters' : 'Add your first student'}
+                action={
+                  search || classFilter
+                    ? <button className="btn btn-secondary btn-sm" onClick={() => { setSearch(''); setClassFilter('') }}>Clear filters</button>
+                    : <Link to="/students/new" className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>Add First Student</Link>
+                }
+              />
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {students.map(s => (
+                <StudentCard
+                  key={s.id}
+                  student={s}
+                  cls={classes.find(c => c.id === s.class_id)}
+                  onDelete={setDeleteTarget}
+                />
+              ))}
+              {students.length > 0 && (
+                <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center', padding: '8px 0' }}>
+                  Showing {students.length} student{students.length !== 1 ? 's' : ''}
+                  {students.length >= 50 && ' — refine search to see more'}
+                </div>
+              )}
+            </div>
+          )}
         </div>
-
-        {/* Row count footer */}
-        {!loading && students.length > 0 && (
-          <div style={{
-            padding: '10px 16px',
-            borderTop: '1px solid var(--border-subtle)',
-            fontSize: '12px',
-            color: 'var(--text-tertiary)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}>
-            <span>Showing {students.length} student{students.length !== 1 ? 's' : ''}</span>
-            {students.length >= 50 && (
-              <span style={{ color: 'var(--warning-600)', fontWeight: 600 }}>
-                Showing first 50 results — refine your search to see more
-              </span>
-            )}
+      ) : (
+        /* Desktop: table layout */
+        <div className="card">
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Student ID</th>
+                  <th>Name</th>
+                  <th>Class</th>
+                  <th>Father</th>
+                  <th>Contact</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              {loading ? (
+                <TableSkeleton rows={8} cols={7} />
+              ) : students.length === 0 ? (
+                <tbody>
+                  <tr>
+                    <td colSpan={7} style={{ padding: 0, border: 'none' }}>
+                      <EmptyState
+                        icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>}
+                        title={search || classFilter ? 'No students match your filters' : 'No students yet'}
+                        description={search || classFilter ? 'Try clearing your search or filters' : 'Add your first student to get started'}
+                        action={
+                          search || classFilter
+                            ? <button className="btn btn-secondary btn-sm" onClick={() => { setSearch(''); setClassFilter('') }}>Clear filters</button>
+                            : <Link to="/students/new" className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>Add First Student</Link>
+                        }
+                      />
+                    </td>
+                  </tr>
+                </tbody>
+              ) : (
+                <tbody>
+                  {students.map(s => {
+                    const cls = classes.find(c => c.id === s.class_id)
+                    return (
+                      <tr key={s.id}>
+                        <td>
+                          <span className="mono" style={{ color: 'var(--brand-600)', fontWeight: 600 }}>{s.student_id}</span>
+                        </td>
+                        <td>
+                          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '13.5px' }}>{s.name_en}</div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '1px' }}>{s.name_gu}</div>
+                        </td>
+                        <td style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          {cls ? `${cls.name} — ${cls.division}` : `Class ${s.class_id}`}
+                        </td>
+                        <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{s.father_name}</td>
+                        <td><span className="mono" style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>{s.contact}</span></td>
+                        <td><StatusBadge status={s.status} /></td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Link to={`/students/${s.id}/edit`} style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--brand-600)', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', textDecoration: 'none' }}>Edit</Link>
+                            <Link to={`/fees/student/${s.id}`} style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--success-700)', background: 'var(--success-50)', border: '1px solid var(--success-100)', textDecoration: 'none' }}>Fees</Link>
+                            <button onClick={() => window.open(`/api/v1/yearend/tc-pdf/${s.id}`, '_blank')} style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', background: 'var(--gray-100)', border: '1px solid var(--border-default)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>TC</button>
+                            <button onClick={() => setDeleteTarget({ id: s.id, name: s.name_en })} style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--danger-600)', background: 'var(--danger-50)', border: '1px solid var(--danger-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>Remove</button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              )}
+            </table>
           </div>
-        )}
-      </div>
+          {!loading && students.length > 0 && (
+            <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border-subtle)', fontSize: '12px', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>Showing {students.length} student{students.length !== 1 ? 's' : ''}</span>
+              {students.length >= 50 && <span style={{ color: 'var(--warning-600)', fontWeight: 600 }}>Showing first 50 — refine search to see more</span>}
+            </div>
+          )}
+        </div>
+      )}
 
-      {/* Confirm delete modal */}
       <ConfirmModal
         open={!!deleteTarget}
         title="Remove Student"
-        message={`Are you sure you want to mark "${deleteTarget?.name}" as Left? This action can be reversed by editing the student's status.`}
+        message={`Are you sure you want to mark "${deleteTarget?.name}" as Left? This can be reversed by editing the student's status.`}
         confirmLabel="Mark as Left"
         confirmVariant="danger"
         onConfirm={handleDeleteConfirm}
         onCancel={() => setDeleteTarget(null)}
         loading={deleting}
       />
+
+      <style>{`
+        @media (max-width: 480px) {
+          .btn-add-label { display: none; }
+        }
+      `}</style>
     </div>
   )
 }

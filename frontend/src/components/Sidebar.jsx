@@ -1,4 +1,4 @@
-// Sidebar.jsx — Completely redesigned with better UX
+// Sidebar.jsx — Fully responsive with proper mobile drawer behavior
 import { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { clearToken } from '../services/auth'
@@ -18,7 +18,7 @@ const navGroups = [
           </svg>
         ),
       },
-    ]
+    ],
   },
   {
     label: 'Academics',
@@ -43,7 +43,7 @@ const navGroups = [
           </svg>
         ),
       },
-    ]
+    ],
   },
   {
     label: 'Finance',
@@ -68,7 +68,7 @@ const navGroups = [
           </svg>
         ),
       },
-    ]
+    ],
   },
   {
     label: 'Operations',
@@ -93,7 +93,7 @@ const navGroups = [
           </svg>
         ),
       },
-    ]
+    ],
   },
 ]
 
@@ -114,84 +114,106 @@ export default function Sidebar({ open, onClose }) {
 
   return (
     <>
-      {/* Mobile overlay */}
+      {/* Mobile backdrop overlay */}
       {open && (
         <div
-          className="fixed inset-0 z-40 md:hidden"
-          style={{ background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(2px)' }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 40,
+            background: 'rgba(15,23,42,0.6)',
+            backdropFilter: 'blur(3px)',
+            WebkitBackdropFilter: 'blur(3px)',
+          }}
           onClick={onClose}
+          aria-label="Close navigation"
         />
       )}
 
+      {/* Sidebar panel */}
       <aside
-  style={{
-    width: '224px',
-    minHeight: '100vh',
-    background: 'var(--gray-900)',
-    borderRight: '1px solid rgba(255,255,255,0.06)',
-    display: 'flex',
-    flexDirection: 'column',
-    flexShrink: 0,
-    // ✅ FIX: Keep position fixed unconditionally via style,
-    // but control VISIBILITY with translate classes only.
-    // Do NOT mix `position: fixed` with `md:static` — they conflict!
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    bottom: 0,
-    zIndex: 50,
-    transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-  }}
-  // ✅ FIX: Remove `md:static` — it fought against position:fixed in inline style.
-  // Instead: hide via -translate-x-full on mobile, show via translate-x-0.
-  className={open ? 'translate-x-0' : 'max-md:-translate-x-full'}
->
-        {/* Logo */}
+        style={{
+          width: '224px',
+          minHeight: '100vh',
+          background: 'var(--gray-900)',
+          borderRight: '1px solid rgba(255,255,255,0.06)',
+          display: 'flex',
+          flexDirection: 'column',
+          flexShrink: 0,
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          bottom: 0,
+          zIndex: 50,
+          transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          WebkitOverflowScrolling: 'touch',
+        }}
+        className={open ? 'sidebar-open' : 'sidebar-closed'}
+      >
+        {/* Logo / branding */}
         <div style={{
-          padding: '20px 16px 16px',
+          padding: '16px 14px',
           borderBottom: '1px solid rgba(255,255,255,0.06)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          flexShrink: 0,
         }}>
-          <NavLink to="/" onClick={onClose} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <NavLink
+            to="/"
+            onClick={onClose}
+            style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}
+          >
             <div style={{
-              width: '34px', height: '34px',
+              width: '34px',
+              height: '34px',
               background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
               borderRadius: '10px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               flexShrink: 0,
               boxShadow: '0 4px 12px rgba(59,130,246,0.35)',
             }}>
               <svg width="18" height="18" fill="none" stroke="white" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
-                  d="M12 14l9-5-9-5-9 5 9 5z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 14l9-5-9-5-9 5 9 5z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
                   d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
               </svg>
             </div>
-            <div>
-              <div style={{ fontSize: '13px', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: '13px', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 Iqra School
               </div>
               {yearLabel && (
-                <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.45)', fontWeight: 500, letterSpacing: '0.02em' }}>
+                <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.4)', fontWeight: 500, letterSpacing: '0.02em' }}>
                   AY {yearLabel}
                 </div>
               )}
             </div>
           </NavLink>
 
+          {/* Close button — visible on mobile */}
           <button
-            className="md:hidden"
             onClick={onClose}
+            className="sidebar-close-btn"
             style={{
-              width: '28px', height: '28px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'rgba(255,255,255,0.4)',
-              background: 'rgba(255,255,255,0.06)',
-              border: 'none', borderRadius: '6px', cursor: 'pointer',
+              width: '32px',
+              height: '32px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'rgba(255,255,255,0.5)',
+              background: 'rgba(255,255,255,0.08)',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              flexShrink: 0,
+              touchAction: 'manipulation',
             }}
+            aria-label="Close sidebar"
           >
             <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
@@ -200,7 +222,7 @@ export default function Sidebar({ open, onClose }) {
         </div>
 
         {/* Dashboard link */}
-        <div style={{ padding: '12px 10px 4px' }}>
+        <div style={{ padding: '10px 10px 4px' }}>
           <NavLink
             to="/"
             end
@@ -209,7 +231,7 @@ export default function Sidebar({ open, onClose }) {
               display: 'flex',
               alignItems: 'center',
               gap: '9px',
-              padding: '8px 10px',
+              padding: '9px 10px',
               borderRadius: '8px',
               textDecoration: 'none',
               fontSize: '13.5px',
@@ -218,6 +240,8 @@ export default function Sidebar({ open, onClose }) {
               background: isActive ? 'rgba(59,130,246,0.2)' : 'transparent',
               transition: 'all 0.15s',
               border: isActive ? '1px solid rgba(59,130,246,0.3)' : '1px solid transparent',
+              touchAction: 'manipulation',
+              minHeight: '40px',
             })}
           >
             {({ isActive }) => (
@@ -235,7 +259,7 @@ export default function Sidebar({ open, onClose }) {
         </div>
 
         {/* Nav groups */}
-        <nav style={{ flex: 1, overflowY: 'auto', padding: '4px 10px 10px' }}>
+        <nav style={{ flex: 1, padding: '4px 10px 10px', overflowY: 'auto' }}>
           {navGroups.map(group => (
             <div key={group.label} style={{ marginBottom: '4px' }}>
               <div style={{
@@ -257,7 +281,7 @@ export default function Sidebar({ open, onClose }) {
                     display: 'flex',
                     alignItems: 'center',
                     gap: '9px',
-                    padding: '7.5px 10px',
+                    padding: '9px 10px',
                     borderRadius: '8px',
                     textDecoration: 'none',
                     fontSize: '13.5px',
@@ -267,6 +291,8 @@ export default function Sidebar({ open, onClose }) {
                     border: isActive ? '1px solid rgba(59,130,246,0.25)' : '1px solid transparent',
                     transition: 'all 0.15s',
                     marginBottom: '1px',
+                    touchAction: 'manipulation',
+                    minHeight: '40px',
                   })}
                   className="nav-link-item"
                 >
@@ -288,6 +314,7 @@ export default function Sidebar({ open, onClose }) {
         <div style={{
           padding: '12px 10px',
           borderTop: '1px solid rgba(255,255,255,0.06)',
+          flexShrink: 0,
         }}>
           <div style={{
             display: 'flex',
@@ -298,37 +325,48 @@ export default function Sidebar({ open, onClose }) {
             background: 'rgba(255,255,255,0.04)',
           }}>
             <div style={{
-              width: '30px', height: '30px',
+              width: '32px',
+              height: '32px',
               background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
               borderRadius: '8px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               flexShrink: 0,
-              fontSize: '12px', fontWeight: 800, color: 'white',
+              fontSize: '12px',
+              fontWeight: 800,
+              color: 'white',
             }}>
               A
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'white', lineHeight: 1.2 }}>
+              <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'white', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 Administrator
               </div>
-              <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.35)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                GSEB · Iqra School
+              <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.35)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Iqra School · GSEB
               </div>
             </div>
             <button
               onClick={handleLogout}
               title="Sign out"
               style={{
-                width: '28px', height: '28px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'rgba(255,255,255,0.3)',
+                width: '32px',
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'rgba(255,255,255,0.35)',
                 background: 'transparent',
-                border: 'none', borderRadius: '6px', cursor: 'pointer',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
                 transition: 'all 0.15s',
                 flexShrink: 0,
+                touchAction: 'manipulation',
               }}
-              onMouseEnter={e => { e.target.style.background = 'rgba(255,255,255,0.08)'; e.target.style.color = 'rgba(255,255,255,0.7)' }}
-              onMouseLeave={e => { e.target.style.background = 'transparent'; e.target.style.color = 'rgba(255,255,255,0.3)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'white' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.35)' }}
             >
               <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -340,6 +378,25 @@ export default function Sidebar({ open, onClose }) {
       </aside>
 
       <style>{`
+        /* Desktop: sidebar always visible */
+        @media (min-width: 768px) {
+          .sidebar-closed,
+          .sidebar-open {
+            transform: translateX(0) !important;
+          }
+          .sidebar-close-btn {
+            display: none !important;
+          }
+        }
+        /* Mobile: sidebar slides in/out */
+        @media (max-width: 767px) {
+          .sidebar-closed {
+            transform: translateX(-100%);
+          }
+          .sidebar-open {
+            transform: translateX(0);
+          }
+        }
         .nav-link-item:hover {
           color: rgba(255,255,255,0.85) !important;
           background: rgba(255,255,255,0.05) !important;

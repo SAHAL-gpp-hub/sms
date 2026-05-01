@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Toaster } from 'react-hot-toast'
 import './index.css'
+import './responsive.css'
 import App from './App.jsx'
 
 // C-07 FIX: Add Toaster to root so toast() works across the entire app.
@@ -12,7 +13,7 @@ createRoot(document.getElementById('root')).render(
     <Toaster
       position="top-right"
       toastOptions={{
-        duration: 4000,
+        durastion: 4000,
         success: { style: { background: '#D5F5E3', color: '#1E8449' } },
         error:   { style: { background: '#FADBD8', color: '#C0392B' } },
       }}

@@ -15,7 +15,7 @@ FIXES:
   "Last 4 Digits of Aadhar".
 """
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, validator
 from typing import Optional
 from datetime import date
 from enum import Enum
@@ -137,6 +137,13 @@ class StudentUpdate(BaseModel):
         if not v.isdigit() or len(v) > 4:
             raise ValueError("Aadhar must be 1–4 numeric digits (zero-padded to 4 on save)")
         return v.zfill(4)
+    
+    @validator('dob')
+    def dob_must_not_be_future(cls, v):
+        if v is not None and v >= date.today():
+            raise ValueError('Date of birth cannot be a future date')
+        return v
+
 
 
 class StudentOut(BaseModel):

@@ -1,4 +1,5 @@
 // MarksEntry.jsx — Full rebuild with Subject Manager + per-exam custom marks
+// 📱 Fully responsive across all device sizes (logic unchanged)
 import { useState, useEffect, useCallback } from 'react'
 import toast from 'react-hot-toast'
 import { marksAPI, setupAPI, extractError } from '../../services/api'
@@ -11,7 +12,6 @@ import {
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 const EXAM_TYPES = ['Unit Test 1', 'Unit Test 2', 'Half-Yearly', 'Annual', 'Practical']
-
 const SUBJECT_TYPES = ['Theory', 'Practical', 'Theory+Practical']
 
 const GRADE_COLORS = {
@@ -27,7 +27,203 @@ const GRADE_COLORS = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sub-components (defined OUTSIDE MarksEntry to prevent remount on every render)
+// 📱 Responsive CSS — injected once
+// ─────────────────────────────────────────────────────────────────────────────
+const RESPONSIVE_CSS = `
+  /* ───── Base layout helpers ───── */
+  .me-root { width: 100%; }
+
+  /* ───── Add-Subject form grid ───── */
+  .me-add-grid {
+    display: grid;
+    grid-template-columns: minmax(160px, 1fr) 90px 90px 160px auto;
+    gap: 10px;
+    align-items: flex-end;
+  }
+
+  /* ───── New-exam form ───── */
+  .me-newexam-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+  .me-newexam-type { flex: 1; min-width: 160px; }
+  .me-newexam-date { width: 160px; }
+
+  /* ───── Filter row exam group ───── */
+  .me-exam-group {
+    flex: 2;
+    min-width: 200px;
+    display: flex;
+    gap: 8px;
+  }
+
+  /* ───── Quick-set toolbar ───── */
+  .me-quickset {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: var(--gray-50);
+    border: 1px solid var(--border-default);
+    border-radius: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  /* ───── Tab bar wrapper — scroll on mobile ───── */
+  .me-tab-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .me-tab-wrapper > :first-child {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* ───── Action button group ───── */
+  .me-action-group {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  /* ───── Marks-entry grid table outer scroll ───── */
+  .me-grid-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* ───── Help/info bar above grid ───── */
+  .me-info-bar {
+    padding: 10px 20px;
+    background: var(--gray-50);
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 12px;
+    color: var(--text-secondary);
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  /* ───── Footer of grid ───── */
+  .me-grid-footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  /* ───── Subject-manager toolbar ───── */
+  .me-subj-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  /* ════════════════════════════════════════════════════════════════════
+     📲 TABLET (≤ 900px)
+     ════════════════════════════════════════════════════════════════════ */
+  @media (max-width: 900px) {
+    .me-add-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+    .me-add-grid > :first-child { grid-column: 1 / -1; }
+    .me-add-grid > :last-child  { grid-column: 1 / -1; }
+
+    .me-newexam-date { width: 100%; }
+
+    .me-info-bar { gap: 10px; padding: 10px 14px; }
+  }
+
+  /* ════════════════════════════════════════════════════════════════════
+     📱 MOBILE (≤ 640px)
+     ════════════════════════════════════════════════════════════════════ */
+  @media (max-width: 640px) {
+    .me-add-grid {
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+    .me-add-grid > * { grid-column: 1 / -1 !important; }
+
+    .me-exam-group {
+      flex-direction: column;
+      width: 100%;
+    }
+    .me-exam-group > * { width: 100%; }
+
+    .me-newexam-row { flex-direction: column; align-items: stretch; }
+    .me-newexam-type, .me-newexam-date { width: 100%; min-width: 0; }
+    .me-newexam-row .btn { width: 100%; }
+
+    .me-quickset {
+      gap: 8px;
+      padding: 10px 12px;
+    }
+    .me-quickset > span:first-child { width: 100%; }
+
+    .me-action-group { width: 100%; }
+    .me-action-group .btn,
+    .me-action-group a { flex: 1; justify-content: center; }
+
+    .me-tab-wrapper { flex-direction: column; align-items: stretch; }
+
+    .me-info-bar {
+      font-size: 11px;
+      padding: 10px 12px;
+      gap: 8px;
+    }
+
+    .me-grid-footer {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .me-grid-footer .btn { width: 100%; }
+
+    .me-subj-toolbar { flex-direction: column; align-items: stretch; }
+    .me-subj-toolbar > div:last-child {
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    /* Make data tables scroll horizontally on mobile */
+    .data-table { font-size: 12px; }
+    .data-table th, .data-table td { padding: 8px 10px; }
+
+    /* Hide some table cols on extreme small screens */
+    .me-hide-mobile { display: none; }
+  }
+
+  /* ════════════════════════════════════════════════════════════════════
+     📱 EXTRA SMALL (≤ 420px)
+     ════════════════════════════════════════════════════════════════════ */
+  @media (max-width: 420px) {
+    .me-info-bar > span { font-size: 10.5px; }
+    .data-table { font-size: 11.5px; }
+  }
+`
+
+// Inject CSS once
+if (typeof document !== 'undefined' && !document.getElementById('me-responsive-css')) {
+  const styleEl = document.createElement('style')
+  styleEl.id = 'me-responsive-css'
+  styleEl.textContent = RESPONSIVE_CSS
+  document.head.appendChild(styleEl)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub-components
 // ─────────────────────────────────────────────────────────────────────────────
 
 function GradeBadge({ grade }) {
@@ -50,13 +246,12 @@ function SubjectManager({ classId, onSubjectsChanged }) {
   const [subjects, setSubjects] = useState([])
   const [loading, setLoading]   = useState(false)
   const [saving, setSaving]     = useState(false)
-  const [editTarget, setEditTarget] = useState(null)   // subject being edited
+  const [editTarget, setEditTarget] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [showInactive, setShowInactive] = useState(false)
   const [seedingSubjects, setSeedingSubjects] = useState(false)
 
-  // New subject form
   const [newForm, setNewForm] = useState({
     name: '', max_theory: '100', max_practical: '0', subject_type: 'Theory',
   })
@@ -181,7 +376,7 @@ function SubjectManager({ classId, onSubjectsChanged }) {
   return (
     <div>
       {/* Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', gap: '10px', flexWrap: 'wrap' }}>
+      <div className="me-subj-toolbar">
         <div>
           <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
             {activeSubjects.length} active subject{activeSubjects.length !== 1 ? 's' : ''}
@@ -229,7 +424,7 @@ function SubjectManager({ classId, onSubjectsChanged }) {
         <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--brand-700)', marginBottom: '12px' }}>
           Add New Subject
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 1fr) 90px 90px 160px auto', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div className="me-add-grid">
           <div>
             <label className="label" style={{ color: 'var(--brand-700)' }}>Subject Name *</label>
             <input
@@ -292,7 +487,7 @@ function SubjectManager({ classId, onSubjectsChanged }) {
       </div>
 
       {/* Subjects table */}
-      <div className="card">
+      <div className="card" style={{ overflowX: 'auto' }}>
         {loading ? (
           <table className="data-table"><TableSkeleton rows={5} cols={5} /></table>
         ) : subjects.length === 0 ? (
@@ -302,7 +497,7 @@ function SubjectManager({ classId, onSubjectsChanged }) {
             description="Add subjects above or load GSEB defaults for this class"
           />
         ) : (
-          <table className="data-table">
+          <table className="data-table" style={{ minWidth: '720px' }}>
             <thead>
               <tr>
                 <th>Subject Name</th>
@@ -317,7 +512,6 @@ function SubjectManager({ classId, onSubjectsChanged }) {
               {subjects.map(subject => (
                 <tr key={subject.id} style={{ opacity: subject.is_active ? 1 : 0.55 }}>
                   {editTarget?.id === subject.id ? (
-                    // Inline edit row
                     <>
                       <td>
                         <input
@@ -378,7 +572,6 @@ function SubjectManager({ classId, onSubjectsChanged }) {
                       </td>
                     </>
                   ) : (
-                    // Normal display row
                     <>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -477,11 +670,11 @@ function SubjectManager({ classId, onSubjectsChanged }) {
 // ── Exam Config Panel ─────────────────────────────────────────────────────────
 function ExamConfigPanel({ examId, classId, onConfigSaved }) {
   const [subjects, setSubjects]       = useState([])
-  const [configs, setConfigs]         = useState({}) // { subject_id: { max_theory, max_practical } }
-  const [useCustom, setUseCustom]     = useState({}) // { subject_id: bool }
+  const [configs, setConfigs]         = useState({})
+  const [useCustom, setUseCustom]     = useState({})
   const [loading, setLoading]         = useState(false)
   const [saving, setSaving]           = useState(false)
-  const [applyAll, setApplyAll]       = useState('')  // quick-set all to a value
+  const [applyAll, setApplyAll]       = useState('')
 
   useEffect(() => {
     if (!examId || !classId) return
@@ -493,14 +686,12 @@ function ExamConfigPanel({ examId, classId, onConfigSaved }) {
       const subs = subRes.data
       setSubjects(subs)
 
-      // Build local state from existing configs
       const cfgMap = {}
       const useMap = {}
       cfgRes.data.forEach(c => {
         cfgMap[c.subject_id] = { max_theory: c.max_theory, max_practical: c.max_practical }
         useMap[c.subject_id] = true
       })
-      // Defaults for subjects with no override
       subs.forEach(s => {
         if (!cfgMap[s.id]) {
           cfgMap[s.id] = { max_theory: s.max_theory, max_practical: s.max_practical }
@@ -531,7 +722,6 @@ function ExamConfigPanel({ examId, classId, onConfigSaved }) {
   const handleSave = async () => {
     setSaving(true)
     try {
-      // Only send overrides where useCustom is true
       const configsToSend = subjects
         .filter(s => useCustom[s.id])
         .map(s => ({
@@ -558,7 +748,6 @@ function ExamConfigPanel({ examId, classId, onConfigSaved }) {
     setSaving(true)
     try {
       await marksAPI.clearExamConfigs(examId)
-      // Reset local state to subject defaults
       const newCfg = {}
       const newUse = {}
       subjects.forEach(s => {
@@ -598,20 +787,13 @@ function ExamConfigPanel({ examId, classId, onConfigSaved }) {
 
   return (
     <div>
-      {/* Info */}
       <InlineBanner
         type="info"
         title="Custom marks per exam"
         message="Override the default max marks for this specific exam. Example: set all subjects to 25 for Unit Tests, 50 for Half-Yearly. Leave unchecked to use the subject's default max marks."
       />
 
-      {/* Quick-apply all */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: '10px',
-        padding: '12px 16px', background: 'var(--gray-50)',
-        border: '1px solid var(--border-default)',
-        borderRadius: '10px', marginBottom: '16px', flexWrap: 'wrap',
-      }}>
+      <div className="me-quickset">
         <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)' }}>
           Quick-set all theory to:
         </span>
@@ -653,9 +835,8 @@ function ExamConfigPanel({ examId, classId, onConfigSaved }) {
         )}
       </div>
 
-      {/* Subject-by-subject config */}
-      <div className="card" style={{ marginBottom: '16px' }}>
-        <table className="data-table">
+      <div className="card" style={{ marginBottom: '16px', overflowX: 'auto' }}>
+        <table className="data-table" style={{ minWidth: '720px' }}>
           <thead>
             <tr>
               <th>Subject</th>
@@ -738,8 +919,7 @@ function ExamConfigPanel({ examId, classId, onConfigSaved }) {
         </table>
       </div>
 
-      {/* Actions */}
-      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
         <button
           className="btn btn-primary"
           onClick={handleSave}
@@ -790,14 +970,12 @@ export default function MarksEntry() {
   const [results, setResults]         = useState([])
   const [loadingResults, setLoadingResults] = useState(false)
 
-  // Tabs: 'entry' | 'results' | 'subjects' | 'examconfig'
   const [view, setView]               = useState('entry')
 
   const [showNewExam, setShowNewExam] = useState(false)
   const [newExam, setNewExam]         = useState({ name: 'Unit Test 1', exam_date: '' })
   const [creatingExam, setCreatingExam] = useState(false)
 
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
   useEffect(() => {
     setupAPI.getClasses().then(r => setClasses(r.data))
     setupAPI.getAcademicYears().then(r => {
@@ -829,7 +1007,6 @@ export default function MarksEntry() {
     try {
       const r = await marksAPI.getMarksEntry(selectedExam, selectedClass)
       setGridData(r.data)
-      // Build local marks state
       const map = {}
       r.data.students.forEach(s => {
         map[s.student_id] = {}
@@ -932,7 +1109,6 @@ export default function MarksEntry() {
   const hasCustomConfig = gridData?.subjects?.some(s => s.has_custom_config)
   const examName     = exams.find(e => String(e.id) === selectedExam)?.name || 'Exam'
 
-  // ── Tab definitions ────────────────────────────────────────────────────────
   const mainTabs = [
     { value: 'entry',     label: 'Marks Entry', icon: '📝' },
     { value: 'results',   label: 'Results',      icon: '📊' },
@@ -942,7 +1118,7 @@ export default function MarksEntry() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div>
+    <div className="me-root">
       <PageHeader
         title="Marks Entry"
         subtitle="Enter marks class-wise. Manage subjects dynamically. Set custom max marks per exam."
@@ -964,7 +1140,7 @@ export default function MarksEntry() {
           placeholder="Select year…"
           style={{ flex: 1, minWidth: '160px' }}
         />
-        <div style={{ flex: 2, minWidth: '200px', display: 'flex', gap: '8px' }}>
+        <div className="me-exam-group">
           <select
             className="input"
             value={selectedExam}
@@ -991,14 +1167,14 @@ export default function MarksEntry() {
           <div style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--brand-700)', marginBottom: '12px' }}>
             Create New Exam
           </div>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <div style={{ flex: 1, minWidth: '160px' }}>
+          <div className="me-newexam-row">
+            <div className="me-newexam-type">
               <label className="label">Exam Type</label>
               <select className="input" value={newExam.name} onChange={e => setNewExam(n => ({ ...n, name: e.target.value }))}>
                 {EXAM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
-            <div style={{ width: '160px' }}>
+            <div className="me-newexam-date">
               <label className="label">Date (optional)</label>
               <input type="date" className="input" value={newExam.exam_date} onChange={e => setNewExam(n => ({ ...n, exam_date: e.target.value }))} />
             </div>
@@ -1025,7 +1201,7 @@ export default function MarksEntry() {
       {selectedClass && (
         <>
           {/* Tab bar + contextual actions */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+          <div className="me-tab-wrapper">
             <TabBar
               tabs={mainTabs}
               active={view}
@@ -1036,9 +1212,8 @@ export default function MarksEntry() {
               }}
             />
 
-            {/* Contextual right-side actions */}
             {view === 'entry' && hasStudents && (
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <div className="me-action-group">
                 {hasCustomConfig && (
                   <span style={{
                     fontSize: '11.5px', fontWeight: 700, padding: '3px 9px', borderRadius: '20px',
@@ -1063,7 +1238,7 @@ export default function MarksEntry() {
             )}
 
             {view === 'results' && selectedExam && (
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div className="me-action-group">
                 <a
                   href={`/api/v1/pdf/report/results?exam_id=${selectedExam}&class_id=${selectedClass}`}
                   target="_blank" rel="noreferrer"
@@ -1089,7 +1264,6 @@ export default function MarksEntry() {
             <SubjectManager
               classId={selectedClass}
               onSubjectsChanged={() => {
-                // Reload grid if an exam is open so the grid reflects subject changes
                 if (selectedExam) loadGrid()
               }}
             />
@@ -1111,9 +1285,8 @@ export default function MarksEntry() {
                 examId={parseInt(selectedExam)}
                 classId={parseInt(selectedClass)}
                 onConfigSaved={() => {
-                  // Reload the grid so the header shows updated max marks
                   if (view === 'entry') loadGrid()
-                  else loadGrid() // always refresh so user sees changes when they switch back
+                  else loadGrid()
                 }}
               />
             </div>
@@ -1158,7 +1331,7 @@ export default function MarksEntry() {
                     />
                   ) : (
                     <>
-                      <div style={{ padding: '10px 20px', background: 'var(--gray-50)', borderBottom: '1px solid var(--border-subtle)', fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <div className="me-info-bar">
                         <span><strong>T</strong> = Theory</span>
                         <span><strong>P</strong> = Practical (where applicable)</span>
                         <span>Check <strong>Abs</strong> to mark absent</span>
@@ -1169,7 +1342,7 @@ export default function MarksEntry() {
                         )}
                         <span style={{ color: 'var(--warning-600)', fontWeight: 600 }}>💡 Scroll right to see all subjects</span>
                       </div>
-                      <div style={{ overflowX: 'auto' }}>
+                      <div className="me-grid-scroll">
                         <table style={{ borderCollapse: 'separate', borderSpacing: 0, fontSize: '12.5px', minWidth: '100%' }}>
                           <thead>
                             <tr>
@@ -1179,7 +1352,7 @@ export default function MarksEntry() {
                                 textAlign: 'left', fontWeight: 700, fontSize: '11px',
                                 textTransform: 'uppercase', letterSpacing: '0.06em',
                                 color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-default)',
-                                whiteSpace: 'nowrap', minWidth: '160px',
+                                whiteSpace: 'nowrap', minWidth: '140px',
                                 boxShadow: '2px 0 4px rgba(0,0,0,0.04)',
                               }}>
                                 Student
@@ -1298,7 +1471,7 @@ export default function MarksEntry() {
                           </tbody>
                         </table>
                       </div>
-                      <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div className="me-grid-footer">
                         <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
                           {gridData.students.length} student{gridData.students.length !== 1 ? 's' : ''} · {gridData.subjects.length} subject{gridData.subjects.length !== 1 ? 's' : ''}
                         </span>
@@ -1315,7 +1488,7 @@ export default function MarksEntry() {
 
           {/* ── TAB: Results ── */}
           {view === 'results' && (
-            <div className="card">
+            <div className="card" style={{ overflowX: 'auto' }}>
               {loadingResults ? (
                 <table className="data-table"><TableSkeleton rows={6} cols={8} /></table>
               ) : results.length === 0 ? (
@@ -1325,7 +1498,7 @@ export default function MarksEntry() {
                   description="Save marks in the Entry tab to generate results"
                 />
               ) : (
-                <table className="data-table">
+                <table className="data-table" style={{ minWidth: '760px' }}>
                   <thead>
                     <tr>
                       <th>Rank</th>

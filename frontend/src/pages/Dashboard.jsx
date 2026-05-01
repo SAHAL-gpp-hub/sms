@@ -1,4 +1,4 @@
-// Dashboard.jsx — Redesigned with skeletons, better layout, improved stats
+// Dashboard.jsx — Fully responsive with proper mobile layout
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { attendanceAPI, formatINR } from '../services/api'
@@ -32,12 +32,12 @@ const STAT_ICONS = {
 }
 
 const QUICK_ACTIONS = [
-  { label: 'Add Student',     to: '/students/new',     color: 'var(--brand-600)',   bg: 'var(--brand-50)',   border: 'var(--brand-200)' },
-  { label: 'Mark Attendance', to: '/attendance',        color: '#7c3aed',            bg: 'var(--purple-50)',  border: 'var(--purple-100)' },
-  { label: 'Enter Marks',     to: '/marks',             color: '#0891b2',            bg: '#ecfeff',           border: '#cffafe' },
-  { label: 'Fee Structure',   to: '/fees',              color: 'var(--success-600)', bg: 'var(--success-50)', border: 'var(--success-100)' },
-  { label: 'View Defaulters', to: '/fees/defaulters',   color: 'var(--danger-600)',  bg: 'var(--danger-50)',  border: 'var(--danger-100)' },
-  { label: 'Reports',         to: '/reports',           color: '#b45309',            bg: 'var(--warning-50)', border: '#fde68a' },
+  { label: 'Add Student',     to: '/students/new',    color: 'var(--brand-600)',   bg: 'var(--brand-50)',   border: 'var(--brand-200)' },
+  { label: 'Attendance',      to: '/attendance',      color: '#7c3aed',            bg: 'var(--purple-50)',  border: 'var(--purple-100)' },
+  { label: 'Enter Marks',     to: '/marks',           color: '#0891b2',            bg: '#ecfeff',           border: '#cffafe' },
+  { label: 'Fee Structure',   to: '/fees',            color: 'var(--success-600)', bg: 'var(--success-50)', border: 'var(--success-100)' },
+  { label: 'Defaulters',      to: '/fees/defaulters', color: 'var(--danger-600)',  bg: 'var(--danger-50)',  border: 'var(--danger-100)' },
+  { label: 'Reports',         to: '/reports',         color: '#b45309',            bg: 'var(--warning-50)', border: '#fde68a' },
 ]
 
 export default function Dashboard() {
@@ -52,24 +52,27 @@ export default function Dashboard() {
   }, [])
 
   const today = new Date().toLocaleDateString('en-IN', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   })
 
   if (error) return (
     <div>
-      <div style={{ marginBottom: '24px' }}>
+      <div style={{ marginBottom: '20px' }}>
         <h1 className="page-title">Dashboard</h1>
         <p className="page-subtitle">{today}</p>
       </div>
       <div style={{
-        background: 'var(--surface-0)', border: '1px solid var(--danger-100)',
-        borderRadius: '14px', padding: '40px', textAlign: 'center',
+        background: 'var(--surface-0)',
+        border: '1px solid var(--danger-100)',
+        borderRadius: '14px',
+        padding: '40px 24px',
+        textAlign: 'center',
       }}>
         <div style={{ fontSize: '32px', marginBottom: '12px' }}>⚠️</div>
         <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '6px' }}>
           Could not load dashboard data
         </div>
-        <div style={{ fontSize: '13.5px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
+        <div style={{ fontSize: '13.5px', color: 'var(--text-secondary)', marginBottom: '20px', maxWidth: '340px', margin: '0 auto 20px' }}>
           The backend may be unreachable. Check that Docker is running.
         </div>
         <button className="btn btn-primary" onClick={() => window.location.reload()}>
@@ -82,13 +85,20 @@ export default function Dashboard() {
   return (
     <div>
       {/* Header */}
-      <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+      <div style={{
+        marginBottom: '20px',
+        display: 'flex',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '12px',
+      }}>
         <div>
           <h1 className="page-title">Dashboard</h1>
-          <p className="page-subtitle">{today}</p>
+          <p className="page-subtitle" style={{ display: 'none' }} className="dashboard-date">{today}</p>
         </div>
-        <Link to="/students/new" className="btn btn-primary" style={{ textDecoration: 'none' }}>
-          <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <Link to="/students/new" className="btn btn-primary" style={{ textDecoration: 'none', flexShrink: 0 }}>
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
           </svg>
           Add Student
@@ -96,7 +106,12 @@ export default function Dashboard() {
       </div>
 
       {/* Stats grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginBottom: '20px' }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: '12px',
+        marginBottom: '16px',
+      }}>
         <StatCard
           label="Total Students"
           value={loading ? null : (stats?.total_students ?? 0).toLocaleString()}
@@ -132,20 +147,25 @@ export default function Dashboard() {
       </div>
 
       {/* Quick Actions */}
-      <div className="card" style={{ marginBottom: '20px' }}>
+      <div className="card" style={{ marginBottom: '16px' }}>
         <div className="card-header">
           <div className="card-title">Quick Actions</div>
         </div>
-        <div style={{ padding: '16px 20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+        <div style={{
+          padding: '14px 16px',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+          gap: '8px',
+        }}>
           {QUICK_ACTIONS.map(a => (
             <Link
               key={a.label}
               to={a.to}
               style={{
-                display: 'inline-flex',
+                display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
-                padding: '8px 16px',
+                justifyContent: 'center',
+                padding: '10px 12px',
                 borderRadius: '9px',
                 border: `1px solid ${a.border}`,
                 background: a.bg,
@@ -155,9 +175,11 @@ export default function Dashboard() {
                 textDecoration: 'none',
                 transition: 'all 0.15s',
                 fontFamily: 'var(--font-sans)',
+                textAlign: 'center',
+                touchAction: 'manipulation',
               }}
-              onMouseEnter={e => { e.currentTarget.style.opacity = '0.8'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)' }}
-              onMouseLeave={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none' }}
+              onMouseEnter={e => { e.currentTarget.style.opacity = '0.8'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'none' }}
             >
               {a.label}
             </Link>
@@ -166,17 +188,21 @@ export default function Dashboard() {
       </div>
 
       {/* Bottom grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+        gap: '14px',
+      }}>
         {/* Recent Payments */}
         <div className="card">
           <div className="card-header">
             <div className="card-title">Recent Payments</div>
-            <Link to="/fees/defaulters" style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--brand-600)', textDecoration: 'none' }}>
+            <Link to="/fees/defaulters" style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--brand-600)', textDecoration: 'none', whiteSpace: 'nowrap' }}>
               View all →
             </Link>
           </div>
           {loading ? (
-            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {[1, 2, 3].map(i => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
@@ -197,19 +223,22 @@ export default function Dashboard() {
             <div style={{ padding: '4px 0' }}>
               {stats.recent_payments.map((p, i) => (
                 <div key={i} style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '10px 20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  padding: '10px 16px',
                   borderBottom: i < stats.recent_payments.length - 1 ? '1px solid var(--border-subtle)' : 'none',
                 }}>
-                  <div>
-                    <div className="mono" style={{ color: 'var(--brand-600)', fontSize: '12px', fontWeight: 600, marginBottom: '2px' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="mono" style={{ color: 'var(--brand-600)', fontSize: '12px', fontWeight: 600, marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {p.receipt_number}
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
-                      {p.date} · <span style={{ background: 'var(--gray-100)', padding: '1px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>{p.mode}</span>
+                      {p.date} · <span style={{ background: 'var(--gray-100)', padding: '1px 5px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>{p.mode}</span>
                     </div>
                   </div>
-                  <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--success-600)' }}>
+                  <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--success-600)', flexShrink: 0 }}>
                     {formatINR(p.amount)}
                   </div>
                 </div>
@@ -218,16 +247,16 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Class-wise enrollment */}
+        {/* Class enrollment */}
         <div className="card">
           <div className="card-header">
             <div className="card-title">Class Enrollment</div>
-            <Link to="/students" style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--brand-600)', textDecoration: 'none' }}>
+            <Link to="/students" style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--brand-600)', textDecoration: 'none', whiteSpace: 'nowrap' }}>
               View all →
             </Link>
           </div>
           {loading ? (
-            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {[1, 2, 3, 4].map(i => <Skeleton key={i} height="13px" width={`${60 + i * 8}%`} />)}
             </div>
           ) : !stats?.class_counts?.length ? (
@@ -243,7 +272,7 @@ export default function Dashboard() {
                 const pct = maxCount > 0 ? (c.count / maxCount) * 100 : 0
                 return (
                   <div key={i} style={{
-                    padding: '8px 20px',
+                    padding: '8px 16px',
                     borderBottom: i < Math.min(stats.class_counts.length, 8) - 1 ? '1px solid var(--border-subtle)' : 'none',
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '5px' }}>
@@ -264,6 +293,19 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      <style>{`
+        @media (min-width: 640px) {
+          .dashboard-date {
+            display: block !important;
+          }
+        }
+        @media (max-width: 480px) {
+          .stat-value {
+            font-size: 20px !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }

@@ -1,114 +1,86 @@
 <!DOCTYPE html>
 <html>
-
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Class Result Report</title>
     <style>
-        @page {
-            size: A4 landscape;
-            margin: 12mm;
-        }
-        
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-        
-        body {
-            font-family: Arial, sans-serif;
-            font-size: 10px;
-            color: #1a1a1a;
-        }
-        
+        @page { size: A4 landscape; margin: 12mm; }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body { font-family: Arial, sans-serif; font-size: 10px; color: #1a1a1a; }
+
         .header {
-            text-align: center;
-            border-bottom: 2px solid #1a3a6b;
-            padding-bottom: 8px;
-            margin-bottom: 12px;
+            text-align: center; border-bottom: 2px solid #1a3a6b;
+            padding-bottom: 8px; margin-bottom: 12px;
         }
-        
-        .school-name {
-            font-size: 18px;
-            font-weight: bold;
-            color: #1a3a6b;
-        }
-        
+        .school-name { font-size: 18px; font-weight: bold; color: #1a3a6b; }
         .report-title {
-            font-size: 13px;
-            font-weight: bold;
-            color: #1a3a6b;
-            margin-top: 4px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
+            font-size: 13px; font-weight: bold; color: #1a3a6b;
+            margin-top: 4px; text-transform: uppercase; letter-spacing: 2px;
         }
-        
-        .meta {
-            font-size: 10px;
-            color: #666;
-            margin-top: 3px;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 9px;
-        }
-        
+        .meta { font-size: 10px; color: #666; margin-top: 3px; }
+
+        .table-wrap { width: 100%; }
+        table { width: 100%; border-collapse: collapse; font-size: 9px; }
         th {
-            background: #1a3a6b;
-            color: white;
-            padding: 6px 5px;
-            text-align: center;
-            font-size: 9px;
+            background: #1a3a6b; color: white;
+            padding: 6px 5px; text-align: center; font-size: 9px;
         }
-        
-        th:first-child,
-        th:nth-child(2) {
-            text-align: left;
-        }
-        
+        th:first-child, th:nth-child(2) { text-align: left; }
         td {
-            padding: 5px;
-            border-bottom: 1px solid #f0f0f0;
-            text-align: center;
+            padding: 5px; border-bottom: 1px solid #f0f0f0; text-align: center;
         }
-        
-        td:first-child,
-        td:nth-child(2) {
-            text-align: left;
-        }
-        
-        tr:nth-child(even) {
-            background: #f9f9f9;
-        }
-        
-        .pass {
-            color: #1a7a45;
-            font-weight: bold;
-        }
-        
-        .fail {
-            color: #c0392b;
-            font-weight: bold;
-        }
-        
-        .grade {
-            font-weight: bold;
-            color: #1a3a6b;
-        }
-        
+        td:first-child, td:nth-child(2) { text-align: left; }
+        tr:nth-child(even) { background: #f9f9f9; }
+
+        .pass { color: #1a7a45; font-weight: bold; }
+        .fail { color: #c0392b; font-weight: bold; }
+        .grade { font-weight: bold; color: #1a3a6b; }
+
         .footer {
-            margin-top: 12px;
-            text-align: center;
-            font-size: 9px;
-            color: #999;
-            border-top: 1px solid #eee;
-            padding-top: 8px;
+            margin-top: 12px; text-align: center;
+            font-size: 9px; color: #999;
+            border-top: 1px solid #eee; padding-top: 8px;
+        }
+
+        /* ===== SCREEN-ONLY RESPONSIVE LAYER ===== */
+        @media screen {
+            body {
+                max-width: 1400px;
+                margin: 0 auto;
+                padding: 16px;
+                background: #f4f6fa;
+            }
+            .header, .table-wrap, .footer {
+                background: #fff;
+                padding: 16px;
+                border-radius: 8px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+                margin-bottom: 14px;
+            }
+            .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            /* Result tables can be very wide due to many subjects */
+            table { min-width: 900px; }
+            th, td { white-space: nowrap; }
+        }
+
+        @media screen and (max-width: 720px) {
+            .school-name { font-size: 16px; }
+            .report-title { font-size: 12px; letter-spacing: 1px; }
+            body { padding: 10px; }
+            .header, .footer { padding: 12px; }
+        }
+
+        @media screen and (max-width: 420px) {
+            body { padding: 8px; }
+            .school-name { font-size: 14px; }
+            .report-title { font-size: 11px; }
+            .meta { font-size: 9px; }
         }
     </style>
 </head>
-
 <body>
     <div class="header">
         <div class="school-name">IQRA ENGLISH MEDIUM SCHOOL</div>
@@ -116,43 +88,45 @@
         <div class="meta">Class {{ class_name }} · Academic Year {{ academic_year }} · Generated: {{ generated_date }}</div>
     </div>
 
-    <table>
-        <thead>
-            <tr>
-                <th>Rank</th>
-                <th>Student Name</th>
-                <th>Roll</th>
-                {% for sub in subjects %}
-                <th>{{ sub }}</th>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>Student Name</th>
+                    <th>Roll</th>
+                    {% for sub in subjects %}
+                    <th>{{ sub }}</th>
+                    {% endfor %}
+                    <th>Total</th>
+                    <th>%</th>
+                    <th>CGPA</th>
+                    <th>Grade</th>
+                    <th>Result</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in results %}
+                <tr>
+                    <td>#{{ r.class_rank }}</td>
+                    <td>{{ r.student_name }}</td>
+                    <td>{{ r.roll_number or '—' }}</td>
+                    {% for sub in r.subjects %}
+                    <td>{% if sub.theory_marks is not none and sub.theory_marks != None %}{{ sub.total|int }}{% else %}AB{% endif %}</td>
+                    {% endfor %}
+                    <td><strong>{{ r.total_marks|int }}/{{ r.max_marks|int }}</strong></td>
+                    <td>{{ "%.1f"|format(r.percentage) }}%</td>
+                    <td>{{ r.cgpa }}</td>
+                    <td class="grade">{{ r.grade }}</td>
+                    <td class="{{ 'pass' if r.result == 'PASS' else 'fail' }}">{{ r.result }}</td>
+                </tr>
                 {% endfor %}
-                <th>Total</th>
-                <th>%</th>
-                <th>CGPA</th>
-                <th>Grade</th>
-                <th>Result</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for r in results %}
-            <tr>
-                <td>#{{ r.class_rank }}</td>
-                <td>{{ r.student_name }}</td>
-                <td>{{ r.roll_number or '—' }}</td>
-                {% for sub in r.subjects %}
-                <td>{% if sub.theory_marks is not none and sub.theory_marks != None %}{{ sub.total|int }}{% else %}AB{% endif %}</td> {% endfor %}
-                <td><strong>{{ r.total_marks|int }}/{{ r.max_marks|int }}</strong></td>
-                <td>{{ "%.1f"|format(r.percentage) }}%</td>
-                <td>{{ r.cgpa }}</td>
-                <td class="grade">{{ r.grade }}</td>
-                <td class="{{ 'pass' if r.result == 'PASS' else 'fail' }}">{{ r.result }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+            </tbody>
+        </table>
+    </div>
 
     <div class="footer">
         Iqra English Medium School · Class Result Report · {{ generated_date }}
     </div>
 </body>
-
 </html>

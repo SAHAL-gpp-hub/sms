@@ -158,12 +158,12 @@ export const formatINR = (amount) =>
 export const extractError = (err) => {
     if (!err || !err.response) return 'Network error — is the backend running?'
 
-    const detail = err.response ? .data ? .detail
+    const detail = err.response?.data?.detail
 
     if (!detail) {
         // Try to get something useful from the response
-        if (err.response ? .data ? .message) return err.response.data.message
-        if (err.response ? .statusText) return `${err.response.status}: ${err.response.statusText}`
+        if (err.response?.data?.message) return err.response.data.message
+        if (err.response?.statusText) return `${err.response.status}: ${err.response.statusText}`
         return 'Something went wrong. Please try again.'
     }
 
