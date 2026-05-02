@@ -1,4 +1,4 @@
-// App.jsx — Updated with all improved components
+// App.jsx — Updated with UserForm route + proper Unauthorized page
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { getRole, getToken } from './services/auth'
@@ -16,6 +16,8 @@ import Reports from './pages/reports/Reports'
 import YearEnd from './pages/yearend/YearEnd'
 import ComingSoon from './pages/ComingSoon'
 import UserManagement from './pages/admin/UserManagement'
+import UserForm from './pages/admin/UserForm'
+import Unauthorized from './pages/Unauthorized'
 
 function ProtectedRoute({ children }) {
   if (!getToken()) return <Navigate to="/login" replace />
@@ -33,21 +35,39 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        {/* Unauthorized lives outside Layout so it renders full-screen */}
+        <Route path="/unauthorized" element={<Unauthorized />} />
+
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<Dashboard />} />
+
+          {/* Students */}
           <Route path="students" element={<StudentList />} />
           <Route path="students/new" element={<RoleRoute roles={['admin']}><StudentForm /></RoleRoute>} />
           <Route path="students/:id/edit" element={<RoleRoute roles={['admin']}><StudentForm /></RoleRoute>} />
+
+          {/* Fees */}
           <Route path="fees" element={<RoleRoute roles={['admin']}><FeeStructure /></RoleRoute>} />
           <Route path="fees/defaulters" element={<RoleRoute roles={['admin']}><Defaulters /></RoleRoute>} />
           <Route path="fees/student/:id" element={<StudentFees />} />
+
+          {/* Academics */}
           <Route path="marks" element={<RoleRoute roles={['admin', 'teacher']}><MarksEntry /></RoleRoute>} />
           <Route path="attendance" element={<RoleRoute roles={['admin', 'teacher']}><Attendance /></RoleRoute>} />
+
+          {/* Reports */}
           <Route path="reports" element={<Reports />} />
+
+          {/* Year-end */}
           <Route path="yearend" element={<RoleRoute roles={['admin']}><YearEnd /></RoleRoute>} />
+
+          {/* Admin — User Management */}
           <Route path="admin/users" element={<RoleRoute roles={['admin']}><UserManagement /></RoleRoute>} />
-          <Route path="unauthorized" element={<ComingSoon title="Unauthorized" description="You do not have access to this section." />} />
-          <Route path="portal" element={<ComingSoon title="Portal" description="Student and parent portal begins in Sprint 10." />} />
+          <Route path="admin/users/new" element={<RoleRoute roles={['admin']}><UserForm /></RoleRoute>} />
+          <Route path="admin/users/:id/edit" element={<RoleRoute roles={['admin']}><UserForm /></RoleRoute>} />
+
+          {/* Portal (future) */}
+          <Route path="portal" element={<ComingSoon title="Student & Parent Portal" description="Portal access begins in Sprint 10." />} />
         </Route>
       </Routes>
 
@@ -67,28 +87,16 @@ export default function App() {
             maxWidth: '420px',
           },
           success: {
-            style: {
-              background: '#f0fdf4',
-              color: '#15803d',
-              borderColor: '#bbf7d0',
-            },
+            style: { background: '#f0fdf4', color: '#15803d', borderColor: '#bbf7d0' },
             iconTheme: { primary: '#16a34a', secondary: 'white' },
           },
           error: {
-            style: {
-              background: '#fff1f2',
-              color: '#be123c',
-              borderColor: '#fecdd3',
-            },
+            style: { background: '#fff1f2', color: '#be123c', borderColor: '#fecdd3' },
             iconTheme: { primary: '#e11d48', secondary: 'white' },
             duration: 6000,
           },
           loading: {
-            style: {
-              background: 'var(--brand-50)',
-              color: 'var(--brand-700)',
-              borderColor: 'var(--brand-200)',
-            },
+            style: { background: 'var(--brand-50)', color: 'var(--brand-700)', borderColor: 'var(--brand-200)' },
           },
         }}
       />
