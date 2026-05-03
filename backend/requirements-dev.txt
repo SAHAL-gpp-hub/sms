@@ -1,0 +1,7 @@
+# backend/requirements-dev.txt
+# Install with: pip install -r requirements-dev.txt --break-system-packages
+# (in addition to requirements.txt)
+
+pytest==8.3.4
+pytest-asyncio==0.24.0
+httpx==0.28.1        # used internally by TestClient in newer starlette
