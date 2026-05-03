@@ -1,8 +1,9 @@
-// App.jsx — Updated with UserForm route + proper Unauthorized page
+// frontend/src/App.jsx — Updated with S10 Portal routes
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { getRole, getToken } from './services/auth'
 import Layout from './components/Layout'
+import PortalLayout from './layouts/PortalLayout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import StudentList from './pages/students/StudentList'
@@ -19,6 +20,13 @@ import UserManagement from './pages/admin/UserManagement'
 import UserForm from './pages/admin/UserForm'
 import Unauthorized from './pages/Unauthorized'
 
+// Portal pages
+import PortalDashboard  from './pages/portal/PortalDashboard'
+import PortalResults    from './pages/portal/PortalResults'
+import PortalAttendance from './pages/portal/PortalAttendance'
+import PortalFees       from './pages/portal/PortalFees'
+import PortalProfile    from './pages/portal/PortalProfile'
+
 function ProtectedRoute({ children }) {
   if (!getToken()) return <Navigate to="/login" replace />
   return children
@@ -30,16 +38,27 @@ function RoleRoute({ roles, children }) {
   return children
 }
 
+// Redirect student/parent to portal, admin/teacher to dashboard
+function SmartRoot() {
+  const role = getRole()
+  if (role === 'student' || role === 'parent') return <Navigate to="/portal" replace />
+  return <Navigate to="/" replace />
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
-        {/* Unauthorized lives outside Layout so it renders full-screen */}
         <Route path="/unauthorized" element={<Unauthorized />} />
 
+        {/* ── Admin / Teacher panel ── */}
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-          <Route index element={<Dashboard />} />
+          <Route index element={
+            <RoleRoute roles={['admin', 'teacher']}>
+              <Dashboard />
+            </RoleRoute>
+          } />
 
           {/* Students */}
           <Route path="students" element={<StudentList />} />
@@ -65,10 +84,28 @@ export default function App() {
           <Route path="admin/users" element={<RoleRoute roles={['admin']}><UserManagement /></RoleRoute>} />
           <Route path="admin/users/new" element={<RoleRoute roles={['admin']}><UserForm /></RoleRoute>} />
           <Route path="admin/users/:id/edit" element={<RoleRoute roles={['admin']}><UserForm /></RoleRoute>} />
-
-          {/* Portal (future) */}
-          <Route path="portal" element={<ComingSoon title="Student & Parent Portal" description="Portal access begins in Sprint 10." />} />
         </Route>
+
+        {/* ── Student / Parent portal ── */}
+        <Route
+          path="/portal"
+          element={
+            <ProtectedRoute>
+              <RoleRoute roles={['student', 'parent']}>
+                <PortalLayout />
+              </RoleRoute>
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<PortalDashboard />} />
+          <Route path="results"    element={<PortalResults />} />
+          <Route path="attendance" element={<PortalAttendance />} />
+          <Route path="fees"       element={<PortalFees />} />
+          <Route path="profile"    element={<PortalProfile />} />
+        </Route>
+
+        {/* Catch-all */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
 
       <Toaster

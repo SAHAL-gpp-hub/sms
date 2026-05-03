@@ -75,6 +75,9 @@ export default function Login() {
     return () => clearTimeout(t)
   }, [])
 
+  // In frontend/src/pages/Login.jsx
+// Replace the handleSubmit function's navigate call with this logic:
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -90,7 +93,13 @@ export default function Login() {
         linkedStudentId: r.data.linked_student_id || null,
         linkedStudentIds: r.data.linked_student_ids || [],
       })
-      navigate(r.data.role === 'student' || r.data.role === 'parent' ? '/portal' : '/')
+      // S10: route student/parent to portal, admin/teacher to dashboard
+      const role = r.data.role
+      if (role === 'student' || role === 'parent') {
+        navigate('/portal')
+      } else {
+        navigate('/')
+      }
     } catch (err) {
       setError(extractError(err))
     } finally {

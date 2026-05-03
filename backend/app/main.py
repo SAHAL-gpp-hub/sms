@@ -16,6 +16,11 @@ FIXES:
 
   - Route registration order preserved exactly — auth and PDF are public,
     all data routes require JWT.
+
+S10 UPDATE:
+  - Registers the portal router (student + parent roles).
+    Auth is enforced globally via Depends(get_current_user); fine-grained
+    role checks (require_role) are handled inside the portal router itself.
 """
 
 import logging
@@ -30,7 +35,18 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.core.database import Base, check_db_connection, engine
 from app.models.base_models import *  # noqa — registers all models with Base
-from app.routers import admin_users, attendance, auth, fees, marks, pdf, setup, students, yearend
+from app.routers import (
+    admin_users,
+    attendance,
+    auth,
+    fees,
+    marks,
+    pdf,
+    portal,      
+    setup,
+    students,
+    yearend,
+)
 from app.routers.auth import get_current_user, limiter
 
 logger = logging.getLogger("sms")
@@ -122,12 +138,17 @@ app.include_router(yearend.router)
 # ── Protected routes (JWT Bearer token required) ───────────────────────────
 _auth = [Depends(get_current_user)]
 
-app.include_router(students.router,   dependencies=_auth)
-app.include_router(setup.router,      dependencies=_auth)
-app.include_router(fees.router,       dependencies=_auth)
-app.include_router(marks.router,      dependencies=_auth)
-app.include_router(attendance.router, dependencies=_auth)
+app.include_router(students.router,    dependencies=_auth)
+app.include_router(setup.router,       dependencies=_auth)
+app.include_router(fees.router,        dependencies=_auth)
+app.include_router(marks.router,       dependencies=_auth)
+app.include_router(attendance.router,  dependencies=_auth)
 app.include_router(admin_users.router, dependencies=_auth)
+
+# S10 — Portal router (student + parent roles).
+# Auth is enforced at this layer; fine-grained role checks (require_role)
+# are performed inside the portal router on a per-endpoint basis.
+app.include_router(portal.router, dependencies=_auth)
 
 
 # ── Utility endpoints ──────────────────────────────────────────────────────

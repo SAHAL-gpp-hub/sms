@@ -154,6 +154,28 @@ export const adminAPI = {
   linkStudent:       (data) => api.post('/admin/portal/link-student', data),
   listPortalAccounts:()     => api.get('/admin/portal/accounts'),
 }
+export const portalAPI = {
+  // Shared — student role always uses own record, parent can pass ?student_id=
+  getProfile:           (studentId) => api.get('/portal/me/profile',           { params: studentId ? { student_id: studentId } : {} }),
+  getResults:           (studentId) => api.get('/portal/me/results',            { params: studentId ? { student_id: studentId } : {} }),
+  getAttendance:        (studentId) => api.get('/portal/me/attendance',         { params: studentId ? { student_id: studentId } : {} }),
+  getAttendanceSummary: (studentId) => api.get('/portal/me/attendance/summary', { params: studentId ? { student_id: studentId } : {} }),
+  getFees:              (studentId) => api.get('/portal/me/fees',               { params: studentId ? { student_id: studentId } : {} }),
+  getMarksheet:         (examId, studentId) => `/api/v1/portal/me/marksheet/${examId}${studentId ? `?student_id=${studentId}` : ''}`,
+
+  // Parent multi-child
+  getChildren:          ()    => api.get('/portal/me/children'),
+  getChildProfile:      (sid) => api.get(`/portal/me/children/${sid}/profile`),
+  getChildResults:      (sid) => api.get(`/portal/me/children/${sid}/results`),
+  getChildFees:         (sid) => api.get(`/portal/me/children/${sid}/fees`),
+  getChildAttendance:   (sid) => api.get(`/portal/me/children/${sid}/attendance`),
+}
+ 
+
+
+
+
+
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
 export const setupAPI = {
