@@ -47,27 +47,89 @@ function LedgerItem({ item, onPay }) {
 }
 
 function PaymentModal({ item, onClose, onSuccess }) {
-  const [form, setForm] = useState({
-    amount_paid:  item ? String(parseFloat(item.balance).toFixed(2)) : '',
-    mode:         'Cash',
+ const [form, setForm] = useState({
+
+    amount_paid: item?.balance
+
+      ? Number(item.balance).toFixed(2)
+
+      : '',
+
+    mode: 'Cash',
+
     payment_date: new Date().toISOString().split('T')[0],
+
     collected_by: '',
+
   })
+
   const [saving, setSaving] = useState(false)
+
   const balance = item ? parseFloat(item.balance) : 0
 
+  useEffect(() => {
+
+    if (item) {
+
+      setForm({
+
+        amount_paid: item?.balance
+
+          ? Number(item.balance).toFixed(2)
+
+          : '',
+
+        mode: 'Cash',
+
+        payment_date: new Date().toISOString().split('T')[0],
+
+        collected_by: '',
+
+      })
+
+    }
+
+  }, [item])
+
   const handleSubmit = async () => {
+
     const amt = parseFloat(form.amount_paid)
-    if (!amt || amt <= 0) { toast.error('Amount must be > ₹0'); return }
-    if (!item?.student_fee_id) { toast.error('Invalid fee record'); return }
+
+    if (!amt || amt <= 0) {
+
+      toast.error('Amount must be > ₹0')
+
+      return
+
+    }
+
+    if (amt > balance) {
+
+      toast.error('Amount cannot exceed balance')
+
+      return
+
+    }
+
+    if (!item?.student_fee_id) {
+
+      toast.error('Invalid fee record')
+
+      return
+
+    }
+
     setSaving(true)
+
     try {
+
       await feeAPI.recordPayment({
         student_fee_id: item.student_fee_id,
         amount_paid: amt,
         mode: form.mode,
         payment_date: form.payment_date,
         collected_by: form.collected_by || null,
+
       })
       toast.success(`Payment of ${formatINR(amt)} recorded`)
       onSuccess()

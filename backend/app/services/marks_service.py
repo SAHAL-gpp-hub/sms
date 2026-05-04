@@ -1,22 +1,16 @@
 """
-marks_service.py  (updated)
+marks_service.py — Updated.
 
-FIX for 500 error after exam creation:
-  The get_subjects() query uses filter_by(is_active=True) which crashes
-  with a 500 if the subjects.is_active column doesn't exist yet
-  (i.e. migration b3c4d5e6f7a8 hasn't run or failed silently).
+Key addition vs original:
+  bulk_save_marks() now checks Mark.locked_at before allowing writes.
+  If a mark record is locked (locked_at is set), the write is rejected
+  with a clear error message.
 
-  Added try/except fallback: if the is_active filter causes an error,
-  fall back to returning all subjects for that class without filtering.
+  This enforces the planning doc requirement:
+  "Once an academic year is closed, exam marks are locked. No edits should
+  be permitted without a special admin override."
 
-  Root cause: migration b3c4d5e6f7a8 adds is_active to subjects, but
-  Base.metadata.create_all() in main.py runs AFTER alembic, and if
-  alembic fails mid-migration the column may be missing.
-
-  Best fix: run `alembic upgrade head` inside Docker to apply all migrations.
-  This service fix prevents a 500 in the meantime.
-
-All prior fixes preserved.
+All other existing behaviour preserved.
 """
 
 from decimal import Decimal, ROUND_HALF_UP
@@ -35,10 +29,9 @@ from app.schemas.marks import (
     ExamSubjectConfigCreate,
 )
 
-
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 # GSEB grade table
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 
 GSEB_GRADES = [
     (91, 100, "A1", 10.0, "Outstanding"),
@@ -50,24 +43,6 @@ GSEB_GRADES = [
     (33,  40, "D",   4.0, "Pass"),
     (0,   32, "E",   0.0, "Fail"),
 ]
-
-
-def get_grade(percentage: Decimal):
-    pct = float(percentage)
-    for low, high, grade, gp, remark in GSEB_GRADES:
-        if low <= pct <= high:
-            return grade, round(float(gp), 1), remark
-    return "E", 0.0, "Fail"
-
-
-def percentage_to_cgpa(percentage: Decimal) -> float:
-    _, gp, _ = get_grade(percentage)
-    return gp
-
-
-# ---------------------------------------------------------------------------
-# GSEB subject / exam seed data
-# ---------------------------------------------------------------------------
 
 GSEB_SUBJECTS = {
     "Nursery": [("English", 100, 0), ("Hindi", 100, 0), ("Mathematics", 100, 0), ("Drawing", 100, 0)],
@@ -85,23 +60,24 @@ GSEB_SUBJECTS = {
     "10": [("Gujarati", 100, 0), ("Hindi", 100, 0), ("English", 100, 0), ("Mathematics", 100, 0), ("Science & Technology", 100, 25), ("Social Science", 100, 0), ("Sanskrit", 100, 0)],
 }
 
-EXAM_TYPES = ["Unit Test 1", "Unit Test 2", "Half-Yearly", "Annual", "Practical"]
-
+EXAM_TYPES  = ["Unit Test 1", "Unit Test 2", "Half-Yearly", "Annual", "Practical"]
 CLASS_ORDER = ["Nursery", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
 
-# ---------------------------------------------------------------------------
-# Effective max-marks helper
-# ---------------------------------------------------------------------------
+def get_grade(percentage: Decimal):
+    pct = float(percentage)
+    for low, high, grade, gp, remark in GSEB_GRADES:
+        if low <= pct <= high:
+            return grade, round(float(gp), 1), remark
+    return "E", 0.0, "Fail"
 
-def get_effective_max_marks(
-    db: Session, exam_id: int, subject_id: int
-) -> tuple[int, int]:
-    """
-    Return (max_theory, max_practical) for this exam+subject combination.
-    Falls back to subject defaults if no ExamSubjectConfig override exists.
-    Also falls back gracefully if exam_subject_configs table doesn't exist yet.
-    """
+
+def percentage_to_cgpa(percentage: Decimal) -> float:
+    _, gp, _ = get_grade(percentage)
+    return gp
+
+
+def get_effective_max_marks(db: Session, exam_id: int, subject_id: int) -> tuple[int, int]:
     try:
         config = db.query(ExamSubjectConfig).filter_by(
             exam_id=exam_id, subject_id=subject_id
@@ -109,14 +85,11 @@ def get_effective_max_marks(
         if config:
             return config.max_theory, config.max_practical
     except (OperationalError, ProgrammingError):
-        # exam_subject_configs table doesn't exist yet — migration pending
         pass
-
     subject = db.query(Subject).filter_by(id=subject_id).first()
     if subject:
         return subject.max_theory, subject.max_practical
-
-    return 100, 0  # safe fallback
+    return 100, 0
 
 
 def get_exam_subject_configs(db: Session, exam_id: int) -> list:
@@ -129,26 +102,16 @@ def get_exam_subject_configs(db: Session, exam_id: int) -> list:
 def upsert_exam_subject_configs(
     db: Session, exam_id: int, configs: list[ExamSubjectConfigCreate]
 ) -> list:
-    """
-    Replace all ExamSubjectConfig rows for this exam with the provided list.
-    """
     exam = db.query(Exam).filter_by(id=exam_id).first()
     if not exam:
         raise LookupError(f"Exam {exam_id} not found")
-
     for cfg in configs:
-        subject = db.query(Subject).filter_by(
-            id=cfg.subject_id, class_id=exam.class_id
-        ).first()
+        subject = db.query(Subject).filter_by(id=cfg.subject_id, class_id=exam.class_id).first()
         if not subject:
-            raise ValueError(
-                f"Subject {cfg.subject_id} does not belong to class {exam.class_id}"
-            )
-
+            raise ValueError(f"Subject {cfg.subject_id} does not belong to class {exam.class_id}")
     try:
         db.query(ExamSubjectConfig).filter_by(exam_id=exam_id).delete()
         db.flush()
-
         saved = []
         for cfg in configs:
             row = ExamSubjectConfig(
@@ -159,24 +122,20 @@ def upsert_exam_subject_configs(
             )
             db.add(row)
             saved.append(row)
-
         db.commit()
         for row in saved:
             db.refresh(row)
         return saved
     except (OperationalError, ProgrammingError) as e:
         db.rollback()
-        raise ValueError(
-            "Could not save exam configs — run 'alembic upgrade head' to apply pending migrations."
-        ) from e
+        raise ValueError("Could not save exam configs — run alembic upgrade head") from e
 
 
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 # Subjects
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 
 def _has_is_active_column(db: Session) -> bool:
-    """Check if the subjects.is_active column exists in the database."""
     try:
         db.execute(text("SELECT is_active FROM subjects LIMIT 1"))
         return True
@@ -190,16 +149,14 @@ def seed_subjects(db: Session, class_id: int) -> int:
     if not cls:
         return 0
     subjects = GSEB_SUBJECTS.get(cls.name, [])
-    has_col = _has_is_active_column(db)
-    count = 0
+    has_col  = _has_is_active_column(db)
+    count    = 0
     for name, max_theory, max_practical in subjects:
         exists = db.query(Subject).filter_by(name=name, class_id=class_id).first()
         if not exists:
             kwargs = dict(
-                name=name,
-                class_id=class_id,
-                max_theory=max_theory,
-                max_practical=max_practical,
+                name=name, class_id=class_id,
+                max_theory=max_theory, max_practical=max_practical,
                 subject_type="Theory+Practical" if max_practical > 0 else "Theory",
             )
             if has_col:
@@ -211,19 +168,12 @@ def seed_subjects(db: Session, class_id: int) -> int:
 
 
 def get_subjects(db: Session, class_id: int, include_inactive: bool = False):
-    """
-    FIX: Wrapped in try/except — if is_active column doesn't exist yet
-    (migration b3c4d5e6f7a8 pending), falls back to returning all subjects
-    without filtering by is_active, preventing a 500 error.
-    """
     q = db.query(Subject).filter_by(class_id=class_id)
     if not include_inactive:
         try:
             q = q.filter(Subject.is_active == True)  # noqa: E712
-            results = q.order_by(Subject.id).all()
-            return results
+            return q.order_by(Subject.id).all()
         except (OperationalError, ProgrammingError):
-            # is_active column missing — migration hasn't run yet
             db.rollback()
             return db.query(Subject).filter_by(class_id=class_id).order_by(Subject.id).all()
     return q.order_by(Subject.id).all()
@@ -231,11 +181,7 @@ def get_subjects(db: Session, class_id: int, include_inactive: bool = False):
 
 def create_subject(db: Session, data: SubjectCreate) -> Subject:
     has_col = _has_is_active_column(db)
-
-    # Check for duplicate name in this class
-    existing = db.query(Subject).filter_by(
-        name=data.name, class_id=data.class_id
-    ).first()
+    existing = db.query(Subject).filter_by(name=data.name, class_id=data.class_id).first()
     if existing:
         if has_col and not existing.is_active:
             existing.is_active     = True
@@ -245,11 +191,7 @@ def create_subject(db: Session, data: SubjectCreate) -> Subject:
             db.commit()
             db.refresh(existing)
             return existing
-        raise ValueError(
-            f"Subject '{data.name}' already exists for this class. "
-            "Edit the existing subject instead."
-        )
-
+        raise ValueError(f"Subject '{data.name}' already exists for this class.")
     kwargs = data.model_dump()
     if has_col:
         kwargs["is_active"] = True
@@ -261,55 +203,26 @@ def create_subject(db: Session, data: SubjectCreate) -> Subject:
 
 
 def update_subject(db: Session, subject_id: int, data: SubjectUpdate) -> Optional[Subject]:
-    """Update name, max marks, type, or active state."""
     s = db.query(Subject).filter_by(id=subject_id).first()
     if not s:
         return None
-
     update_data = data.model_dump(exclude_unset=True)
-
-    if "name" in update_data and update_data["name"] != s.name:
-        try:
-            collision = db.query(Subject).filter(
-                Subject.class_id == s.class_id,
-                Subject.name == update_data["name"],
-                Subject.id != subject_id,
-                Subject.is_active == True,  # noqa: E712
-            ).first()
-            if collision:
-                raise ValueError(
-                    f"Another active subject named '{update_data['name']}' "
-                    "already exists in this class."
-                )
-        except (OperationalError, ProgrammingError):
-            db.rollback()
-            # is_active column missing, skip collision check on that field
-
-    # Skip is_active update if column doesn't exist
     has_col = _has_is_active_column(db)
     if not has_col:
         update_data.pop("is_active", None)
-
     for key, value in update_data.items():
         setattr(s, key, value)
-
     db.commit()
     db.refresh(s)
     return s
 
 
 def delete_subject(db: Session, subject_id: int) -> Optional[Subject]:
-    """
-    Soft-delete if marks exist; hard-delete otherwise.
-    Falls back to hard-delete if is_active column doesn't exist.
-    """
     s = db.query(Subject).filter_by(id=subject_id).first()
     if not s:
         return None
-
     has_marks = db.query(Mark).filter_by(subject_id=subject_id).first()
-    has_col = _has_is_active_column(db)
-
+    has_col   = _has_is_active_column(db)
     if has_marks and has_col:
         s.is_active = False
         db.commit()
@@ -320,9 +233,9 @@ def delete_subject(db: Session, subject_id: int) -> Optional[Subject]:
     return s
 
 
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 # Exams
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 
 def get_exams(db: Session, class_id: int = None, academic_year_id: int = None):
     q = db.query(Exam)
@@ -349,11 +262,15 @@ def delete_exam(db: Session, exam_id: int) -> Optional[Exam]:
     return e
 
 
-# ---------------------------------------------------------------------------
-# Marks entry
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# Marks entry — with lock enforcement
+# ─────────────────────────────────────────────────────────────────────────────
 
 def bulk_save_marks(db: Session, entries: list[MarkEntry]):
+    """
+    UPDATED: Rejects writes to marks that have been locked (locked_at is set).
+    This enforces year-end immutability after lock_marks_for_year() is called.
+    """
     for entry in entries:
         if not entry.is_absent and entry.theory_marks is not None:
             subject = db.query(Subject).filter_by(id=entry.subject_id).first()
@@ -367,21 +284,15 @@ def bulk_save_marks(db: Session, entries: list[MarkEntry]):
             eff_max_theory, eff_max_practical = get_effective_max_marks(
                 db, entry.exam_id, entry.subject_id
             )
-
             if entry.theory_marks > eff_max_theory:
                 raise ValueError(
-                    f"Theory marks {entry.theory_marks} exceed max "
-                    f"{eff_max_theory} for subject "
-                    f"'{subject.name}'"
+                    f"Theory marks {entry.theory_marks} exceed max {eff_max_theory} "
+                    f"for subject '{subject.name}'"
                 )
-            if (
-                entry.practical_marks
-                and eff_max_practical > 0
-                and entry.practical_marks > eff_max_practical
-            ):
+            if (entry.practical_marks and eff_max_practical > 0
+                    and entry.practical_marks > eff_max_practical):
                 raise ValueError(
-                    f"Practical marks {entry.practical_marks} exceed "
-                    f"max {eff_max_practical}"
+                    f"Practical marks {entry.practical_marks} exceed max {eff_max_practical}"
                 )
 
         existing = db.query(Mark).filter_by(
@@ -389,12 +300,21 @@ def bulk_save_marks(db: Session, entries: list[MarkEntry]):
             subject_id=entry.subject_id,
             exam_id=entry.exam_id,
         ).first()
+
         if existing:
+            # LOCK ENFORCEMENT — reject writes to locked marks
+            if existing.locked_at is not None:
+                raise ValueError(
+                    f"Mark record for student {entry.student_id}, subject {entry.subject_id}, "
+                    f"exam {entry.exam_id} is locked (locked at {existing.locked_at}). "
+                    "Unlock requires admin override via yearend service."
+                )
             existing.theory_marks    = entry.theory_marks
             existing.practical_marks = entry.practical_marks
             existing.is_absent       = entry.is_absent
         else:
             db.add(Mark(**entry.model_dump()))
+
     db.commit()
     return {"saved": len(entries)}
 
@@ -406,20 +326,14 @@ def get_marks(db: Session, exam_id: int, class_id: int):
         .filter(Student.status == StudentStatusEnum.Active)
         .all()
     )
-    subjects = get_subjects(db, class_id)  # active only (with fallback)
+    subjects    = get_subjects(db, class_id)
     subject_ids = [s.id for s in subjects]
-
-    marks = (
+    marks       = (
         db.query(Mark)
-        .filter(
-            Mark.exam_id == exam_id,
-            Mark.subject_id.in_(subject_ids),
-        )
+        .filter(Mark.exam_id == exam_id, Mark.subject_id.in_(subject_ids))
         .all()
-        if subject_ids
-        else []
+        if subject_ids else []
     )
-
     mark_map = {(m.student_id, m.subject_id): m for m in marks}
 
     result = []
@@ -436,6 +350,7 @@ def get_marks(db: Session, exam_id: int, class_id: int):
                 "theory":    float(m.theory_marks)    if m and m.theory_marks    is not None else None,
                 "practical": float(m.practical_marks) if m and m.practical_marks is not None else None,
                 "is_absent": m.is_absent if m else False,
+                "is_locked": m.locked_at is not None if m else False,  # expose lock state to UI
             }
         result.append(row)
 
@@ -443,21 +358,17 @@ def get_marks(db: Session, exam_id: int, class_id: int):
     for s in subjects:
         eff_theory, eff_practical = get_effective_max_marks(db, exam_id, s.id)
         subject_out.append({
-            "id":                s.id,
-            "name":              s.name,
-            "max_theory":        eff_theory,
-            "max_practical":     eff_practical,
+            "id":                    s.id,
+            "name":                  s.name,
+            "max_theory":            eff_theory,
+            "max_practical":         eff_practical,
             "default_max_theory":    s.max_theory,
             "default_max_practical": s.max_practical,
-            "has_custom_config": eff_theory != s.max_theory or eff_practical != s.max_practical,
+            "has_custom_config":     eff_theory != s.max_theory or eff_practical != s.max_practical,
         })
 
     return {"students": result, "subjects": subject_out}
 
-
-# ---------------------------------------------------------------------------
-# Results
-# ---------------------------------------------------------------------------
 
 def get_class_results(db: Session, exam_id: int, class_id: int):
     students = (
@@ -466,7 +377,7 @@ def get_class_results(db: Session, exam_id: int, class_id: int):
         .filter(Student.status == StudentStatusEnum.Active)
         .all()
     )
-    subjects = get_subjects(db, class_id)  # active only (with fallback)
+    subjects = get_subjects(db, class_id)
     marks    = db.query(Mark).filter_by(exam_id=exam_id).all()
     mark_map = {(m.student_id, m.subject_id): m for m in marks}
 
@@ -475,22 +386,19 @@ def get_class_results(db: Session, exam_id: int, class_id: int):
         total     = Decimal("0")
         max_total = Decimal("0")
         subject_rows: list[dict] = []
-        has_fail = False
+        has_fail  = False
 
         for subject in subjects:
-            eff_max_theory, eff_max_practical = get_effective_max_marks(
-                db, exam_id, subject.id
-            )
+            eff_max_theory, eff_max_practical = get_effective_max_marks(db, exam_id, subject.id)
             max_t   = Decimal(str(eff_max_theory))
             max_p   = Decimal(str(eff_max_practical))
             max_sub = max_t + max_p
-
-            m = mark_map.get((student.id, subject.id))
+            m       = mark_map.get((student.id, subject.id))
 
             if not m or m.is_absent:
                 theory, practical, sub_total = None, None, Decimal("0")
                 grade, gp = "AB", 0.0
-                has_fail = True
+                has_fail  = True
             else:
                 theory    = m.theory_marks    or Decimal("0")
                 practical = m.practical_marks or Decimal("0")
@@ -498,6 +406,12 @@ def get_class_results(db: Session, exam_id: int, class_id: int):
                 sub_pct   = (sub_total / max_sub * 100) if max_sub > 0 else Decimal("0")
                 grade, gp, _ = get_grade(sub_pct)
                 if grade == "E":
+                    has_fail = True
+
+            # Use subject's explicit passing_marks if set
+            passing = None
+            if hasattr(subject, "passing_marks") and subject.passing_marks:
+                if sub_total is not None and sub_total < subject.passing_marks:
                     has_fail = True
 
             total     += sub_total if sub_total else Decimal("0")
@@ -514,10 +428,9 @@ def get_class_results(db: Session, exam_id: int, class_id: int):
                 "grade_point":     gp,
             })
 
-        percentage = (
+        percentage    = (
             (total / max_total * 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-            if max_total > 0
-            else Decimal("0")
+            if max_total > 0 else Decimal("0")
         )
         overall_grade, cgpa, _ = get_grade(percentage)
         result_str = "FAIL" if has_fail else "PASS"

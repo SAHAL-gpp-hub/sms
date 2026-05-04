@@ -10,13 +10,5 @@ import App from './App.jsx'
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <App />
-    <Toaster
-      position="top-right"
-      toastOptions={{
-        durastion: 4000,
-        success: { style: { background: '#D5F5E3', color: '#1E8449' } },
-        error:   { style: { background: '#FADBD8', color: '#C0392B' } },
-      }}
-    />
   </StrictMode>,
 )

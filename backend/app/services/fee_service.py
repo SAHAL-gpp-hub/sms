@@ -302,6 +302,25 @@ def record_payment(db: Session, data: PaymentCreate) -> FeePayment:
     if not sf:
         raise LookupError("Student fee not found")
 
+    # Check overpayment
+    already_paid = Decimal(str(
+        db.query(func.coalesce(func.sum(FeePayment.amount_paid), 0))
+        .filter(FeePayment.student_fee_id == data.student_fee_id)
+        .scalar()
+    ))
+    net = Decimal(str(sf.net_amount))
+    outstanding = net - already_paid
+
+    if outstanding <= 0:
+        raise ValueError(
+            f"This fee entry is already fully paid "
+            f"(net: ₹{net}, paid: ₹{already_paid})."
+        )
+    if Decimal(str(data.amount_paid)) > outstanding:
+        raise ValueError(
+            f"Payment ₹{data.amount_paid} exceeds outstanding balance ₹{outstanding}."
+        )
+
     receipt = generate_receipt_number(db)
     payment = FeePayment(**data.model_dump(), receipt_number=receipt)
     db.add(payment)
