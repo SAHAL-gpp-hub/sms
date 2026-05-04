@@ -95,7 +95,7 @@ export default function Dashboard() {
       }}>
         <div>
           <h1 className="page-title">Dashboard</h1>
-          <p className="page-subtitle" style={{ display: 'none' }} className="dashboard-date">{today}</p>
+          <p className="dashboard-date page-subtitle">{today}</p>
         </div>
         <Link to="/students/new" className="btn btn-primary" style={{ textDecoration: 'none', flexShrink: 0 }}>
           <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">

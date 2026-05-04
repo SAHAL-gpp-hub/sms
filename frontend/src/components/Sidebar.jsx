@@ -3,7 +3,9 @@ import { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { clearToken, getRole } from '../services/auth'
 import { yearendAPI } from '../services/api'
+import { getAuthUser } from '../services/auth'
 
+const user = getAuthUser()
 const navGroups = [
   {
     label: 'Admin',
@@ -341,7 +343,7 @@ export default function Sidebar({ open, onClose }) {
           borderTop: '1px solid rgba(255,255,255,0.06)',
           flexShrink: 0,
         }}>
-          <div style={{
+        <div style={{
             display: 'flex',
             alignItems: 'center',
             gap: '9px',
@@ -349,6 +351,8 @@ export default function Sidebar({ open, onClose }) {
             borderRadius: '8px',
             background: 'rgba(255,255,255,0.04)',
           }}>
+
+            {/* ✅ Avatar */}
             <div style={{
               width: '32px',
               height: '32px',
@@ -357,20 +361,38 @@ export default function Sidebar({ open, onClose }) {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              flexShrink: 0,
               fontSize: '12px',
               fontWeight: 800,
               color: 'white',
+              flexShrink: 0,
             }}>
-              A
+              {(user?.name || user?.username || 'U')[0].toUpperCase()}
             </div>
+
+            {/* ✅ User Info */}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'white', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                Administrator
+
+              <div style={{
+                fontSize: '12.5px',
+                fontWeight: 700,
+                color: 'white',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}>
+                {user?.name || user?.username || 'Unknown User'}
               </div>
-              <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.35)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+
+              <div style={{
+                fontSize: '10.5px',
+                color: 'rgba(255,255,255,0.35)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}>
                 Iqra School · GSEB
               </div>
+
             </div>
             <button
               onClick={handleLogout}
