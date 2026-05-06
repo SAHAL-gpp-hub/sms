@@ -394,6 +394,17 @@ class TestPrePromotionValidation:
         assert any("recognised" in e.lower() or "unrecognised" in e.lower() or
                    "not a recognised" in e.lower() for e in result["errors"])
 
+    def test_validation_accepts_prefixed_class_name(self, db):
+        year = _make_year(db, "VAL-PREFIX-2024", "active")
+        cls  = _make_class(db, "Grade 1", year.id)
+        year2 = _make_year(db, "VAL-PREFIX-2025", "draft", is_current=False)
+        db.commit()
+
+        result = yearend_service.validate_pre_promotion(db, cls.id, year2.id)
+
+        assert result["can_proceed"] is True
+        assert result["errors"] == []
+
     def test_validation_blocks_std10(self, db):
         """Std 10 cannot be promoted (it's the final standard)."""
         year  = _make_year(db, "VAL-STD10-2024", "active")
@@ -450,6 +461,25 @@ class TestBulkPromotionCorePaths:
         db.refresh(s)
         new_cls = db.query(Class).filter_by(id=s.class_id).first()
         assert new_cls.name == "3"   # 2 → 3
+        assert new_cls.academic_year_id == year2.id
+
+    def test_prefixed_class_name_promotes_to_canonical_next_class(self, db):
+        year, year2, cls = self._setup(db, "P2-PREFIX-2024", "P2-PREFIX-2025", "Class 2")
+        existing_target = _make_class(db, "Std 3", year2.id)
+        s = _make_student(db, "Prefix Move Child", cls.id, year.id, roll=1)
+        db.commit()
+
+        result = yearend_service.bulk_promote_students(
+            db, cls.id, year2.id,
+            student_actions={s.id: "promoted"},
+        )
+
+        db.refresh(s)
+        new_cls = db.query(Class).filter_by(id=s.class_id).first()
+        assert result["from_class"] == "2"
+        assert result["to_class"] == "3"
+        assert new_cls.id == existing_target.id
+        assert new_cls.name == "Std 3"
         assert new_cls.academic_year_id == year2.id
 
     def test_retained_student_stays_in_same_class(self, db):

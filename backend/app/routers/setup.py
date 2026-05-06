@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from app.core.database import get_db
 from app.models.base_models import AcademicYear, Class
 from app.routers.auth import CurrentUser, require_role
+from app.services.yearend_service import normalize_class_name
 
 router = APIRouter(prefix="/api/v1/setup", tags=["Setup"])
 
@@ -62,7 +63,7 @@ def create_class(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_role("admin")),
 ):
-    class_name = data.name or str(data.standard)
+    class_name = normalize_class_name(data.name or str(data.standard))
     # Check for duplicate
     existing = db.query(Class).filter_by(
         name=class_name,

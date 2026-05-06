@@ -11,10 +11,15 @@
 //   • Audit log viewer
 //   • Enrollment backfill (one-time)
 //   • TC generation
+//
+// FIX: PromotionTab now owns its own Source Academic Year selector and fetches
+//      classes scoped to that year via setupAPI.getClasses(sourceYearId).
+//      This decouples the promotion workflow from the globally-active year so
+//      promotions can be run even after a new year has been activated.
 
 import { useState, useEffect, useCallback } from 'react'
 import toast from 'react-hot-toast'
-import { setupAPI, yearendAPI, classAPI, extractError } from '../../services/api'
+import { setupAPI, yearendAPI, extractError } from '../../services/api'
 import {
   PageHeader, TabBar, EmptyState, InlineBanner,
   ConfirmModal, Select,
@@ -22,7 +27,6 @@ import {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Design tokens — editorial charcoal + saffron accent palette
-// Matches the school's existing SMS design language but with more structure
 // ─────────────────────────────────────────────────────────────────────────────
 const YE_CSS = `
   .ye-root { font-family: var(--font-sans); }
@@ -122,9 +126,6 @@ const YE_CSS = `
   .ye-table-wrap::-webkit-scrollbar { height:3px; }
 `
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Small helpers
-// ─────────────────────────────────────────────────────────────────────────────
 if (typeof document !== 'undefined' && !document.getElementById('ye-css')) {
   const s = document.createElement('style')
   s.id = 'ye-css'
@@ -136,6 +137,37 @@ const ACTIONS = ['promoted', 'retained', 'graduated', 'transferred', 'dropped', 
 const ACTION_LABELS = {
   promoted: 'Promote', retained: 'Retain', graduated: 'Graduate',
   transferred: 'Transfer', dropped: 'Drop', on_hold: 'Hold',
+}
+const formatClassOptionLabel = (cls) => {
+  const name = String(cls?.name || '').trim()
+  const division = cls?.division ? ` — Div ${cls.division}` : ''
+  return `${name || 'Unnamed class'}${division}`
+}
+const normalizeClassDisplayName = (name) => {
+  const raw = String(name || '').trim()
+  const match = raw.match(/^(standard|std\.?|class|grade)\s+(.+)$/i)
+  return match ? match[2].trim() : raw
+}
+const sortClassGroups = (a, b) => {
+  const order = ['Nursery', 'LKG', 'UKG', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10']
+  const ai = order.indexOf(a.name)
+  const bi = order.indexOf(b.name)
+  if (ai !== -1 || bi !== -1) return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+  return a.name.localeCompare(b.name, undefined, { numeric: true })
+}
+const candidateFlagCounts = (candidates = []) => candidates.reduce((acc, c) => {
+  if (c.flags?.has_pending_dues) acc.dues += 1
+  if (c.flags?.low_attendance) acc.lowAttendance += 1
+  if (c.flags?.no_marks_entered) acc.noMarks += 1
+  return acc
+}, { dues: 0, lowAttendance: 0, noMarks: 0 })
+const totalFlagCount = (counts) => counts.dues + counts.lowAttendance + counts.noMarks
+const statusMeta = {
+  pending: { label: 'Pending', color: 'var(--text-tertiary)', bg: '#94a3b8' },
+  loading: { label: 'Previewing', color: 'var(--brand-600)', bg: 'var(--brand-500)' },
+  running: { label: 'Running', color: 'var(--brand-600)', bg: 'var(--brand-500)' },
+  done:    { label: 'Done', color: 'var(--success-700)', bg: 'var(--success-500)' },
+  failed:  { label: 'Failed', color: 'var(--danger-700)', bg: 'var(--danger-500)' },
 }
 
 function YeCard({ icon, title, sub, children, badge, right }) {
@@ -168,7 +200,7 @@ function Spinner({ size = 14 }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // TAB: Academic Year Lifecycle
 // ─────────────────────────────────────────────────────────────────────────────
-function YearLifecycleTab({ years, currentYear, onRefresh }) {
+function YearLifecycleTab({ years, onRefresh }) {
   const [form, setForm] = useState({ label: '', start_date: '', end_date: '' })
   const [creating, setCreating] = useState(false)
   const [activating, setActivating] = useState(null)
@@ -203,7 +235,6 @@ function YearLifecycleTab({ years, currentYear, onRefresh }) {
       onRefresh()
     } catch (err) {
       const msg = extractError(err)
-      // If validation fails, offer to skip
       if (msg.includes('No classes') || msg.includes('No fee') || msg.includes('No subject')) {
         toast.error(`Validation: ${msg}. Use force-activate if intentional.`)
       } else {
@@ -229,7 +260,6 @@ function YearLifecycleTab({ years, currentYear, onRefresh }) {
 
   return (
     <div>
-      {/* Create new year */}
       <YeCard icon="📅" title="Create Academic Year" sub="New years start as Draft — configure classes, fees, subjects, then activate">
         <div className="ye-form-row" style={{ marginBottom: 14 }}>
           <div>
@@ -250,7 +280,6 @@ function YearLifecycleTab({ years, currentYear, onRefresh }) {
         </button>
       </YeCard>
 
-      {/* Year list */}
       <YeCard icon="🗂" title="All Academic Years" sub="Draft → Active → Closed lifecycle">
         {years.length === 0 ? (
           <EmptyState
@@ -294,7 +323,6 @@ function YearLifecycleTab({ years, currentYear, onRefresh }) {
         )}
       </YeCard>
 
-      {/* Backfill */}
       <YeCard icon="🔧" title="Backfill Enrollments" sub="One-time migration — run once after deploying the new schema">
         <InlineBanner type="info" message="Creates Enrollment records for all existing students. Safe to run multiple times (idempotent)." />
         <button
@@ -318,20 +346,130 @@ function YearLifecycleTab({ years, currentYear, onRefresh }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TAB: Bulk Promotion
+//
+// KEY FIX: This tab now owns a "Source Academic Year" selector. When changed,
+// it fetches classes scoped to that year via setupAPI.getClasses(sourceYearId).
+// This means promotion always operates on the correct year's class list,
+// independent of whichever year is globally active.
 // ─────────────────────────────────────────────────────────────────────────────
-function PromotionTab({ classes, years, onRefresh }) {
-  const [selectedClass, setSelectedClass]   = useState('')
+function PromotionTab({ years, onRefresh }) {
+  const [promotionMode, setPromotionMode] = useState('single')
+
+  // ── Source-year-scoped class state ──────────────────────────────────────────
+  const [selectedSourceYear, setSelectedSourceYear] = useState('')
+  const [sourceClasses, setSourceClasses]           = useState([])
+  const [loadingClasses, setLoadingClasses]         = useState(false)
+  const [allClassRows, setAllClassRows]             = useState([])
+  const [previewingAll, setPreviewingAll]           = useState(false)
+  const [runningAll, setRunningAll]                 = useState(false)
+  const [allRunResult, setAllRunResult]             = useState(null)
+
+  // ── Promotion selectors ─────────────────────────────────────────────────────
+  const [selectedClass, setSelectedClass]     = useState('')
   const [selectedNewYear, setSelectedNewYear] = useState('')
-  const [validation, setValidation]         = useState(null)
-  const [candidates, setCandidates]         = useState(null)
-  const [studentActions, setStudentActions] = useState({})
-  const [rollStrategy, setRollStrategy]     = useState('sequential')
-  const [forcePromote, setForcePromote]     = useState(false)
-  const [promoting, setPromoting]           = useState(false)
-  const [undoing, setUndoing]               = useState(false)
-  const [confirmPromote, setConfirmPromote] = useState(false)
-  const [result, setResult]                 = useState(null)
-  const [phase, setPhase]                   = useState('setup') // setup | review | done
+  const [validation, setValidation]           = useState(null)
+  const [candidates, setCandidates]           = useState(null)
+  const [studentActions, setStudentActions]   = useState({})
+  const [rollStrategy, setRollStrategy]       = useState('sequential')
+  const [forcePromote, setForcePromote]       = useState(false)
+  const [promoting, setPromoting]             = useState(false)
+  const [undoing, setUndoing]                 = useState(false)
+  const [confirmPromote, setConfirmPromote]   = useState(false)
+  const [result, setResult]                   = useState(null)
+  const [phase, setPhase]                     = useState('setup') // setup | review | done
+
+  // ── Fetch classes whenever source year changes ──────────────────────────────
+  useEffect(() => {
+    if (!selectedSourceYear) {
+      setSourceClasses([])
+      setSelectedClass('')
+      setAllClassRows([])
+      return
+    }
+    setLoadingClasses(true)
+    setSelectedClass('')
+    setAllClassRows([])
+    setAllRunResult(null)
+    setPhase('setup')
+    setResult(null)
+    setCandidates(null)
+    setValidation(null)
+    setupAPI.getClasses(parseInt(selectedSourceYear))
+      .then(r => setSourceClasses(r.data || []))
+      .catch(err => toast.error(extractError(err)))
+      .finally(() => setLoadingClasses(false))
+  }, [selectedSourceYear])
+
+  useEffect(() => {
+    if (promotionMode !== 'all' || !selectedSourceYear || !selectedNewYear || sourceClasses.length === 0) {
+      if (promotionMode === 'all') setAllClassRows([])
+      return
+    }
+
+    let cancelled = false
+    const buildPreview = async () => {
+      setPreviewingAll(true)
+      setAllRunResult(null)
+
+      const candidateResults = await Promise.allSettled(
+        sourceClasses.map(cls => yearendAPI.getCandidates(cls.id))
+      )
+      if (cancelled) return
+
+      const groups = new Map()
+      sourceClasses.forEach((cls, idx) => {
+        const name = normalizeClassDisplayName(cls.name)
+        const key = name || `class-${cls.id}`
+        if (!groups.has(key)) {
+          groups.set(key, {
+            key,
+            name,
+            included: true,
+            expanded: false,
+            action: 'promoted',
+            status: 'pending',
+            error: '',
+            results: [],
+            divisions: [],
+          })
+        }
+
+        const settled = candidateResults[idx]
+        const candidates = settled.status === 'fulfilled'
+          ? settled.value.data?.candidates || []
+          : []
+        const flagCounts = candidateFlagCounts(candidates)
+        groups.get(key).divisions.push({
+          classId: cls.id,
+          division: cls.division || 'A',
+          originalName: cls.name,
+          candidates,
+          flagCounts,
+          studentCount: candidates.length,
+          previewError: settled.status === 'rejected' ? extractError(settled.reason) : '',
+        })
+      })
+
+      setAllClassRows(
+        Array.from(groups.values())
+          .map(group => ({
+            ...group,
+            divisions: group.divisions.sort((a, b) => String(a.division).localeCompare(String(b.division), undefined, { numeric: true })),
+          }))
+          .sort(sortClassGroups)
+      )
+      setPreviewingAll(false)
+    }
+
+    buildPreview().catch(err => {
+      if (!cancelled) {
+        setPreviewingAll(false)
+        toast.error(extractError(err))
+      }
+    })
+
+    return () => { cancelled = true }
+  }, [promotionMode, selectedSourceYear, selectedNewYear, sourceClasses])
 
   const fetchValidation = useCallback(async () => {
     if (!selectedClass || !selectedNewYear) return
@@ -349,7 +487,6 @@ function PromotionTab({ classes, years, onRefresh }) {
       const r = await yearendAPI.getCandidates(selectedClass)
       const list = r.data.candidates || []
       setCandidates(list)
-      // Pre-populate actions from suggested
       const actions = {}
       list.forEach(c => { actions[c.student_id] = c.suggested_action })
       setStudentActions(actions)
@@ -412,25 +549,213 @@ function PromotionTab({ classes, years, onRefresh }) {
     setStudentActions(actions)
   }
 
-  const classDraftYears = years.filter(y => y.status === 'draft' || y.status === 'active')
-  const classOptions  = classes.map(c => ({ value: String(c.id), label: `Std ${c.name} — Div ${c.division}` }))
-  const yearOptions   = classDraftYears.map(y => ({ value: String(y.id), label: y.label + (y.is_current ? ' (Current)' : y.status === 'draft' ? ' (Draft)' : '') }))
+  const updateAllClassRow = (key, updater) => {
+    setAllClassRows(rows => rows.map(row => row.key === key ? updater(row) : row))
+  }
+
+  const toggleAllRows = (included) => {
+    setAllClassRows(rows => rows.map(row => ({ ...row, included })))
+  }
+
+  const handleRunAllClasses = async () => {
+    const selectedRows = allClassRows.filter(row => row.included)
+    if (!selectedRows.length || !selectedNewYear) return
+
+    setRunningAll(true)
+    setAllRunResult(null)
+    const failures = []
+    let done = 0
+
+    for (const row of selectedRows) {
+      updateAllClassRow(row.key, current => ({ ...current, status: 'running', error: '', results: [] }))
+      const rowResults = []
+      const rowFailures = []
+
+      for (const div of row.divisions) {
+        try {
+          const studentActionsForClass = {}
+          div.candidates.forEach(c => { studentActionsForClass[c.student_id] = row.action })
+          const r = await yearendAPI.promoteClass(div.classId, {
+            new_academic_year_id: parseInt(selectedNewYear),
+            student_actions: studentActionsForClass,
+            roll_strategy: rollStrategy,
+            force: forcePromote,
+          })
+          rowResults.push({ division: div.division, data: r.data })
+        } catch (err) {
+          const message = extractError(err)
+          rowFailures.push(`Div ${div.division}: ${message}`)
+        }
+      }
+
+      if (rowFailures.length > 0) {
+        failures.push({ className: row.name, messages: rowFailures })
+        updateAllClassRow(row.key, current => ({
+          ...current,
+          status: 'failed',
+          error: rowFailures.join(' · '),
+          results: rowResults,
+        }))
+      } else {
+        done += 1
+        updateAllClassRow(row.key, current => ({ ...current, status: 'done', results: rowResults }))
+      }
+    }
+
+    setAllRunResult({ done, failed: failures.length, failures, total: selectedRows.length })
+    setRunningAll(false)
+    onRefresh?.()
+  }
+
+  // Target years = any year that isn't the source year
+  const targetYears = years.filter(y => String(y.id) !== selectedSourceYear && (y.status === 'draft' || y.status === 'active'))
+  const classOptions = sourceClasses.map(c => ({ value: String(c.id), label: formatClassOptionLabel(c) }))
+  const yearOptions  = targetYears.map(y => ({
+    value: String(y.id),
+    label: y.label + (y.is_current ? ' (Current)' : y.status === 'draft' ? ' (Draft)' : ''),
+  }))
+
+  const sourceYearLabel = years.find(y => String(y.id) === selectedSourceYear)?.label
+  const selectedAllRows = allClassRows.filter(row => row.included)
+  const allClassTotals = selectedAllRows.reduce((acc, row) => {
+    row.divisions.forEach(div => {
+      acc.students += div.studentCount
+      acc.flags += totalFlagCount(div.flagCounts)
+    })
+    return acc
+  }, { students: 0, flags: 0 })
 
   return (
     <div>
-      {/* Step 1 — Select class + year */}
-      <YeCard icon="🎓" title="Bulk Promotion" sub="Move students from one standard to the next">
+      {/* Step 1 — Source year + class + target year */}
+      <YeCard
+        icon="🎓"
+        title="Bulk Promotion"
+        sub={promotionMode === 'all'
+          ? 'Promote students across all standards and divisions in one operation'
+          : 'Select the source year first — classes are loaded for that year specifically'}
+      >
+        <div style={{
+          display: 'inline-flex',
+          border: '1px solid var(--border-default)',
+          borderRadius: 8,
+          overflow: 'hidden',
+          marginBottom: 16,
+          background: 'var(--surface-0)',
+        }}>
+          {[
+            { value: 'single', label: 'Single class' },
+            { value: 'all', label: 'All classes' },
+          ].map(mode => (
+            <button
+              key={mode.value}
+              type="button"
+              onClick={() => {
+                setPromotionMode(mode.value)
+                setPhase('setup')
+                setResult(null)
+                setValidation(null)
+                setCandidates(null)
+                setAllRunResult(null)
+              }}
+              style={{
+                border: 0,
+                padding: '7px 18px',
+                fontSize: 12.5,
+                fontWeight: 800,
+                cursor: 'pointer',
+                color: promotionMode === mode.value ? 'var(--brand-700)' : 'var(--text-secondary)',
+                background: promotionMode === mode.value ? 'var(--brand-50)' : 'transparent',
+              }}
+            >
+              {mode.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Source Academic Year — NEW ─────────────────────────────────── */}
+        <div style={{ marginBottom: 14 }}>
+          <label className="label">
+            Source Academic Year
+            <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: 'var(--brand-600)', background: 'var(--brand-50)', padding: '1px 7px', borderRadius: 20 }}>
+              Step 1
+            </span>
+          </label>
+          <select
+            className="input"
+            value={selectedSourceYear}
+            onChange={e => setSelectedSourceYear(e.target.value)}
+          >
+            <option value="">Select the year students are currently in…</option>
+            {years.map(y => (
+              <option key={y.id} value={String(y.id)}>
+                {y.label}
+                {y.is_current ? ' (Current)' : ''}
+                {` — ${y.status}`}
+              </option>
+            ))}
+          </select>
+          {selectedSourceYear && (
+            <div style={{ marginTop: 5, fontSize: 11.5, color: 'var(--text-tertiary)' }}>
+              {loadingClasses
+                ? '⏳ Loading classes…'
+                : `${sourceClasses.length} class${sourceClasses.length !== 1 ? 'es' : ''} found for ${sourceYearLabel}`}
+            </div>
+          )}
+        </div>
+
+        {/* ── Class + Target Year + Roll Strategy ──────────────────────── */}
         <div className="ye-form-row" style={{ marginBottom: 14 }}>
+          {promotionMode === 'single' && (
+            <div>
+              <label className="label">
+                From Class
+                <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: 'var(--brand-600)', background: 'var(--brand-50)', padding: '1px 7px', borderRadius: 20 }}>
+                  Step 2
+                </span>
+              </label>
+              <select
+                className="input"
+                value={selectedClass}
+                disabled={!selectedSourceYear || loadingClasses || sourceClasses.length === 0}
+                onChange={e => {
+                  setSelectedClass(e.target.value)
+                  setPhase('setup')
+                  setResult(null)
+                  setCandidates(null)
+                  setValidation(null)
+                }}
+              >
+                <option value="">
+                  {!selectedSourceYear
+                    ? 'Select source year first…'
+                    : loadingClasses
+                    ? 'Loading…'
+                    : sourceClasses.length === 0
+                    ? 'No classes in this year'
+                    : 'Select class…'}
+                </option>
+                {classOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+          )}
           <div>
-            <label className="label">From Class</label>
-            <select className="input" value={selectedClass} onChange={e => { setSelectedClass(e.target.value); setPhase('setup'); setResult(null); setCandidates(null); setValidation(null) }}>
-              <option value="">Select class…</option>
-              {classOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="label">Into Academic Year</label>
-            <select className="input" value={selectedNewYear} onChange={e => { setSelectedNewYear(e.target.value); setPhase('setup'); setResult(null) }}>
+            <label className="label">
+              Into Academic Year
+              <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: 'var(--brand-600)', background: 'var(--brand-50)', padding: '1px 7px', borderRadius: 20 }}>
+                {promotionMode === 'all' ? 'Step 2' : 'Step 3'}
+              </span>
+            </label>
+            <select
+              className="input"
+              value={selectedNewYear}
+              disabled={!selectedSourceYear}
+              onChange={e => {
+                setSelectedNewYear(e.target.value)
+                setPhase('setup')
+                setResult(null)
+              }}
+            >
               <option value="">Select target year…</option>
               {yearOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
@@ -444,12 +769,12 @@ function PromotionTab({ classes, years, onRefresh }) {
             </select>
           </div>
         </div>
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 700, color: 'var(--text-secondary)' }}>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 12 }}>
           <input type="checkbox" checked={forcePromote} onChange={e => setForcePromote(e.target.checked)} />
           Force promotion when preflight has blocking issues
         </label>
 
-        {phase === 'setup' && (
+        {promotionMode === 'single' && phase === 'setup' && (
           <button
             className="btn btn-primary"
             style={{ width: '100%' }}
@@ -461,7 +786,7 @@ function PromotionTab({ classes, years, onRefresh }) {
         )}
 
         {/* Validation banner */}
-        {validation && (
+        {promotionMode === 'single' && validation && (
           <div style={{ marginTop: 14 }}>
             {validation.errors?.length > 0 && (
               <InlineBanner type="danger" title="Blocking issues" message={validation.errors.join(' · ')} />
@@ -476,8 +801,208 @@ function PromotionTab({ classes, years, onRefresh }) {
         )}
       </YeCard>
 
+      {promotionMode === 'all' && selectedSourceYear && selectedNewYear && (
+        <YeCard
+          icon="📋"
+          title={`Class preview — ${allClassRows.length} classes · ${allClassTotals.students} students`}
+          sub={`${selectedAllRows.length} classes checked · ${allClassRows.length - selectedAllRows.length} excluded`}
+          right={
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => toggleAllRows(true)} disabled={runningAll}>Select all</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => toggleAllRows(false)} disabled={runningAll}>Deselect all</button>
+            </div>
+          }
+        >
+          {previewingAll ? (
+            <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-tertiary)' }}>
+              <Spinner /> Loading class previews…
+            </div>
+          ) : allClassRows.length === 0 ? (
+            <EmptyState
+              icon="🎓"
+              title="No classes found"
+              description="Choose a source year with configured classes to build the bulk promotion preview."
+            />
+          ) : (
+            <>
+              <InlineBanner
+                type="info"
+                message={`Showing ${allClassRows.length} class${allClassRows.length !== 1 ? 'es' : ''} for ${sourceYearLabel}. Uncheck any class to exclude it from the bulk run.`}
+              />
+              <div className="ye-table-wrap">
+                <table className="data-table" style={{ minWidth: 860 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: 36, textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedAllRows.length === allClassRows.length}
+                          onChange={e => toggleAllRows(e.target.checked)}
+                          disabled={runningAll}
+                        />
+                      </th>
+                      <th>Class</th>
+                      <th>Divisions</th>
+                      <th style={{ textAlign: 'right' }}>Students</th>
+                      <th style={{ textAlign: 'center' }}>Flags</th>
+                      <th style={{ textAlign: 'center' }}>Default action</th>
+                      <th style={{ textAlign: 'center' }}>Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allClassRows.map(row => {
+                      const students = row.divisions.reduce((sum, div) => sum + div.studentCount, 0)
+                      const flags = row.divisions.reduce((sum, div) => sum + totalFlagCount(div.flagCounts), 0)
+                      const meta = statusMeta[row.status] || statusMeta.pending
+                      return (
+                        <>
+                          <tr key={row.key} style={{ opacity: row.included ? 1 : 0.45 }}>
+                            <td style={{ textAlign: 'center' }}>
+                              <input
+                                type="checkbox"
+                                checked={row.included}
+                                disabled={runningAll}
+                                onChange={e => updateAllClassRow(row.key, current => ({ ...current, included: e.target.checked }))}
+                              />
+                            </td>
+                            <td style={{ fontWeight: 800 }}>{row.name}</td>
+                            <td>
+                              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                {row.divisions.map(div => (
+                                  <span key={div.classId} className="ye-flag ye-flag-nomarks">Div {div.division}</span>
+                                ))}
+                              </div>
+                            </td>
+                            <td style={{ textAlign: 'right', fontWeight: 800 }}>{students}</td>
+                            <td style={{ textAlign: 'center' }}>
+                              {flags > 0
+                                ? <span className="ye-flag ye-flag-dues">{flags} flags</span>
+                                : <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>—</span>}
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              <select
+                                className="input"
+                                value={row.action}
+                                disabled={runningAll}
+                                onChange={e => updateAllClassRow(row.key, current => ({ ...current, action: e.target.value }))}
+                                style={{ maxWidth: 140, padding: '5px 8px', fontSize: 12, margin: '0 auto' }}
+                              >
+                                {ACTIONS.map(a => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}
+                              </select>
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: meta.color, fontSize: 12, fontWeight: 800 }}>
+                                <span style={{ width: 7, height: 7, borderRadius: '50%', background: meta.bg, display: 'inline-block' }} />
+                                {meta.label}
+                              </span>
+                            </td>
+                            <td style={{ textAlign: 'right' }}>
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => updateAllClassRow(row.key, current => ({ ...current, expanded: !current.expanded }))}
+                              >
+                                {row.expanded ? 'Hide' : 'Preview'}
+                              </button>
+                            </td>
+                          </tr>
+                          {row.expanded && (
+                            <tr key={`${row.key}-expanded`}>
+                              <td colSpan="8" style={{ background: 'var(--surface-1)', padding: 12 }}>
+                                <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                                  Per-division breakdown
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
+                                  {row.divisions.map(div => (
+                                    <div
+                                      key={div.classId}
+                                      style={{
+                                        background: 'var(--surface-0)',
+                                        border: '1px solid var(--border-subtle)',
+                                        borderRadius: 8,
+                                        padding: 10,
+                                      }}
+                                    >
+                                      <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>Division {div.division}</div>
+                                      {[
+                                        ['Students', div.studentCount, 'var(--text-primary)'],
+                                        ['Pending dues', div.flagCounts.dues, 'var(--warning-600)'],
+                                        ['Low attendance', div.flagCounts.lowAttendance, 'var(--warning-600)'],
+                                        ['No marks', div.flagCounts.noMarks, 'var(--danger-700)'],
+                                      ].map(([label, value, color]) => (
+                                        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                                          <span>{label}</span>
+                                          <span style={{ fontWeight: 800, color: value > 0 ? color : 'var(--text-primary)' }}>{value}</span>
+                                        </div>
+                                      ))}
+                                      {div.previewError && (
+                                        <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--danger-700)' }}>{div.previewError}</div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                                {row.error && (
+                                  <InlineBanner type="danger" message={row.error} />
+                                )}
+                              </td>
+                            </tr>
+                          )}
+                        </>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                flexWrap: 'wrap',
+                paddingTop: 14,
+                marginTop: 14,
+                borderTop: '1px solid var(--border-subtle)',
+              }}>
+                <span style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}><strong>{selectedAllRows.length}</strong> classes selected</span>
+                <span style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}><strong>{allClassTotals.students}</strong> students</span>
+                <span style={{ fontSize: 12.5, color: 'var(--warning-600)' }}><strong>{allClassTotals.flags}</strong> flags</span>
+                <div style={{ flex: 1 }} />
+                <button
+                  className="btn btn-success"
+                  disabled={runningAll || selectedAllRows.length === 0}
+                  onClick={handleRunAllClasses}
+                >
+                  {runningAll ? <><Spinner /> Running…</> : `▶ Run promotion for ${selectedAllRows.length} class${selectedAllRows.length !== 1 ? 'es' : ''}`}
+                </button>
+              </div>
+            </>
+          )}
+        </YeCard>
+      )}
+
+      {promotionMode === 'all' && allRunResult && (
+        <div style={{
+          padding: 16,
+          borderRadius: 12,
+          background: allRunResult.failed ? 'var(--warning-50)' : 'var(--success-50)',
+          border: `1px solid ${allRunResult.failed ? 'var(--warning-100)' : 'var(--success-100)'}`,
+        }}>
+          <div style={{ fontWeight: 900, color: allRunResult.failed ? 'var(--warning-600)' : 'var(--success-700)', marginBottom: 8 }}>
+            Promotion run complete — {allRunResult.done} done, {allRunResult.failed} failed
+          </div>
+          {allRunResult.failures.length > 0 && (
+            <div style={{ display: 'grid', gap: 6 }}>
+              {allRunResult.failures.map(f => (
+                <div key={f.className} style={{ fontSize: 12.5, color: 'var(--danger-700)' }}>
+                  <strong>{f.className}:</strong> {f.messages.join(' · ')}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Step 2 — Candidate list */}
-      {phase !== 'setup' && candidates && (
+      {promotionMode === 'single' && phase !== 'setup' && candidates && (
         <YeCard
           icon="👥"
           title={`Candidate List — ${candidates.length} students`}
@@ -642,10 +1167,10 @@ function PromotionTab({ classes, years, onRefresh }) {
 // TAB: Year-End Operations (lock, clone, TC)
 // ─────────────────────────────────────────────────────────────────────────────
 function OperationsTab({ years }) {
-  const [lockYear, setLockYear]     = useState('')
-  const [locking, setLocking]       = useState(false)
-  const [cloneFrom, setCloneFrom]   = useState('')
-  const [cloneTo, setCloneTo]       = useState('')
+  const [lockYear, setLockYear]       = useState('')
+  const [locking, setLocking]         = useState(false)
+  const [cloneFrom, setCloneFrom]     = useState('')
+  const [cloneTo, setCloneTo]         = useState('')
   const [cloningFees, setCloningFees] = useState(false)
   const [cloningSubs, setCloningSubs] = useState(false)
   const [confirmOp, setConfirmOp]     = useState(null)
@@ -699,7 +1224,6 @@ function OperationsTab({ years }) {
 
   return (
     <div className="ye-grid-2">
-      {/* Lock marks */}
       <YeCard icon="🔒" title="Lock Exam Marks" sub="Prevents editing after year closes. Idempotent — safe to run twice.">
         <InlineBanner type="warning" message="Run this before promotion. Marks cannot be edited after locking without admin override." />
         <div style={{ marginTop: 14 }}>
@@ -714,7 +1238,6 @@ function OperationsTab({ years }) {
         </div>
       </YeCard>
 
-      {/* Clone */}
       <YeCard icon="📋" title="Clone Fees & Subjects" sub="Copy structure from one year to the next. Use at year start.">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div>
@@ -739,11 +1262,10 @@ function OperationsTab({ years }) {
               {cloningSubs ? <><Spinner /> Cloning…</> : 'Clone Subjects'}
             </button>
           </div>
-          {cloneFrom === cloneTo && <InlineBanner type="danger" message="Source and target years must be different." />}
+          {cloneFrom === cloneTo && cloneFrom !== '' && <InlineBanner type="danger" message="Source and target years must be different." />}
         </div>
       </YeCard>
 
-      {/* TC */}
       <YeCard icon="📄" title="Transfer Certificates" sub="Generate TC PDFs for leaving students">
         <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
           Go to <strong>Students</strong>, find the student, click <strong>TC</strong>. The PDF opens for printing.
@@ -776,9 +1298,9 @@ function OperationsTab({ years }) {
 // ─────────────────────────────────────────────────────────────────────────────
 function CalendarTab({ years }) {
   const [selectedYear, setSelectedYear] = useState('')
-  const [events, setEvents]     = useState([])
-  const [loading, setLoading]   = useState(false)
-  const [seeding, setSeeding]   = useState(false)
+  const [events, setEvents]   = useState([])
+  const [loading, setLoading] = useState(false)
+  const [seeding, setSeeding] = useState(false)
   const [form, setForm] = useState({
     event_type: 'holiday', title: '', start_date: '', end_date: '',
     description: '', affects_attendance: true,
@@ -864,7 +1386,6 @@ function CalendarTab({ years }) {
 
       {selectedYear && (
         <>
-          {/* Add event form */}
           <YeCard icon="➕" title="Add Calendar Event" sub="Holidays and exam periods affect attendance working-day count">
             <div className="ye-form-row" style={{ marginBottom: 10 }}>
               <div>
@@ -897,7 +1418,6 @@ function CalendarTab({ years }) {
             </button>
           </YeCard>
 
-          {/* Event list */}
           <YeCard icon="📆" title={`Events (${events.length})`}>
             {loading ? (
               <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-tertiary)' }}><Spinner /> Loading…</div>
@@ -939,12 +1459,12 @@ function CalendarTab({ years }) {
 // TAB: Audit Log
 // ─────────────────────────────────────────────────────────────────────────────
 function AuditLogTab({ years }) {
-  const [logs, setLogs]       = useState([])
-  const [total, setTotal]     = useState(0)
-  const [loading, setLoading] = useState(false)
+  const [logs, setLogs]         = useState([])
+  const [total, setTotal]       = useState(0)
+  const [loading, setLoading]   = useState(false)
   const [opFilter, setOpFilter] = useState('')
   const [yearFilter, setYearFilter] = useState('')
-  const [offset, setOffset]   = useState(0)
+  const [offset, setOffset]     = useState(0)
   const LIMIT = 25
 
   const fetchLogs = useCallback(async () => {
@@ -1033,25 +1553,27 @@ function AuditLogTab({ years }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Root component
+//
+// NOTE: `classes` is no longer fetched here for promotion — PromotionTab
+// fetches its own classes per source year. The root fetch of classes is kept
+// for any other tabs that may need it, but is not passed to PromotionTab.
 // ─────────────────────────────────────────────────────────────────────────────
 export default function YearEnd() {
-  const [tab, setTab]           = useState('lifecycle')
-  const [classes, setClasses]   = useState([])
-  const [years, setYears]       = useState([])
-  const [currentYear, setCurrentYear] = useState(null)
+  const [tab, setTab]                   = useState('lifecycle')
+  const [years, setYears]               = useState([])
+  const [currentYear, setCurrentYear]   = useState(null)
 
   const loadData = useCallback(async () => {
-    const [classRes, yearRes] = await Promise.all([
-      setupAPI.getClasses(),
-      yearendAPI.getYears(),
-        ])
-    setClasses(classRes.data)
+    const yearRes = await yearendAPI.getYears()
     setYears(yearRes.data)
     const curr = yearRes.data.find(y => y.is_current)
     if (curr) setCurrentYear(curr)
   }, [])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadData()
+  }, [loadData])
 
   const tabs = [
     { value: 'lifecycle',  label: 'Year Lifecycle', icon: '📅' },
@@ -1079,8 +1601,8 @@ export default function YearEnd() {
         <TabBar tabs={tabs} active={tab} onChange={setTab} />
       </div>
 
-      {tab === 'lifecycle'  && <YearLifecycleTab  years={years} currentYear={currentYear} onRefresh={loadData} />}
-      {tab === 'promotion'  && <PromotionTab       classes={classes} years={years} onRefresh={loadData} />}
+      {tab === 'lifecycle'  && <YearLifecycleTab  years={years} onRefresh={loadData} />}
+      {tab === 'promotion'  && <PromotionTab       years={years} onRefresh={loadData} />}
       {tab === 'operations' && <OperationsTab      years={years} />}
       {tab === 'calendar'   && <CalendarTab        years={years} />}
       {tab === 'audit'      && <AuditLogTab        years={years} />}

@@ -64,35 +64,54 @@ CLASS_ORDER = [
 PASSING_PERCENTAGE = Decimal("33.00")   # default GSEB passing threshold
 PROMOTION_ACTIONS = {"promoted", "retained", "graduated", "transferred", "dropped", "on_hold"}
 ROLL_STRATEGIES = {"sequential", "alphabetical", "carry_forward"}
+CLASS_NAME_PREFIXES = ("standard", "std", "class", "grade")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+def normalize_class_name(class_name: str) -> str:
+    """
+    Convert UI/legacy display labels like "Std 2" or "Class Nursery" to the
+    canonical class name stored in the promotion ladder.
+    """
+    raw = str(class_name or "").strip()
+    parts = raw.split(maxsplit=1)
+    if len(parts) == 2 and parts[0].lower().rstrip(".") in CLASS_NAME_PREFIXES:
+        return parts[1].strip()
+    return raw
+
+
 def get_next_class_name(current_name: str) -> Optional[str]:
     """
     Returns next class name, None if end of ladder (Std 10),
     or raises ValueError for unrecognised names.
     """
-    if current_name not in CLASS_ORDER:
+    canonical_name = normalize_class_name(current_name)
+    if canonical_name not in CLASS_ORDER:
         raise ValueError(
             f"Class name '{current_name}' is not a recognised GSEB standard. "
             f"Expected one of: {', '.join(CLASS_ORDER)}."
         )
-    idx = CLASS_ORDER.index(current_name)
+    idx = CLASS_ORDER.index(canonical_name)
     return CLASS_ORDER[idx + 1] if idx + 1 < len(CLASS_ORDER) else None
 
 
 def _get_or_create_class(
     db: Session, name: str, division: str, academic_year_id: int
 ) -> Class:
-    cls = db.query(Class).filter_by(
-        name=name, division=division, academic_year_id=academic_year_id
-    ).first()
+    canonical_name = normalize_class_name(name)
+    matching_classes = db.query(Class).filter_by(
+        division=division, academic_year_id=academic_year_id
+    ).all()
+    cls = next(
+        (c for c in matching_classes if normalize_class_name(c.name) == canonical_name),
+        None,
+    )
     if not cls:
         cls = Class(
-            name=name,
+            name=canonical_name,
             division=division,
             academic_year_id=academic_year_id,
             promotion_status="not_started",
@@ -230,11 +249,13 @@ def validate_pre_promotion(
     except ValueError as exc:
         return {"can_proceed": False, "errors": [str(exc)], "warnings": [], "stats": {}}
 
+    current_class_name = normalize_class_name(current_class.name)
+
     if next_name is None:
         return {
             "can_proceed": False,
             "errors": [
-                f"Std {current_class.name} is the final standard. "
+                f"Std {current_class_name} is the final standard. "
                 "Students should be issued Transfer Certificates instead of being promoted."
             ],
             "warnings": [],
@@ -252,12 +273,12 @@ def validate_pre_promotion(
 
     # 3. Idempotency — has this class already been promoted to this year?
     target_class_ids = [
-        r[0]
-        for r in db.query(Class.id).filter(
-            Class.academic_year_id == new_academic_year_id,
-            Class.division == current_class.division,
-            Class.name.in_([current_class.name, next_name]),
+        c.id
+        for c in db.query(Class).filter_by(
+            academic_year_id=new_academic_year_id,
+            division=current_class.division,
         ).all()
+        if normalize_class_name(c.name) in {current_class_name, next_name}
     ]
     already_promoted = 0
     if target_class_ids:
@@ -607,8 +628,9 @@ def bulk_promote_students(
                 resolved_actions[sid] = "graduated"
 
     next_class = None
+    current_class_name = normalize_class_name(current_class.name)
     same_class = _get_or_create_class(
-        db, current_class.name, current_class.division, new_academic_year_id
+        db, current_class_name, current_class.division, new_academic_year_id
     )
 
     if next_name:
@@ -778,7 +800,7 @@ def bulk_promote_students(
         class_id,
         total_processed,
         {
-            "from_class":  current_class.name,
+            "from_class":  current_class_name,
             "division":    current_class.division,
             "to_year":     new_academic_year_id,
             "roll_strategy": roll_strategy,
@@ -795,7 +817,7 @@ def bulk_promote_students(
     # ── 12. Build final report ────────────────────────────────────────────────
     return {
         "success":        True,
-        "from_class":     current_class.name,
+        "from_class":     current_class_name,
         "division":       current_class.division,
         "to_class":       next_name,
         "new_year_id":    new_academic_year_id,
