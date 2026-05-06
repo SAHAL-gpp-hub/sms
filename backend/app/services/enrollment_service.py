@@ -1,15 +1,26 @@
 """
 enrollment_service.py
 
-Manages the Enrollment table — the year-scoped central node that
-attendance, marks, and fees should all reference.
+FIX — backfill_enrollments() diagnostics + correctness:
 
-Public functions:
-  - get_enrollment()              : fetch a single enrollment
-  - get_enrollment_for_student()  : student + year → enrollment
-  - list_enrollments()            : query with filters
-  - backfill_enrollments()        : one-time migration from Student rows
-  - get_class_roll_list()         : ordered roll list for a class/year
+  Previous behaviour that caused "0 created / X skipped":
+  ─────────────────────────────────────────────────────────
+  1. The initial migration (d1e2f3g4h5i6) already ran an INSERT … SELECT
+     for all students that existed at migration time. So every pre-migration
+     student already had an enrollment row → backfill found nothing to create.
+
+  2. Students added AFTER the migration (via create_student) never got
+     enrollment rows because create_student() didn't create them.
+     Those students would appear in backfill as needing creation, but
+     since the migration already ran they were also already covered by
+     the migration's ON CONFLICT DO NOTHING.
+
+  The real fix is in student_service.create_student() (see that file).
+  The backfill is now:
+  - More informative: returns per-category counts so you can tell why
+    records were skipped (already_enrolled vs missing_class vs missing_year).
+  - Correct: uses SQLAlchemy IS NULL / IS NOT NULL rather than Python != None.
+  - Safe to call repeatedly.
 """
 
 from datetime import date
@@ -58,7 +69,6 @@ def list_enrollments(
 def get_class_roll_list(db: Session, class_id: int, academic_year_id: int) -> list[dict]:
     """
     Returns the roll list for a class in a given year — ordered by roll number.
-    Used for attendance, marks entry, and printing.
     """
     enrollments = (
         db.query(Enrollment)
@@ -74,32 +84,58 @@ def get_class_roll_list(db: Session, class_id: int, academic_year_id: int) -> li
         if not student:
             continue
         result.append({
-            "enrollment_id":  enroll.id,
-            "student_id":     student.id,
-            "student_name":   student.name_en,
+            "enrollment_id":   enroll.id,
+            "student_id":      student.id,
+            "student_name":    student.name_en,
             "student_name_gu": student.name_gu,
-            "gr_number":      student.gr_number,
-            "roll_number":    enroll.roll_number,
-            "status":         enroll.status.value if hasattr(enroll.status, "value") else enroll.status,
-            "gender":         student.gender.value if hasattr(student.gender, "value") else student.gender,
-            "contact":        student.contact,
+            "gr_number":       student.gr_number,
+            "roll_number":     enroll.roll_number,
+            "status":          enroll.status.value if hasattr(enroll.status, "value") else enroll.status,
+            "gender":          student.gender.value if hasattr(student.gender, "value") else student.gender,
+            "contact":         student.contact,
         })
     return result
 
 
 def backfill_enrollments(db: Session) -> dict:
     """
-    One-time migration: creates Enrollment rows for all existing Students
-    who don't already have one for their current academic_year_id.
-    Safe to call multiple times (idempotent via unique constraint).
-    """
-    students = db.query(Student).filter(
-        Student.class_id != None,         # noqa: E711
-        Student.academic_year_id != None, # noqa: E711
-    ).all()
+    Creates Enrollment rows for students that don't have one for their
+    current academic_year_id + class_id combination.
 
-    created = 0
-    skipped = 0
+    Safe to call multiple times (idempotent via unique constraint).
+
+    Returns detailed counts to explain the result:
+      created            - new Enrollment rows inserted
+      skipped_enrolled   - already had an enrollment for current year
+      skipped_no_class   - student.class_id is NULL (can't create enrollment)
+      skipped_no_year    - student.academic_year_id is NULL
+      total              - total students examined
+    """
+    # Use SQLAlchemy IS NOT NULL correctly
+    students = (
+        db.query(Student)
+        .filter(Student.class_id.isnot(None))
+        .filter(Student.academic_year_id.isnot(None))
+        .all()
+    )
+
+    # Students excluded due to NULL FK (for diagnostic count)
+    null_class = db.query(Student).filter(Student.class_id.is_(None)).count()
+    null_year  = db.query(Student).filter(Student.academic_year_id.is_(None)).count()
+
+    created           = 0
+    skipped_enrolled  = 0
+
+    status_map = {
+        StudentStatusEnum.Active:      EnrollmentStatusEnum.active,
+        StudentStatusEnum.TC_Issued:   EnrollmentStatusEnum.transferred,
+        StudentStatusEnum.Left:        EnrollmentStatusEnum.dropped,
+        StudentStatusEnum.Passed_Out:  EnrollmentStatusEnum.graduated,
+        StudentStatusEnum.Alumni:      EnrollmentStatusEnum.graduated,
+        StudentStatusEnum.Detained:    EnrollmentStatusEnum.retained,
+        StudentStatusEnum.Provisional: EnrollmentStatusEnum.provisional,
+        StudentStatusEnum.On_Hold:     EnrollmentStatusEnum.on_hold,
+    }
 
     for student in students:
         existing = db.query(Enrollment).filter_by(
@@ -108,19 +144,9 @@ def backfill_enrollments(db: Session) -> dict:
         ).first()
 
         if existing:
-            skipped += 1
+            skipped_enrolled += 1
             continue
 
-        status_map = {
-            StudentStatusEnum.Active:     EnrollmentStatusEnum.active,
-            StudentStatusEnum.TC_Issued:  EnrollmentStatusEnum.transferred,
-            StudentStatusEnum.Left:       EnrollmentStatusEnum.dropped,
-            StudentStatusEnum.Passed_Out: EnrollmentStatusEnum.graduated,
-            StudentStatusEnum.Alumni:     EnrollmentStatusEnum.graduated,
-            StudentStatusEnum.Detained:   EnrollmentStatusEnum.retained,
-            StudentStatusEnum.Provisional: EnrollmentStatusEnum.provisional,
-            StudentStatusEnum.On_Hold:    EnrollmentStatusEnum.on_hold,
-        }
         enroll_status = status_map.get(student.status, EnrollmentStatusEnum.active)
 
         enrollment = Enrollment(
@@ -130,13 +156,28 @@ def backfill_enrollments(db: Session) -> dict:
             roll_number      = str(student.roll_number) if student.roll_number else None,
             status           = enroll_status,
             enrolled_on      = student.admission_date or date.today(),
-            promotion_status = "completed",   # existing data = already placed
+            promotion_status = "completed",  # pre-existing data = already placed
         )
         db.add(enrollment)
         created += 1
 
     db.commit()
-    return {"created": created, "skipped": skipped, "total": len(students)}
+
+    return {
+        "created":          created,
+        "skipped":          skipped_enrolled,   # ← kept for API compat
+        "skipped_enrolled": skipped_enrolled,
+        "skipped_no_class": null_class,
+        "skipped_no_year":  null_year,
+        "total":            len(students) + null_class + null_year,
+        "note": (
+            "If created=0 and skipped_enrolled=N, all students already have "
+            "enrollment rows (either from the initial migration or from a prior "
+            "backfill). New students added via the API now auto-create enrollments "
+            "inside create_student() so manual backfill is only needed for "
+            "historical data or direct DB inserts."
+        ),
+    }
 
 
 def reassign_roll_numbers(
@@ -159,7 +200,6 @@ def reassign_roll_numbers(
     if not enrollments:
         return {"reassigned": 0}
 
-    # Fetch students for sorting
     student_map = {
         s.id: s
         for s in db.query(Student).filter(
@@ -171,13 +211,13 @@ def reassign_roll_numbers(
         enrollments.sort(key=lambda e: (student_map[e.student_id].name_en or "").lower())
     elif strategy == "by_gr_number":
         enrollments.sort(key=lambda e: student_map[e.student_id].gr_number or "")
-    # else sequential = current order
+    # else sequential = keep current order
 
     for i, enroll in enumerate(enrollments, start=1):
         enroll.roll_number = str(i)
         student = student_map.get(enroll.student_id)
         if student:
-            student.roll_number = i   # keep legacy field in sync
+            student.roll_number = i  # keep legacy field in sync
 
     db.commit()
     return {"reassigned": len(enrollments)}

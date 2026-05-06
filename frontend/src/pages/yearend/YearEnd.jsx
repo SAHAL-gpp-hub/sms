@@ -1043,8 +1043,8 @@ export default function YearEnd() {
   const loadData = useCallback(async () => {
     const [classRes, yearRes] = await Promise.all([
       setupAPI.getClasses(),
-      setupAPI.getAcademicYears(),
-    ])
+      yearendAPI.getYears(),
+        ])
     setClasses(classRes.data)
     setYears(yearRes.data)
     const curr = yearRes.data.find(y => y.is_current)

@@ -1,4 +1,3 @@
-// frontend/src/services/api.js
 import axios from 'axios'
 import { getToken, clearToken } from './auth'
 
@@ -33,6 +32,36 @@ api.interceptors.response.use(
     return Promise.reject(err)
   }
 )
+
+// ── Current year cache ────────────────────────────────────────────────────────
+// Fetched once per session so every getClasses() call can scope to the active
+// year without each page needing to fetch the year list separately.
+let _currentYearId = null
+let _currentYearPromise = null
+
+async function getCurrentYearId() {
+  if (_currentYearId) return _currentYearId
+  // Deduplicate concurrent calls — only one request in flight at a time
+  if (!_currentYearPromise) {
+    _currentYearPromise = api.get('/yearend/current-year')
+      .then(r => {
+        _currentYearId = r.data?.id || null
+        return _currentYearId
+      })
+      .catch(() => {
+        // If the endpoint fails (e.g. no year set up yet), fall back to unfiltered
+        _currentYearPromise = null
+        return null
+      })
+  }
+  return _currentYearPromise
+}
+
+// Call this after login / year activation to bust the cache
+export function clearYearCache() {
+  _currentYearId = null
+  _currentYearPromise = null
+}
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const authAPI = {
@@ -121,9 +150,8 @@ export const attendanceAPI = {
   getDashboardStats: () => api.get('/attendance/dashboard-stats'),
 }
 
-// ── Year-End (full rebuild) ────────────────────────────────────────────────────
+// ── Year-End ──────────────────────────────────────────────────────────────────
 export const yearendAPI = {
-  // Academic year lifecycle
   createNewYear:  (data)    => api.post('/yearend/new-year', data),
   activateYear:   (yearId, skipValidation = false) =>
     api.post(`/yearend/activate/${yearId}`, { skip_validation: skipValidation }),
@@ -131,7 +159,6 @@ export const yearendAPI = {
   getYears:       ()        => api.get('/yearend/years'),
   getAllYears:     ()        => api.get('/yearend/years'),
 
-  // Promotion workflow
   validatePromotion: (classId, newYearId) =>
     api.get(`/yearend/promote/${classId}/validate`, {
       params: { new_academic_year_id: newYearId },
@@ -144,11 +171,9 @@ export const yearendAPI = {
     }),
   promoteClass: (classId, payload) =>
     api.post(`/yearend/promote/${classId}`, payload),
-  // payload: { new_academic_year_id, student_actions, roll_strategy, force }
   undoPromotion: (classId, newYearId) =>
     api.post(`/yearend/promote/${classId}/undo`, { new_academic_year_id: newYearId }),
 
-  // Year-end operations
   lockMarks:     (academicYearId) =>
     api.post('/yearend/lock-marks', { academic_year_id: academicYearId }),
   cloneFees:     (fromYearId, toYearId) =>
@@ -158,7 +183,6 @@ export const yearendAPI = {
   issueTC:       (studentId)   => api.post(`/yearend/issue-tc/${studentId}`),
   backfillEnrollments: ()      => api.post('/yearend/backfill-enrollments'),
 
-  // Calendar
   getCalendar:       (yearId, eventType) =>
     api.get(`/yearend/calendar/${yearId}`, { params: eventType ? { event_type: eventType } : {} }),
   addCalendarEvent:  (yearId, data) => api.post(`/yearend/calendar/${yearId}`, data),
@@ -166,19 +190,15 @@ export const yearendAPI = {
   deleteCalendarEvent: (eventId)      => api.delete(`/yearend/calendar/event/${eventId}`),
   seedHolidays:      (yearId)         => api.post(`/yearend/calendar/${yearId}/seed-holidays`),
 
-  // Audit
   getAuditLog: (params) => api.get('/yearend/audit-log', { params }),
-  // params: { operation, academic_year_id, limit, offset }
 
   openTcPdf: (studentId, reason = "Parent's Request", conduct = 'Good') =>
     openSignedPdf(`/yearend/tc-pdf-token/${studentId}`, `/yearend/tc-pdf/${studentId}`, { reason, conduct }),
 }
 
-// ── Enrollments (new) ─────────────────────────────────────────────────────────
+// ── Enrollments ───────────────────────────────────────────────────────────────
 export const enrollmentsAPI = {
   list: (params) => api.get('/enrollments/', { params }),
-  // params: { academic_year_id, class_id, status, student_id }
-
   getById:       (enrollmentId)         => api.get(`/enrollments/${enrollmentId}`),
   getHistory:    (studentId)            => api.get(`/enrollments/student/${studentId}`),
   getRollList:   (classId, academicYearId) =>
@@ -222,7 +242,6 @@ export const portalAPI = {
   getMarksheet: (examId, studentId) =>
     `/api/v1/portal/me/marksheet/${examId}${studentId ? `?student_id=${studentId}` : ''}`,
 
-  // Parent multi-child
   getChildren:        ()    => api.get('/portal/me/children'),
   getChildProfile:    (sid) => api.get(`/portal/me/children/${sid}/profile`),
   getChildResults:    (sid) => api.get(`/portal/me/children/${sid}/results`),
@@ -232,10 +251,30 @@ export const portalAPI = {
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
 export const setupAPI = {
-  seed:             ()               => api.post('/setup/seed'),
-  getClasses:       (academicYearId) => api.get('/setup/classes', {
-    params: academicYearId ? { academic_year_id: academicYearId } : {},
-  }),
+  seed: () => api.post('/setup/seed'),
+
+  /**
+   * getClasses — always scopes to the current active academic year unless
+   * an explicit academicYearId is passed. This prevents duplicate class
+   * entries when multiple years exist (each year auto-creates 13 classes).
+   *
+   * Pass academicYearId explicitly when you intentionally want a different
+   * year's classes (e.g. YearEnd clone operations, FeeStructure cross-year).
+   */
+  getClasses: async (academicYearId) => {
+    // If caller specified a year, use it directly
+    if (academicYearId) {
+      return api.get('/setup/classes', { params: { academic_year_id: academicYearId } })
+    }
+    // Otherwise scope to current year automatically
+    const yearId = await getCurrentYearId()
+    if (yearId) {
+      return api.get('/setup/classes', { params: { academic_year_id: yearId } })
+    }
+    // No current year found — fall back to unfiltered (first-run / no year set up)
+    return api.get('/setup/classes')
+  },
+
   getAcademicYears: () => api.get('/setup/academic-years'),
 }
 

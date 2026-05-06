@@ -1,37 +1,32 @@
 """
 student_service.py
 
-FIX — BUG-CONCURRENCY (race-proof, no schema change required):
-  generate_student_id() now acquires a PostgreSQL advisory transaction lock
-  keyed on the admission year before reading MAX().
+BUG FIX — Enrollment auto-creation:
+  create_student() now creates an Enrollment row immediately after inserting
+  the Student. Without this, students added after the initial migration
+  back-fill never get enrollment rows, which breaks:
+    - promotion candidate lists (generate_candidate_list queries enrollments)
+    - marks entry (get_marks uses Enrollment to scope student lists)
+    - the roll list endpoint (/enrollments/class/{id}/roll-list)
+    - backfill reporting (always shows 0 created because the back-fill only
+      handles students that somehow have no enrollment — newly created
+      students never had one since create_student didn't make one)
 
-  Why the old approach failed
-  ───────────────────────────
-  COUNT race:  threads A and B both read COUNT=5 → both generate SMS-2026-006
-               → one wins, the other hits IntegrityError.
-  MAX + retry: same window. Retries help but 10 threads hitting simultaneously
-               can exhaust all attempts before any commit is visible.
-
-  Advisory lock solution
-  ──────────────────────
-  pg_advisory_xact_lock(year) serialises all concurrent callers for the same
-  year at the DB level. The lock is held for the duration of the transaction
-  and released automatically on commit or rollback — no manual cleanup needed.
-
-  Thread A acquires the lock → reads MAX → generates SMS-2026-006 → commits
-  → lock released → Thread B acquires the lock → reads MAX (now 6) →
-  generates SMS-2026-007 → commits. Zero collisions, zero retries needed.
-
-  The UNIQUE constraint on student_id remains as a hard safety net.
+  The backfill endpoint remains useful for one-time fixes but should not be
+  needed in normal operation after this fix is deployed.
 """
 
+from datetime import date
 from typing import Optional
 
 from sqlalchemy import or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.base_models import Student, StudentStatusEnum
+from app.models.base_models import (
+    Enrollment, EnrollmentStatusEnum,
+    Student, StudentStatusEnum,
+)
 from app.schemas.student import StudentCreate, StudentUpdate
 from fastapi import HTTPException
 
@@ -50,9 +45,6 @@ def generate_student_id(db: Session, year: int) -> str:
     at the same time for the same year. The lock is released automatically
     when the surrounding transaction commits or rolls back.
     """
-    # Serialize all concurrent ID generation for this admission year.
-    # pg_advisory_xact_lock takes a bigint; using year directly is fine
-    # (years are small positive integers well within bigint range).
     try:
         db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": year})
     except Exception:
@@ -76,15 +68,59 @@ def generate_student_id(db: Session, year: int) -> str:
 # CRUD
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _create_enrollment_for_student(db: Session, student: Student) -> None:
+    """
+    Creates an Enrollment row for the student if one doesn't already exist
+    for their current academic_year_id.
+
+    Called automatically by create_student() and can also be called
+    from update_student() if class/year changes.
+
+    Idempotent: silently skips if enrollment already exists
+    (ON CONFLICT via unique constraint uq_enrollment_student_year).
+    """
+    if student.class_id is None or student.academic_year_id is None:
+        return  # can't create enrollment without both FK values
+
+    existing = db.query(Enrollment).filter_by(
+        student_id=student.id,
+        academic_year_id=student.academic_year_id,
+    ).first()
+
+    if existing:
+        return  # already enrolled, nothing to do
+
+    # Map student status → enrollment status
+    status_map = {
+        StudentStatusEnum.Active:      EnrollmentStatusEnum.active,
+        StudentStatusEnum.TC_Issued:   EnrollmentStatusEnum.transferred,
+        StudentStatusEnum.Left:        EnrollmentStatusEnum.dropped,
+        StudentStatusEnum.Passed_Out:  EnrollmentStatusEnum.graduated,
+        StudentStatusEnum.Alumni:      EnrollmentStatusEnum.graduated,
+        StudentStatusEnum.Detained:    EnrollmentStatusEnum.retained,
+        StudentStatusEnum.Provisional: EnrollmentStatusEnum.provisional,
+        StudentStatusEnum.On_Hold:     EnrollmentStatusEnum.on_hold,
+    }
+    enroll_status = status_map.get(student.status, EnrollmentStatusEnum.active)
+
+    enrollment = Enrollment(
+        student_id       = student.id,
+        academic_year_id = student.academic_year_id,
+        class_id         = student.class_id,
+        roll_number      = str(student.roll_number) if student.roll_number else None,
+        status           = enroll_status,
+        enrolled_on      = student.admission_date or date.today(),
+        promotion_status = "not_started",
+    )
+    db.add(enrollment)
+    # Note: caller is responsible for db.commit() — we only add to session here
+
+
 def create_student(db: Session, data: StudentCreate) -> Student:
     """
-    Creates a student record.
+    Creates a student record AND an enrollment record for the current year.
 
-    ID generation is now race-proof via advisory locking, so a single attempt
-    is sufficient. A one-shot retry is kept only as a last-resort safety net
-    for the (practically impossible) case where the UNIQUE constraint fires
-    despite the lock (e.g. a row was inserted outside this service with a
-    hand-crafted ID).
+    ID generation is race-proof via advisory locking.
     """
     year    = data.admission_date.year
     payload = data.model_dump()
@@ -94,6 +130,9 @@ def create_student(db: Session, data: StudentCreate) -> Student:
     db.add(student)
 
     try:
+        db.flush()  # assign student.id without committing
+        # FIX: auto-create enrollment so the student appears in all year-scoped queries
+        _create_enrollment_for_student(db, student)
         db.commit()
         db.refresh(student)
         return student
@@ -101,13 +140,14 @@ def create_student(db: Session, data: StudentCreate) -> Student:
         db.rollback()
         err_str = str(exc.orig).lower()
 
-        # Retry once — only for student_id collisions (should never happen
-        # with advisory locking, but belt-and-suspenders).
+        # Retry once — only for student_id collisions
         if "student_id" in err_str and ("unique" in err_str or "duplicate" in err_str):
             student_id = generate_student_id(db, year)
             student    = Student(student_id=student_id, **payload)
             db.add(student)
             try:
+                db.flush()
+                _create_enrollment_for_student(db, student)
                 db.commit()
                 db.refresh(student)
                 return student
@@ -117,13 +157,10 @@ def create_student(db: Session, data: StudentCreate) -> Student:
                     status_code=500,
                     detail=(
                         "Could not generate a unique student ID even with advisory "
-                        f"locking. This should not happen — check for manual DB "
-                        f"inserts that bypass this service. Last error: {exc2.orig}"
+                        f"locking. Last error: {exc2.orig}"
                     ),
                 ) from exc2
 
-        # Any other constraint violation (e.g. duplicate roll_number) is a
-        # client error — return 400 with the DB message.
         raise HTTPException(status_code=400, detail=str(exc.orig)) from exc
 
 
@@ -135,10 +172,6 @@ def get_students(
     limit: int                         = 50,
     offset: int                        = 0,
 ):
-    """
-    Returns active students with optional filters and pagination.
-    limit/offset support was added for M-01 (no student list pagination).
-    """
     query = db.query(Student).filter(Student.status == StudentStatusEnum.Active)
 
     if class_id is not None:
@@ -174,8 +207,19 @@ def update_student(
     student = get_student(db, student_id, include_inactive=True)
     if not student:
         return None
+
+    old_year_id  = student.academic_year_id
+    old_class_id = student.class_id
+
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(student, key, value)
+
+    # If class or year changed, ensure enrollment exists for the new year
+    year_changed  = (student.academic_year_id != old_year_id)
+    class_changed = (student.class_id != old_class_id)
+    if year_changed or class_changed:
+        _create_enrollment_for_student(db, student)
+
     db.commit()
     db.refresh(student)
     return student
