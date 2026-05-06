@@ -19,6 +19,8 @@ import ComingSoon from './pages/ComingSoon'
 import UserManagement from './pages/admin/UserManagement'
 import UserForm from './pages/admin/UserForm'
 import Unauthorized from './pages/Unauthorized'
+import ClassManagement from './pages/setup/ClassManagement'
+
 
 // Portal pages
 import PortalDashboard  from './pages/portal/PortalDashboard'
@@ -69,6 +71,16 @@ export default function App() {
           <Route path="fees" element={<RoleRoute roles={['admin']}><FeeStructure /></RoleRoute>} />
           <Route path="fees/defaulters" element={<RoleRoute roles={['admin']}><Defaulters /></RoleRoute>} />
           <Route path="fees/student/:id" element={<StudentFees />} />
+
+          {/* Setup */}
+              <Route
+              path="setup/classes"
+                element={
+                  <RoleRoute roles={['admin']}>
+                    <ClassManagement />
+                  </RoleRoute>
+                }
+              />
 
           {/* Academics */}
           <Route path="marks" element={<RoleRoute roles={['admin', 'teacher']}><MarksEntry /></RoleRoute>} />
