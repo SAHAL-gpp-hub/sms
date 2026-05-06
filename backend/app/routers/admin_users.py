@@ -480,8 +480,7 @@ def get_link_status(
 
     total = len(students)
     with_student = sum(1 for s in students if s.student_user_id is not None)
-    with_parent  = sum(1 for s in students if s.parent_user_id  is not None)
-
+    with_parent = sum(1 for s in students if s.parent_user_id is not None)
     unlinked = [
         UnlinkedStudentItem(
             id=s.id,
@@ -489,7 +488,7 @@ def get_link_status(
             name_en=s.name_en,
             class_id=s.class_id,
             has_student_account=s.student_user_id is not None,
-            has_parent_account=s.parent_user_id  is not None,
+            has_parent_account=s.parent_user_id is not None,
         )
         for s in students
         if s.student_user_id is None or s.parent_user_id is None
