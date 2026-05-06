@@ -20,7 +20,7 @@ Updated models:
 import enum
 from sqlalchemy import (
     Boolean, CheckConstraint, Column, Date, DateTime, Enum,
-    ForeignKey, Integer, Numeric, String, Text, UniqueConstraint,
+    ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -83,6 +83,10 @@ class AuditOperationEnum(str, enum.Enum):
     issue_tc       = "issue_tc"
     clone_subjects = "clone_subjects"
     clone_fees     = "clone_fees"
+    student_activation_started = "student_activation_started"
+    student_activation_verified = "student_activation_verified"
+    student_activation_completed = "student_activation_completed"
+    student_activation_failed = "student_activation_failed"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -196,6 +200,9 @@ class Enrollment(Base):
 
 class Student(Base):
     __tablename__ = "students"
+    __table_args__ = (
+        UniqueConstraint("student_user_id", name="uq_students_student_user_id"),
+    )
 
     id               = Column(Integer, primary_key=True)
     student_id       = Column(String(20), unique=True, nullable=False)
@@ -209,6 +216,10 @@ class Student(Base):
     father_name      = Column(String(100), nullable=False)
     mother_name      = Column(String(100), nullable=True)
     contact          = Column(String(10), nullable=False)
+    student_email    = Column(String(100), unique=True, nullable=True)
+    student_phone    = Column(String(20), nullable=True)
+    guardian_email   = Column(String(100), nullable=True, index=True)
+    guardian_phone   = Column(String(20), nullable=True)
     address          = Column(Text, nullable=True)
     category         = Column(String(10), nullable=True)
     aadhar_last4     = Column(String(4), nullable=True)
@@ -464,6 +475,66 @@ class TokenBlocklist(Base):
     jti        = Column(String(36), unique=True, nullable=False, index=True)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class StudentActivationRequest(Base):
+    __tablename__ = "student_activation_requests"
+
+    id                    = Column(Integer, primary_key=True)
+    activation_id         = Column(String(36), unique=True, nullable=False, index=True)
+    student_id            = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False, index=True)
+    account_type          = Column(String(20), nullable=False)  # student / parent
+    destination           = Column(String(255), nullable=False)
+    destination_fingerprint = Column(String(64), nullable=False, index=True)
+    status                = Column(String(20), nullable=False, default="pending")
+    verified_at           = Column(DateTime(timezone=True), nullable=True)
+    completed_at          = Column(DateTime(timezone=True), nullable=True)
+    expires_at            = Column(DateTime(timezone=True), nullable=False, index=True)
+    resend_count          = Column(Integer, nullable=False, default=0)
+    locked_until          = Column(DateTime(timezone=True), nullable=True)
+    request_ip            = Column(String(64), nullable=True)
+    user_agent            = Column(String(255), nullable=True)
+    created_at            = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at            = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    student = relationship("Student")
+
+
+class OTPVerification(Base):
+    __tablename__ = "otp_verifications"
+
+    id                    = Column(Integer, primary_key=True)
+    activation_request_id = Column(Integer, ForeignKey("student_activation_requests.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider              = Column(String(20), nullable=False, default="email")
+    destination_fingerprint = Column(String(64), nullable=False, index=True)
+    otp_hash              = Column(String(128), nullable=False)
+    expires_at            = Column(DateTime(timezone=True), nullable=False, index=True)
+    verified_at           = Column(DateTime(timezone=True), nullable=True)
+    attempt_count         = Column(Integer, nullable=False, default=0)
+    max_attempts          = Column(Integer, nullable=False, default=5)
+    resend_available_at   = Column(DateTime(timezone=True), nullable=False)
+    created_at            = Column(DateTime(timezone=True), server_default=func.now())
+
+    activation_request = relationship("StudentActivationRequest")
+
+
+class NotificationOutbox(Base):
+    __tablename__ = "notification_outbox"
+
+    id              = Column(Integer, primary_key=True)
+    provider        = Column(String(20), nullable=False)
+    destination     = Column(String(255), nullable=False)
+    subject         = Column(String(255), nullable=True)
+    body            = Column(Text, nullable=False)
+    payload         = Column(JSON, nullable=True)
+    status          = Column(String(20), nullable=False, default="pending", index=True)
+    attempts        = Column(Integer, nullable=False, default=0)
+    max_attempts    = Column(Integer, nullable=False, default=3)
+    next_attempt_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
+    last_error      = Column(Text, nullable=True)
+    sent_at         = Column(DateTime(timezone=True), nullable=True)
+    created_at      = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at      = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
 # ─────────────────────────────────────────────────────────────────────────────

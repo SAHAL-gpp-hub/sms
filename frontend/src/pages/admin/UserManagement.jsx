@@ -503,12 +503,12 @@ function PortalLinkingTab() {
   const [linking, setLinking]         = useState(false)
   const [search, setSearch]           = useState('')
 
-  // Auto-generation state
+  // Activation state
   const [linkStatus, setLinkStatus]     = useState(null)
   const [statusLoading, setStatusLoading] = useState(false)
   const [bulkGenerating, setBulkGenerating] = useState(false)
   const [bulkResult, setBulkResult]     = useState(null)
-  const [generatingFor, setGeneratingFor] = useState(null) // student id being generated
+  const [generatingFor, setGeneratingFor] = useState(null)
 
   const fetchAll = async () => {
     setLoading(true)
@@ -567,14 +567,23 @@ function PortalLinkingTab() {
     setBulkGenerating(true)
     setBulkResult(null)
     try {
-      const res = await adminAPI.bulkGenerate({
-        include_students: true,
-        include_parents: true,
-      })
-      setBulkResult(res.data)
-      toast.success(
-        `Done — ${res.data.student_accounts_created} student + ${res.data.parent_accounts_created} parent accounts created`
-      )
+      let sent = 0
+      const errors = []
+      for (const student of linkStatus?.unlinked_students || []) {
+        for (const accountType of ['student', 'parent']) {
+          const alreadyLinked = accountType === 'student' ? student.has_student_account : student.has_parent_account
+          const hasEmail = accountType === 'student' ? student.has_student_email : student.has_guardian_email
+          if (alreadyLinked || !hasEmail) continue
+          try {
+            await adminAPI.resendActivation(student.id, accountType)
+            sent += 1
+          } catch (err) {
+            errors.push(`${student.student_id} ${accountType}: ${extractError(err)}`)
+          }
+        }
+      }
+      setBulkResult({ sent, errors })
+      toast.success(`Activation emails queued: ${sent}`)
       fetchAll()
       fetchLinkStatus()
     } catch (err) {
@@ -584,14 +593,20 @@ function PortalLinkingTab() {
     }
   }
 
-  const handleGenerateOne = async (studentId) => {
+  const handleGenerateOne = async (student) => {
+    const studentId = student.id
     setGeneratingFor(studentId)
     try {
-      const res = await adminAPI.generateForStudent(studentId, {
-        include_students: true,
-        include_parents: true,
-      })
-      toast.success(res.data.message)
+      let sent = 0
+      if (!student.has_student_account && student.has_student_email) {
+        await adminAPI.resendActivation(studentId, 'student')
+        sent += 1
+      }
+      if (!student.has_parent_account && student.has_guardian_email) {
+        await adminAPI.resendActivation(studentId, 'parent')
+        sent += 1
+      }
+      toast.success(sent ? `Activation email${sent !== 1 ? 's' : ''} queued` : 'No activation-ready email found')
       fetchAll()
       fetchLinkStatus()
     } catch (err) {
@@ -662,7 +677,7 @@ function PortalLinkingTab() {
               ))}
             </div>
 
-            {/* Bulk generate */}
+            {/* Bulk activation */}
             {unlinkedCount > 0 && (
               <div style={{ marginBottom: '14px' }}>
                 <button
@@ -672,13 +687,12 @@ function PortalLinkingTab() {
                   style={{ width: '100%' }}
                 >
                   {bulkGenerating
-                    ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Generating accounts…</>
-                    : `⚡ Auto-Generate All Missing Portal Accounts (${linkStatus.unlinked_students.length} students affected)`
+                    ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Queueing activation emails…</>
+                    : `Send Activation Emails (${linkStatus.unlinked_students.length} students affected)`
                   }
                 </button>
                 <div style={{ fontSize: '11.5px', color: 'var(--text-tertiary)', marginTop: '6px', lineHeight: 1.5 }}>
-                  Creates student + parent portal accounts for all unlinked students.
-                  Default password = student's DOB in DDMMYYYY format.
+                  Queues OTP emails for activation-ready student and parent contacts. Accounts are created only after OTP verification.
                 </div>
               </div>
             )}
@@ -693,7 +707,7 @@ function PortalLinkingTab() {
               </div>
             )}
 
-            {/* Bulk generate result */}
+            {/* Bulk activation result */}
             {bulkResult && (
               <div style={{
                 marginTop: '12px', padding: '12px 14px', borderRadius: '8px',
@@ -704,19 +718,14 @@ function PortalLinkingTab() {
                   Generation complete
                 </div>
                 <div style={{ color: 'var(--text-secondary)' }}>
-                  Student accounts created: <strong>{bulkResult.student_accounts_created}</strong>
-                  {' · '}Parent accounts created: <strong>{bulkResult.parent_accounts_created}</strong>
-                  {' · '}Already linked: <strong>{bulkResult.already_linked_students + bulkResult.already_linked_parents}</strong>
+                  Activation emails queued: <strong>{bulkResult.sent}</strong>
                 </div>
-                {bulkResult.errors.length > 0 && (
+                {bulkResult.errors?.length > 0 && (
                   <div style={{ marginTop: '6px', color: 'var(--danger-600)', fontSize: '12px' }}>
                     {bulkResult.errors.length} error{bulkResult.errors.length !== 1 ? 's' : ''}:
                     {bulkResult.errors.map((e, i) => <div key={i} style={{ marginLeft: '8px' }}>• {e}</div>)}
                   </div>
                 )}
-                <div style={{ marginTop: '6px', fontSize: '11.5px', color: 'var(--text-tertiary)' }}>
-                  {bulkResult.default_password_note}
-                </div>
               </div>
             )}
 
@@ -733,6 +742,7 @@ function PortalLinkingTab() {
                         <th>Student</th>
                         <th>Student Account</th>
                         <th>Parent Account</th>
+                        <th>Readiness</th>
                         <th style={{ textAlign: 'right' }}>Action</th>
                       </tr>
                     </thead>
@@ -763,9 +773,18 @@ function PortalLinkingTab() {
                               {s.has_parent_account ? '✓ Linked' : '✗ Missing'}
                             </span>
                           </td>
+                          <td style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            Student email: <strong>{s.has_student_email ? 'Yes' : 'No'}</strong><br />
+                            Guardian email: <strong>{s.has_guardian_email ? 'Yes' : 'No'}</strong>
+                            {(s.student_activation_status || s.parent_activation_status) && (
+                              <div style={{ color: 'var(--brand-600)', marginTop: '2px' }}>
+                                {s.student_activation_status || 'not sent'} / {s.parent_activation_status || 'not sent'}
+                              </div>
+                            )}
+                          </td>
                           <td style={{ textAlign: 'right' }}>
                             <button
-                              onClick={() => handleGenerateOne(s.id)}
+                              onClick={() => handleGenerateOne(s)}
                               disabled={generatingFor === s.id}
                               style={{
                                 padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600,
@@ -776,7 +795,7 @@ function PortalLinkingTab() {
                             >
                               {generatingFor === s.id
                                 ? <span className="spinner" style={{ width: '11px', height: '11px' }} />
-                                : 'Generate'
+                                : 'Send OTP'
                               }
                             </button>
                           </td>
@@ -793,7 +812,7 @@ function PortalLinkingTab() {
 
       {/* Explainer */}
       <div style={{ padding: '14px 16px', background: 'var(--brand-50)', border: '1px solid var(--brand-200)', borderRadius: '10px', marginBottom: '16px', fontSize: '13.5px', color: 'var(--brand-700)', lineHeight: 1.6 }}>
-        <strong>How portal linking works:</strong> A student or parent user account must be linked to an actual student record before they can log in and see data. Use "Auto-Generate" above for new deployments, or link individual accounts manually below.
+        <strong>How portal activation works:</strong> Student and parent accounts are created only after OTP verification. Manual linking remains available for audited emergency repair.
       </div>
 
       {/* Link form */}
@@ -855,7 +874,7 @@ function PortalLinkingTab() {
           <EmptyState
             icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>}
             title="No portal accounts yet"
-            description="Use Auto-Generate above, or create student/parent accounts in the Users tab"
+            description="Send activation emails above, or create emergency accounts in the Users tab"
           />
         ) : (
           <div style={{ overflowX: 'auto' }}>

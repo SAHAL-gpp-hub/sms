@@ -14,6 +14,7 @@ venv/
 
 # Test artifacts
 .pytest_cache/
+backend/test_*.db
 fixes/
 sms_bugfixes/
 sms-frontend-improved/

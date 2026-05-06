@@ -49,6 +49,26 @@ class Settings(BaseSettings):
     # only and used as a unique identifier.  Override in .env for production.
     PORTAL_EMAIL_DOMAIN: str = "portal.sms.local"
 
+    # ── Student / parent self-activation ─────────────────────────────────
+    ACTIVATION_TOKEN_EXPIRE_MINUTES: int = 15
+    ACTIVATION_OTP_EXPIRE_MINUTES: int = 10
+    ACTIVATION_RESEND_COOLDOWN_SECONDS: int = 60
+    ACTIVATION_REQUEST_EXPIRE_MINUTES: int = 30
+    ACTIVATION_MAX_OTP_ATTEMPTS: int = 5
+    ACTIVATION_MAX_RESENDS: int = 5
+
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SMTP_FROM_EMAIL: str = "no-reply@school.local"
+    SMTP_FROM_NAME: str = "School Portal"
+    SMTP_USE_TLS: bool = True
+    SMTP_USE_SSL: bool = False
+    SMTP_TIMEOUT_SECONDS: int = 10
+    NOTIFICATION_WORKER_ENABLED: bool = True
+    NOTIFICATION_WORKER_INTERVAL_SECONDS: int = 10
+
     class Config:
         env_file = ".env"
         # Allow extra env vars (e.g. POSTGRES_DB set by docker) without failing

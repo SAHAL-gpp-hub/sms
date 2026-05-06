@@ -156,6 +156,8 @@ def get_current_user(
     )
     try:
         payload  = decode_access_token(token)
+        if payload.get("purpose") not in (None, "access"):
+            raise ValueError("Unsupported token purpose")
         user_id  = int(payload.get("sub"))
         jti      = payload.get("jti")
     except Exception:

@@ -729,6 +729,9 @@ export default function Login() {
             </form>
 
             <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '13px' }}>
+              <Link to="/activate-account" style={{ color: '#0d7377', fontWeight: 800, textDecoration: 'none', marginRight: '14px' }}>
+                Activate account
+              </Link>
               <Link to="/register" style={{ color: '#c84b11', fontWeight: 700, textDecoration: 'none' }}>
                 First-time setup
               </Link>

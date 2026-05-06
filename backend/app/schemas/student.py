@@ -15,7 +15,7 @@ FIXES:
   "Last 4 Digits of Aadhar".
 """
 
-from pydantic import BaseModel, field_validator, validator
+from pydantic import BaseModel, EmailStr, field_validator, validator
 from typing import Optional
 from datetime import date
 from enum import Enum
@@ -39,6 +39,10 @@ class StudentCreate(BaseModel):
     father_name:      str
     mother_name:      Optional[str]  = None
     contact:          str
+    student_email:    Optional[EmailStr] = None
+    student_phone:    Optional[str]  = None
+    guardian_email:   Optional[EmailStr] = None
+    guardian_phone:   Optional[str]  = None
     address:          Optional[str]  = None
     category:         Optional[str]  = None
     # BUG-C FIX: was 'aadhar' (12-digit placeholder) — now aadhar_last4 (4 digits max)
@@ -53,6 +57,25 @@ class StudentCreate(BaseModel):
             raise ValueError("Contact must be a 10-digit number")
         if v.startswith("0"):
             raise ValueError("Contact number must not start with 0")
+        return v
+
+    @field_validator("student_email", "guardian_email")
+    @classmethod
+    def normalize_email(cls, v):
+        return str(v).strip().lower() if v is not None else v
+
+    @field_validator("student_phone", "guardian_phone")
+    @classmethod
+    def validate_optional_phone(cls, v):
+        if v is None:
+            return v
+        v = "".join(ch for ch in v.strip() if ch.isdigit())
+        if v == "":
+            return None
+        if len(v) != 10:
+            raise ValueError("Phone number must be 10 digits")
+        if v.startswith("0"):
+            raise ValueError("Phone number must not start with 0")
         return v
 
     @field_validator("dob")
@@ -94,6 +117,10 @@ class StudentUpdate(BaseModel):
     father_name:   Optional[str]              = None
     mother_name:   Optional[str]              = None
     contact:       Optional[str]              = None
+    student_email: Optional[EmailStr]         = None
+    student_phone: Optional[str]              = None
+    guardian_email: Optional[EmailStr]        = None
+    guardian_phone: Optional[str]             = None
     address:       Optional[str]              = None
     category:      Optional[str]              = None
     status:        Optional[StudentStatusEnum] = None
@@ -111,6 +138,25 @@ class StudentUpdate(BaseModel):
                 raise ValueError("Contact must be a 10-digit number")
             if v.startswith("0"):
                 raise ValueError("Contact number must not start with 0")
+        return v
+
+    @field_validator("student_email", "guardian_email")
+    @classmethod
+    def normalize_email(cls, v):
+        return str(v).strip().lower() if v is not None else v
+
+    @field_validator("student_phone", "guardian_phone")
+    @classmethod
+    def validate_optional_phone(cls, v):
+        if v is None:
+            return v
+        v = "".join(ch for ch in v.strip() if ch.isdigit())
+        if v == "":
+            return None
+        if len(v) != 10:
+            raise ValueError("Phone number must be 10 digits")
+        if v.startswith("0"):
+            raise ValueError("Phone number must not start with 0")
         return v
 
     @field_validator("roll_number")
@@ -153,6 +199,10 @@ class StudentOut(BaseModel):
     father_name:      str
     mother_name:      Optional[str]
     contact:          str
+    student_email:    Optional[str]
+    student_phone:    Optional[str]
+    guardian_email:   Optional[str]
+    guardian_phone:   Optional[str]
     address:          Optional[str]
     category:         Optional[str]
     admission_date:   date

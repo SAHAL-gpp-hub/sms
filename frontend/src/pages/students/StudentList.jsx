@@ -370,7 +370,12 @@ export default function StudentList() {
                           {cls ? `${cls.name} — ${cls.division}` : `Class ${s.class_id}`}
                         </td>
                         <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{s.father_name}</td>
-                        <td><span className="mono" style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>{s.contact}</span></td>
+                        <td>
+                          <span className="mono" style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>{s.contact}</span>
+                          <div style={{ fontSize: '11.5px', color: s.student_email || s.guardian_email ? 'var(--success-600)' : 'var(--warning-600)', marginTop: '2px', fontWeight: 700 }}>
+                            {s.student_email || s.guardian_email ? 'Activation ready' : 'Activation contacts missing'}
+                          </div>
+                        </td>
                         <td><StatusBadge status={s.status} /></td>
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>

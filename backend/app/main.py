@@ -9,7 +9,8 @@ Changes vs original:
 """
 
 import logging
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,10 +32,12 @@ from app.routers import (
     portal,
     report_cards,
     setup,
+    student_auth,
     students,
     yearend,
 )
 from app.routers.auth import get_current_user, limiter
+from app.services.notification_service import run_notification_worker
 
 logger = logging.getLogger("sms")
 logging.basicConfig(
@@ -57,7 +60,20 @@ async def lifespan(app: FastAPI):
             "❌ DATABASE CONNECTION FAILED.\n"
             "   Check DATABASE_URL in .env or docker-compose.yml."
         )
+    app.state.notification_stop_event = asyncio.Event()
+    app.state.notification_worker_task = None
+    if settings.NOTIFICATION_WORKER_ENABLED:
+        app.state.notification_worker_task = asyncio.create_task(
+            run_notification_worker(app.state.notification_stop_event)
+        )
     yield
+    if getattr(app.state, "notification_stop_event", None):
+        app.state.notification_stop_event.set()
+    task = getattr(app.state, "notification_worker_task", None)
+    if task:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
     logger.info("SMS backend shutting down.")
 
 
@@ -82,6 +98,7 @@ app.add_middleware(
 
 # ── Public routes (no auth required) ─────────────────────────────────────────
 app.include_router(auth.router)
+app.include_router(student_auth.router)
 app.include_router(pdf.router)
 app.include_router(yearend.router)   # TC PDF download is public inside this router
 

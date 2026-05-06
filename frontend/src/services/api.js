@@ -111,7 +111,8 @@ api.interceptors.request.use(config => {
 api.interceptors.response.use(
   res => res,
   err => {
-    if (err.response && err.response.status === 401) {
+    const url = err.config?.url || ''
+    if (err.response && err.response.status === 401 && !url.startsWith('/student-auth')) {
       clearToken()
       window.location.href = '/login'
     }
@@ -163,6 +164,14 @@ export const authAPI = {
   registerStatus: () => api.get('/auth/register-status'),
   me:       ()     => api.get('/auth/me'),
   logout:   ()     => api.post('/auth/logout'),
+}
+
+export const studentAuthAPI = {
+  startActivation: (data) => api.post('/student-auth/start-activation', data),
+  resendOtp:      (activationId) => api.post('/student-auth/resend-otp', { activation_id: activationId }),
+  verifyOtp:      (activationId, otp) => api.post('/student-auth/verify-otp', { activation_id: activationId, otp }),
+  completeRegistration: (activationToken, password) =>
+    api.post('/student-auth/complete-registration', { activation_token: activationToken, password }),
 }
 
 // ── Students ──────────────────────────────────────────────────────────────────
@@ -336,6 +345,8 @@ export const adminAPI = {
   bulkGenerate:     (data)   => api.post('/admin/portal/bulk-generate', data),
   generateForStudent: (studentId, params) =>
     api.post(`/admin/portal/generate/${studentId}`, null, { params }),
+  resendActivation: (studentId, accountType) =>
+    api.post(`/admin/portal/resend-activation/${studentId}`, { account_type: accountType }),
 }
 
 // ── Portal ────────────────────────────────────────────────────────────────────

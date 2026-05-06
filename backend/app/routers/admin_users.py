@@ -8,8 +8,9 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_password_hash
-from app.models.base_models import AcademicYear, Class, Student, StudentStatusEnum, Subject, TeacherClassAssignment, User
+from app.models.base_models import AcademicYear, Class, Student, StudentActivationRequest, StudentStatusEnum, Subject, TeacherClassAssignment, User
 from app.routers.auth import CurrentUser, require_role
+from app.services import student_activation_service
 
 
 router = APIRouter(prefix="/api/v1/admin", tags=["Admin Users"])
@@ -338,6 +339,12 @@ class UnlinkedStudentItem(BaseModel):
     class_id: Optional[int]
     has_student_account: bool
     has_parent_account: bool
+    has_student_email: bool = False
+    has_guardian_email: bool = False
+    student_activation_status: Optional[str] = None
+    parent_activation_status: Optional[str] = None
+    failed_activation_attempts: int = 0
+    last_activation_sent_at: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -373,6 +380,17 @@ class SingleGenerateResult(BaseModel):
     parent_email: Optional[str]
     default_password_note: str
     message: str
+
+
+class AdminActivationResendRequest(BaseModel):
+    account_type: str
+
+    @field_validator("account_type")
+    @classmethod
+    def validate_account_type(cls, value: str) -> str:
+        if value not in {"student", "parent"}:
+            raise ValueError("Account type must be student or parent")
+        return value
 
 
 def _make_portal_email(prefix: str, student_id: str, domain: str) -> str:
@@ -481,6 +499,20 @@ def get_link_status(
     total = len(students)
     with_student = sum(1 for s in students if s.student_user_id is not None)
     with_parent = sum(1 for s in students if s.parent_user_id is not None)
+    activation_rows = (
+        db.query(StudentActivationRequest)
+        .filter(StudentActivationRequest.student_id.in_([s.id for s in students]))
+        .order_by(StudentActivationRequest.created_at.desc())
+        .all()
+        if students
+        else []
+    )
+    latest_by_student_type: dict[tuple[int, str], StudentActivationRequest] = {}
+    failed_by_student: dict[int, int] = {}
+    for row in activation_rows:
+        latest_by_student_type.setdefault((row.student_id, row.account_type), row)
+        if row.status in {"failed", "locked"}:
+            failed_by_student[row.student_id] = failed_by_student.get(row.student_id, 0) + 1
     unlinked = [
         UnlinkedStudentItem(
             id=s.id,
@@ -489,6 +521,32 @@ def get_link_status(
             class_id=s.class_id,
             has_student_account=s.student_user_id is not None,
             has_parent_account=s.parent_user_id is not None,
+            has_student_email=bool(s.student_email),
+            has_guardian_email=bool(s.guardian_email),
+            student_activation_status=(
+                latest_by_student_type.get((s.id, "student")).status
+                if latest_by_student_type.get((s.id, "student"))
+                else None
+            ),
+            parent_activation_status=(
+                latest_by_student_type.get((s.id, "parent")).status
+                if latest_by_student_type.get((s.id, "parent"))
+                else None
+            ),
+            failed_activation_attempts=failed_by_student.get(s.id, 0),
+            last_activation_sent_at=str(
+                max(
+                    [
+                        row.created_at
+                        for row in (
+                            latest_by_student_type.get((s.id, "student")),
+                            latest_by_student_type.get((s.id, "parent")),
+                        )
+                        if row is not None
+                    ],
+                    default="",
+                )
+            ) or None,
         )
         for s in students
         if s.student_user_id is None or s.parent_user_id is None
@@ -514,62 +572,10 @@ def bulk_generate_portal_accounts(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_role("admin")),
 ):
-    """
-    Finds every active student that is missing a student and/or parent portal
-    account, creates those User accounts, and auto-links them.
-
-    - Email format: ``student.sms.2026.001@<PORTAL_EMAIL_DOMAIN>``
-    - Default password: student's DOB in DDMMYYYY format
-    - Idempotent: already-linked students are skipped, not duplicated
-    - Optionally filter by academic_year_id
-    """
-    query = db.query(Student).filter(Student.status == StudentStatusEnum.Active)
-    if data.academic_year_id:
-        query = query.filter(Student.academic_year_id == data.academic_year_id)
-    students = query.order_by(Student.id).all()
-
-    result = BulkGenerateResult(
-        student_accounts_created=0,
-        parent_accounts_created=0,
-        already_linked_students=0,
-        already_linked_parents=0,
-        errors=[],
-        default_password_note=(
-            "Default password is the student's date of birth in DDMMYYYY format "
-            "(e.g. 15082010 for 15 Aug 2010). Admins should communicate this to users."
-        ),
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Portal account auto-generation is deprecated. Use activation emails instead.",
     )
-
-    for student in students:
-        try:
-            if data.include_students:
-                email = _create_and_link_student_account(db, student)
-                if email:
-                    result.student_accounts_created += 1
-                else:
-                    result.already_linked_students += 1
-
-            if data.include_parents:
-                email = _create_and_link_parent_account(db, student)
-                if email:
-                    result.parent_accounts_created += 1
-                else:
-                    result.already_linked_parents += 1
-
-            db.commit()
-
-        except HTTPException as exc:
-            db.rollback()
-            result.errors.append(
-                f"Student {student.student_id} ({student.name_en}): {exc.detail}"
-            )
-        except IntegrityError as exc:
-            db.rollback()
-            result.errors.append(
-                f"Student {student.student_id} ({student.name_en}): DB error — {exc.orig}"
-            )
-
-    return result
 
 
 @router.post(
@@ -584,59 +590,33 @@ def generate_portal_accounts_for_student(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_role("admin")),
 ):
-    """
-    Creates missing student and/or parent portal accounts for a single
-    student record and auto-links them.  Same email and password rules as
-    bulk-generate.
-    """
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Portal account auto-generation is deprecated. Send an activation email instead.",
+    )
+
+
+@router.post(
+    "/portal/resend-activation/{student_id}",
+    summary="Send an activation OTP to a student or parent contact",
+)
+def resend_activation_for_student(
+    student_id: int,
+    data: AdminActivationResendRequest,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
     student = db.query(Student).filter_by(id=student_id).first()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
-
-    student_email: Optional[str] = None
-    parent_email:  Optional[str] = None
-    student_created = False
-    parent_created  = False
-
-    try:
-        if include_students:
-            student_email = _create_and_link_student_account(db, student)
-            student_created = student_email is not None
-
-        if include_parents:
-            parent_email = _create_and_link_parent_account(db, student)
-            parent_created = parent_email is not None
-
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(status_code=409, detail=str(exc.orig)) from exc
-
-    parts = []
-    if student_created:
-        parts.append(f"student account created ({student_email})")
-    if parent_created:
-        parts.append(f"parent account created ({parent_email})")
-    if not student_created and not parent_created:
-        parts.append("all requested accounts already exist")
-
-    return SingleGenerateResult(
-        student_account_created=student_created,
-        parent_account_created=parent_created,
-        student_email=student_email or (
-            db.query(User).filter_by(id=student.student_user_id).first().email
-            if student.student_user_id
-            else None
-        ),
-        parent_email=parent_email or (
-            db.query(User).filter_by(id=student.parent_user_id).first().email
-            if student.parent_user_id
-            else None
-        ),
-        default_password_note=(
-            "Default password is the student's date of birth in DDMMYYYY format "
-            "(e.g. 15082010 for 15 Aug 2010)."
-        ),
-        message="; ".join(parts).capitalize() + ".",
+    email = student.student_email if data.account_type == "student" else student.guardian_email
+    if not email:
+        raise HTTPException(status_code=422, detail=f"{data.account_type.title()} email is missing for this student")
+    return student_activation_service.start_activation(
+        db,
+        student.student_id,
+        email,
+        data.account_type,
+        None,
+        "admin-resend",
     )
-

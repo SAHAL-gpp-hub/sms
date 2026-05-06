@@ -8,6 +8,7 @@ import Layout from './components/Layout'
 import PortalLayout from './layouts/PortalLayout'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import ActivateAccount from './pages/ActivateAccount'
 import Dashboard from './pages/Dashboard'
 import EnrollmentManager from './pages/enrollments/EnrollmentManager'
 import StudentList from './pages/students/StudentList'
@@ -68,6 +69,10 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/activate-account" element={<ActivateAccount />} />
+        <Route path="/activate-account/verify" element={<ActivateAccount />} />
+        <Route path="/activate-account/password" element={<ActivateAccount />} />
+        <Route path="/activate-account/success" element={<ActivateAccount />} />
         <Route path="/unauthorized" element={<Unauthorized />} />
 
         {/* ── Admin / Teacher panel ── */}

@@ -44,6 +44,8 @@ const EMPTY_FORM = {
   name_en: '', name_gu: '', dob: '', gender: 'M',
   class_id: '', roll_number: '', gr_number: '',
   father_name: '', mother_name: '', contact: '',
+  student_email: '', student_phone: '',
+  guardian_email: '', guardian_phone: '',
   address: '', category: 'GEN', aadhar_last4: '',
   admission_date: new Date().toISOString().split('T')[0],
   academic_year_id: '', status: 'Active',
@@ -84,6 +86,8 @@ export default function StudentForm() {
           class_id: String(s.class_id) || '', roll_number: s.roll_number != null ? String(s.roll_number) : '',
           gr_number: s.gr_number || '', father_name: s.father_name || '',
           mother_name: s.mother_name || '', contact: s.contact || '',
+          student_email: s.student_email || '', student_phone: s.student_phone || '',
+          guardian_email: s.guardian_email || '', guardian_phone: s.guardian_phone || '',
           address: s.address || '', category: s.category || 'GEN',
           aadhar_last4: s.aadhar_last4 || '',
           admission_date: s.admission_date || '',
@@ -116,6 +120,10 @@ export default function StudentForm() {
     if (!form.admission_date)       e.admission_date = 'Admission date is required'
     if (!form.contact || !/^\d{10}$/.test(form.contact)) e.contact = 'Must be exactly 10 digits'
     else if (form.contact.startsWith('0')) e.contact = 'Cannot start with 0'
+    if (form.student_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.student_email)) e.student_email = 'Enter a valid email'
+    if (form.guardian_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.guardian_email)) e.guardian_email = 'Enter a valid email'
+    if (form.student_phone && !/^\d{10}$/.test(form.student_phone)) e.student_phone = 'Must be exactly 10 digits'
+    if (form.guardian_phone && !/^\d{10}$/.test(form.guardian_phone)) e.guardian_phone = 'Must be exactly 10 digits'
     if (form.roll_number && parseInt(form.roll_number) <= 0) e.roll_number = 'Must be greater than 0'
     if (form.aadhar_last4 && (!/^\d{1,4}$/.test(form.aadhar_last4))) e.aadhar_last4 = 'Must be up to 4 numeric digits'
     if (form.dob && new Date(form.dob) > new Date()) e.dob = 'Cannot be in the future'
@@ -133,6 +141,10 @@ export default function StudentForm() {
         academic_year_id: parseInt(form.academic_year_id),
         roll_number: form.roll_number ? parseInt(form.roll_number) : null,
         aadhar_last4: form.aadhar_last4 || null,
+        student_email: form.student_email.trim().toLowerCase() || null,
+        student_phone: form.student_phone || null,
+        guardian_email: form.guardian_email.trim().toLowerCase() || null,
+        guardian_phone: form.guardian_phone || null,
         previous_school: form.previous_school || null,
         reason_for_leaving: form.reason_for_leaving || null,
       }
@@ -259,6 +271,52 @@ export default function StudentForm() {
               const val = e.target.value.replace(/\D/g, '').slice(0, 10)
               setForm(f => ({ ...f, contact: val }))
               setErrors(prev => ({ ...prev, contact: undefined }))
+            }}
+            placeholder="9876543210"
+            maxLength={10}
+            inputMode="tel"
+          />
+        </Field>
+        <Field label="Student Email" error={errors.student_email} hint="Used for student account activation">
+          <input
+            type="email"
+            className={`input${errors.student_email ? ' error' : ''}`}
+            value={form.student_email}
+            onChange={setField('student_email')}
+            placeholder="student@example.com"
+          />
+        </Field>
+        <Field label="Student WhatsApp" error={errors.student_phone} hint="Future WhatsApp OTP support">
+          <input
+            className={`input${errors.student_phone ? ' error' : ''}`}
+            value={form.student_phone}
+            onChange={e => {
+              const val = e.target.value.replace(/\D/g, '').slice(0, 10)
+              setForm(f => ({ ...f, student_phone: val }))
+              setErrors(prev => ({ ...prev, student_phone: undefined }))
+            }}
+            placeholder="9876543210"
+            maxLength={10}
+            inputMode="tel"
+          />
+        </Field>
+        <Field label="Guardian Email" error={errors.guardian_email} hint="Used for parent account activation">
+          <input
+            type="email"
+            className={`input${errors.guardian_email ? ' error' : ''}`}
+            value={form.guardian_email}
+            onChange={setField('guardian_email')}
+            placeholder="parent@example.com"
+          />
+        </Field>
+        <Field label="Guardian WhatsApp" error={errors.guardian_phone} hint="Future WhatsApp OTP support">
+          <input
+            className={`input${errors.guardian_phone ? ' error' : ''}`}
+            value={form.guardian_phone}
+            onChange={e => {
+              const val = e.target.value.replace(/\D/g, '').slice(0, 10)
+              setForm(f => ({ ...f, guardian_phone: val }))
+              setErrors(prev => ({ ...prev, guardian_phone: undefined }))
             }}
             placeholder="9876543210"
             maxLength={10}
