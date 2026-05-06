@@ -330,6 +330,12 @@ export const adminAPI = {
 
   linkStudent:        (data) => api.post('/admin/portal/link-student', data),
   listPortalAccounts: ()     => api.get('/admin/portal/accounts'),
+
+  // Auto-generation endpoints
+  getLinkStatus:    (params) => api.get('/admin/portal/link-status', { params }),
+  bulkGenerate:     (data)   => api.post('/admin/portal/bulk-generate', data),
+  generateForStudent: (studentId, params) =>
+    api.post(`/admin/portal/generate/${studentId}`, null, { params }),
 }
 
 // ── Portal ────────────────────────────────────────────────────────────────────

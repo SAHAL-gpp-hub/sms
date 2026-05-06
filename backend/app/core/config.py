@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     # first admin account). Disable immediately after.
     REGISTRATION_ENABLED: bool = False
 
+    # ── Portal account auto-generation ───────────────────────────────────
+    # Domain used when auto-generating portal account email addresses.
+    # Email format: student.sms.2026.001@<PORTAL_EMAIL_DOMAIN>
+    # This domain does not need to be resolvable — it is stored in the DB
+    # only and used as a unique identifier.  Override in .env for production.
+    PORTAL_EMAIL_DOMAIN: str = "portal.sms.local"
+
     class Config:
         env_file = ".env"
         # Allow extra env vars (e.g. POSTGRES_DB set by docker) without failing
