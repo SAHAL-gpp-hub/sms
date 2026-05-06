@@ -332,6 +332,8 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
             ),
         )
 
+    # Defense-in-depth: also reject a duplicate email (shouldn't be reachable
+    # after the first-user check above, but kept as an explicit safety net).
     existing = db.query(User).filter_by(email=data.email).first()
     if existing:
         raise HTTPException(
