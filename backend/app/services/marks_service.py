@@ -21,7 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from app.models.base_models import (
-    Subject, Exam, Mark, Student, Class, StudentStatusEnum,
+    Subject, Exam, Mark, Student, Class, StudentStatusEnum, Enrollment,
     ExamSubjectConfig,
 )
 from app.schemas.marks import (
@@ -65,7 +65,7 @@ CLASS_ORDER = ["Nursery", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", 
 
 
 def get_grade(percentage: Decimal):
-    pct = float(percentage)
+    pct = min(float(percentage), 100.0)
     for low, high, grade, gp, remark in GSEB_GRADES:
         if low <= pct <= high:
             return grade, round(float(gp), 1), remark
@@ -111,7 +111,6 @@ def upsert_exam_subject_configs(
             raise ValueError(f"Subject {cfg.subject_id} does not belong to class {exam.class_id}")
     try:
         db.query(ExamSubjectConfig).filter_by(exam_id=exam_id).delete()
-        db.flush()
         saved = []
         for cfg in configs:
             row = ExamSubjectConfig(
@@ -122,6 +121,7 @@ def upsert_exam_subject_configs(
             )
             db.add(row)
             saved.append(row)
+        db.flush()
         db.commit()
         for row in saved:
             db.refresh(row)
@@ -272,10 +272,21 @@ def bulk_save_marks(db: Session, entries: list[MarkEntry]):
     This enforces year-end immutability after lock_marks_for_year() is called.
     """
     for entry in entries:
+        student = db.query(Student).filter_by(id=entry.student_id).first()
+        subject = db.query(Subject).filter_by(id=entry.subject_id).first()
+        exam = db.query(Exam).filter_by(id=entry.exam_id).first()
+        if student is None:
+            raise ValueError(f"Student {entry.student_id} not found")
+        if subject is None:
+            raise ValueError(f"Subject {entry.subject_id} not found")
+        if exam is None:
+            raise ValueError(f"Exam {entry.exam_id} not found")
+        if student.class_id != exam.class_id:
+            raise ValueError(f"Student {student.id} does not belong to exam class {exam.class_id}")
+        if subject.class_id != exam.class_id:
+            raise ValueError(f"Subject {subject.id} does not belong to exam class {exam.class_id}")
+
         if not entry.is_absent and entry.theory_marks is not None:
-            subject = db.query(Subject).filter_by(id=entry.subject_id).first()
-            if subject is None:
-                raise ValueError(f"Subject {entry.subject_id} not found")
             if entry.theory_marks < 0:
                 raise ValueError("Theory marks cannot be negative")
             if entry.practical_marks is not None and entry.practical_marks < 0:
@@ -319,14 +330,24 @@ def bulk_save_marks(db: Session, entries: list[MarkEntry]):
     return {"saved": len(entries)}
 
 
-def get_marks(db: Session, exam_id: int, class_id: int):
+def get_marks(db: Session, exam_id: int, class_id: int, subject_ids: Optional[list[int]] = None):
+    exam = db.query(Exam).filter_by(id=exam_id).first()
+    student_ids = []
+    if exam and exam.academic_year_id:
+        student_ids = [
+            r[0] for r in db.query(Enrollment.student_id).filter_by(
+                class_id=class_id, academic_year_id=exam.academic_year_id
+            ).all()
+        ]
     students = (
-        db.query(Student)
-        .filter_by(class_id=class_id)
-        .filter(Student.status == StudentStatusEnum.Active)
-        .all()
+        db.query(Student).filter(Student.id.in_(student_ids)).all()
+        if student_ids
+        else db.query(Student).filter_by(class_id=class_id).filter(Student.status == StudentStatusEnum.Active).all()
     )
     subjects    = get_subjects(db, class_id)
+    if subject_ids is not None:
+        allowed = set(subject_ids)
+        subjects = [s for s in subjects if s.id in allowed]
     subject_ids = [s.id for s in subjects]
     marks       = (
         db.query(Mark)
@@ -371,11 +392,18 @@ def get_marks(db: Session, exam_id: int, class_id: int):
 
 
 def get_class_results(db: Session, exam_id: int, class_id: int):
+    exam = db.query(Exam).filter_by(id=exam_id).first()
+    student_ids = []
+    if exam and exam.academic_year_id:
+        student_ids = [
+            r[0] for r in db.query(Enrollment.student_id).filter_by(
+                class_id=class_id, academic_year_id=exam.academic_year_id
+            ).all()
+        ]
     students = (
-        db.query(Student)
-        .filter_by(class_id=class_id)
-        .filter(Student.status == StudentStatusEnum.Active)
-        .all()
+        db.query(Student).filter(Student.id.in_(student_ids)).all()
+        if student_ids
+        else db.query(Student).filter_by(class_id=class_id).filter(Student.status == StudentStatusEnum.Active).all()
     )
     subjects = get_subjects(db, class_id)
     marks    = db.query(Mark).filter_by(exam_id=exam_id).all()

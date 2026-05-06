@@ -1,26 +1,45 @@
 // frontend/src/pages/portal/PortalAttendance.jsx
+// Rebuilt with:
+//   1. Calendar-aware working day count (backend now uses holiday calendar,
+//      not hardcoded Sunday exclusion — the denominator is now correct)
+//   2. Child-aware — parents see data for selectedChildId automatically
+//   3. Monthly calendar heatmap with colour-coded day cells
+//   4. Year-over-year navigation
+//   5. Low attendance warning banner (< 75%)
+//   6. Full monthly summary stats with progress bar
+
 import { useState, useEffect } from 'react'
 import { usePortalContext } from '../../layouts/PortalLayout'
 import { portalAPI } from '../../services/api'
 
-const MONTHS = ['January','February','March','April','May','June',
-                'July','August','September','October','November','December']
-const DAYS   = ['Mo','Tu','We','Th','Fr','Sa','Su']
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────────────────
+const MONTHS = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December',
+]
+const DAYS = ['Mo','Tu','We','Th','Fr','Sa','Su']
 
 const STATUS_META = {
-  P:  { color:'#16a34a', bg:'#dcfce7', label:'Present' },
-  A:  { color:'#dc2626', bg:'#fee2e2', label:'Absent'  },
-  L:  { color:'#d97706', bg:'#fef3c7', label:'Late'    },
-  OL: { color:'#2563eb', bg:'#dbeafe', label:'Leave'   },
+  P:  { color: '#16a34a', bg: '#dcfce7', border: '#bbf7d0', label: 'Present' },
+  A:  { color: '#dc2626', bg: '#fee2e2', border: '#fecaca', label: 'Absent'  },
+  L:  { color: '#d97706', bg: '#fef3c7', border: '#fde68a', label: 'Late'    },
+  OL: { color: '#2563eb', bg: '#dbeafe', border: '#bfdbfe', label: 'Leave'   },
 }
 
-function CalendarView({ year, month, records }) {
+// ─────────────────────────────────────────────────────────────────────────────
+// Calendar grid — colour-coded day cells
+// ─────────────────────────────────────────────────────────────────────────────
+function CalendarGrid({ year, month, records }) {
+  // Build a date → status map
   const recordMap = {}
-  records.forEach(r => { recordMap[r.date] = r.status })
+  records.forEach(r => { if (r.date) recordMap[r.date] = r.status })
 
   const firstDay    = new Date(year, month - 1, 1)
   const daysInMonth = new Date(year, month, 0).getDate()
-  let startOffset   = firstDay.getDay() - 1
+  // Monday-first offset (0=Mon … 6=Sun)
+  let startOffset = firstDay.getDay() - 1
   if (startOffset < 0) startOffset = 6
 
   const cells = []
@@ -31,26 +50,53 @@ function CalendarView({ year, month, records }) {
 
   return (
     <div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'3px', marginBottom:'5px' }}>
+      {/* Day headers */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)',
+        gap: 3, marginBottom: 5,
+      }}>
         {DAYS.map(d => (
-          <div key={d} style={{ textAlign:'center', fontSize:'10px', fontWeight:800, color:'#94a3b8', padding:'3px 0' }}>{d}</div>
+          <div key={d} style={{
+            textAlign: 'center', fontSize: 10, fontWeight: 800,
+            color: '#94a3b8', padding: '3px 0',
+          }}>
+            {d}
+          </div>
         ))}
       </div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'3px' }}>
+
+      {/* Day cells */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
         {cells.map((day, i) => {
-          if (!day) return <div key={i} />
-          const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`
+          if (!day) return <div key={`e-${i}`} />
+          const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
           const status  = recordMap[dateStr]
           const meta    = STATUS_META[status]
           const isToday = dateStr === todayStr
+
           return (
-            <div key={i} style={{
-              aspectRatio:'1/1', display:'flex', alignItems:'center', justifyContent:'center',
-              borderRadius:'7px', fontSize:'11.5px', fontWeight:700, minHeight:'32px',
-              background: meta ? meta.bg : isToday ? '#f0f7f7' : 'transparent',
-              color:      meta ? meta.color : isToday ? '#0d7377' : '#64748b',
-              border:     isToday && !meta ? '1.5px solid #0d7377' : 'none',
-            }}>
+            <div
+              key={dateStr}
+              title={status ? `${STATUS_META[status]?.label}` : dateStr}
+              style={{
+                aspectRatio: '1/1',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                borderRadius: 8, fontSize: 11.5, fontWeight: 700,
+                minHeight: 32,
+                background: meta
+                  ? meta.bg
+                  : isToday ? '#f0f7f7' : 'transparent',
+                color: meta
+                  ? meta.color
+                  : isToday ? '#0d7377' : '#64748b',
+                border: isToday && !meta
+                  ? '1.5px solid #0d7377'
+                  : meta
+                    ? `1px solid ${meta.border}`
+                    : '1px solid transparent',
+                transition: 'transform 0.1s',
+              }}
+            >
               {day}
             </div>
           )
@@ -60,19 +106,44 @@ function CalendarView({ year, month, records }) {
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Shimmer skeleton
+// ─────────────────────────────────────────────────────────────────────────────
+function Shimmer({ h = '80px', r = '14px' }) {
+  return (
+    <div style={{
+      height: h, borderRadius: r,
+      background: 'linear-gradient(90deg, #f0f7f7 25%, #e0eded 50%, #f0f7f7 75%)',
+      backgroundSize: '200% auto',
+      animation: 'portalShimmer 1.5s linear infinite',
+    }} />
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main component
+// ─────────────────────────────────────────────────────────────────────────────
 export default function PortalAttendance() {
-  const { role, selectedChildId } = usePortalContext()
+  const { role, profile, selectedChildId } = usePortalContext()
   const isParent = role === 'parent'
 
   const now = new Date()
   const [year,    setYear]    = useState(now.getFullYear())
   const [month,   setMonth]   = useState(now.getMonth() + 1)
-  const [records, setRecords] = useState([])
+  const [records, setRecords] = useState([])   // all records for this student
   const [loading, setLoading] = useState(true)
+  const [error,   setError]   = useState(false)
 
-  // Reload when selected child changes
+  // ── Fetch attendance records ───────────────────────────────────────────────
+  // The backend now returns daily records. Working-day denominator is computed
+  // from the academic calendar (holiday-aware) — we just count P records here
+  // and show percentage against the total records in that month (which already
+  // excludes Sundays and holidays on the backend's attendance marking side).
   useEffect(() => {
-    setLoading(true); setRecords([])
+    setLoading(true)
+    setError(false)
+    setRecords([])
+
     const req = isParent && selectedChildId
       ? portalAPI.getChildAttendance(selectedChildId)
       : !isParent
@@ -80,20 +151,13 @@ export default function PortalAttendance() {
         : null
 
     if (!req) { setLoading(false); return }
-    req.then(r => { setRecords(r.data || []); setLoading(false) })
-       .catch(() => setLoading(false))
+
+    req
+      .then(r => { setRecords(r.data || []); setLoading(false) })
+      .catch(() => { setError(true); setLoading(false) })
   }, [isParent, selectedChildId])
 
-  const monthStr    = `${year}-${String(month).padStart(2,'0')}`
-  const monthRecs   = records.filter(r => r.date && r.date.startsWith(monthStr))
-
-  const present = monthRecs.filter(r => r.status === 'P').length
-  const absent  = monthRecs.filter(r => r.status === 'A').length
-  const late    = monthRecs.filter(r => r.status === 'L').length
-  const leave   = monthRecs.filter(r => r.status === 'OL').length
-  const total   = monthRecs.length
-  const pct     = total > 0 ? ((present / total) * 100).toFixed(1) : null
-
+  // ── Month navigation ───────────────────────────────────────────────────────
   const isThisMonth = year === now.getFullYear() && month === now.getMonth() + 1
 
   const prevMonth = () => {
@@ -106,112 +170,331 @@ export default function PortalAttendance() {
     else setMonth(m => m + 1)
   }
 
+  // ── Filter records to this month ──────────────────────────────────────────
+  const monthStr  = `${year}-${String(month).padStart(2, '0')}`
+  const monthRecs = records.filter(r => r.date?.startsWith(monthStr))
+
+  const present  = monthRecs.filter(r => r.status === 'P').length
+  const absent   = monthRecs.filter(r => r.status === 'A').length
+  const late     = monthRecs.filter(r => r.status === 'L').length
+  const onLeave  = monthRecs.filter(r => r.status === 'OL').length
+  const total    = monthRecs.length
+
+  // Percentage: present / total-marked-days (backend already excludes holidays
+  // and Sundays when marking attendance, so total = working days marked)
+  const pct = total > 0 ? ((present / total) * 100).toFixed(1) : null
+  const isLow = pct !== null && parseFloat(pct) < 75
+
+  // ── Overall (all-time) stats ───────────────────────────────────────────────
+  const allPresent = records.filter(r => r.status === 'P').length
+  const allTotal   = records.length
+  const allPct     = allTotal > 0 ? ((allPresent / allTotal) * 100).toFixed(1) : null
+
+  const displayName = profile?.name_en?.split(' ')[0] || (isParent ? 'Student' : 'Student')
+
   return (
     <>
-      <style>{`@keyframes portalShimmer{0%{background-position:-200% center}100%{background-position:200% center}}`}</style>
+      <style>{`
+        @keyframes portalShimmer {
+          0%   { background-position: -200% center; }
+          100% { background-position:  200% center; }
+        }
+      `}</style>
 
-      <div style={{ marginBottom:'14px' }}>
-        <h2 style={{ fontSize:'18px', fontWeight:900, color:'#0f172a', letterSpacing:'-0.02em' }}>Attendance</h2>
-        <p style={{ fontSize:'12.5px', color:'#64748b', marginTop:'2px', fontWeight:600 }}>Monthly calendar view</p>
+      {/* Page title */}
+      <div style={{ marginBottom: 14 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em' }}>
+          Attendance
+        </h2>
+        <p style={{ fontSize: 12.5, color: '#64748b', marginTop: 2, fontWeight: 600 }}>
+          {isParent && selectedChildId ? `${displayName}'s attendance` : 'Monthly calendar view'}
+        </p>
       </div>
 
-      {/* Calendar card */}
-      <div style={{ background:'white', borderRadius:'16px', padding:'14px 16px', marginBottom:'12px', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
-        {/* Month nav */}
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'14px' }}>
-          <button onClick={prevMonth} style={{ width:'34px', height:'34px', borderRadius:'10px', border:'1px solid #e2e8f0', background:'white', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'#64748b', touchAction:'manipulation' }}>
-            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-          </button>
-          <div style={{ textAlign:'center' }}>
-            <div style={{ fontSize:'16px', fontWeight:900, color:'#0f172a' }}>{MONTHS[month-1]} {year}</div>
-            {!loading && pct != null && (
-              <div style={{ fontSize:'13px', fontWeight:800, color: parseFloat(pct) >= 75 ? '#16a34a':'#dc2626', marginTop:'2px' }}>
-                {pct}% attendance
+      {/* Parent — no child selected */}
+      {isParent && !selectedChildId && (
+        <div style={{ textAlign: 'center', padding: '40px 20px', background: 'white', borderRadius: 16 }}>
+          <div style={{ fontSize: 36, marginBottom: 10 }}>👆</div>
+          <div style={{ fontWeight: 700, color: '#0f172a' }}>Select a student</div>
+          <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 4 }}>
+            Tap the switch button in the header to choose a student
+          </div>
+        </div>
+      )}
+
+      {((!isParent) || (isParent && selectedChildId)) && (
+        <>
+          {/* ── Overall stats strip ── */}
+          {!loading && allPct !== null && (
+            <div style={{
+              background: 'white', borderRadius: 14, padding: '12px 16px',
+              marginBottom: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+              display: 'flex', alignItems: 'center', gap: 12,
+            }}>
+              {/* Donut-style ring */}
+              <div style={{ position: 'relative', width: 54, height: 54, flexShrink: 0 }}>
+                <svg width="54" height="54" viewBox="0 0 54 54">
+                  <circle cx="27" cy="27" r="22" fill="none" stroke="#f0f7f7" strokeWidth="6" />
+                  <circle
+                    cx="27" cy="27" r="22" fill="none"
+                    stroke={parseFloat(allPct) >= 75 ? '#16a34a' : '#dc2626'}
+                    strokeWidth="6"
+                    strokeDasharray={`${(parseFloat(allPct) / 100) * 138.2} 138.2`}
+                    strokeLinecap="round"
+                    transform="rotate(-90 27 27)"
+                  />
+                </svg>
+                <div style={{
+                  position: 'absolute', inset: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 11, fontWeight: 900,
+                  color: parseFloat(allPct) >= 75 ? '#16a34a' : '#dc2626',
+                }}>
+                  {allPct}%
+                </div>
               </div>
-            )}
-          </div>
-          <button onClick={nextMonth} disabled={isThisMonth} style={{ width:'34px', height:'34px', borderRadius:'10px', border:'1px solid #e2e8f0', background:'white', cursor: isThisMonth ? 'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', color: isThisMonth ? '#cbd5e1':'#64748b', touchAction:'manipulation' }}>
-            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-          </button>
-        </div>
-
-        {loading ? (
-          <div style={{ height:'200px', borderRadius:'10px', background:'linear-gradient(90deg,#f0f7f7 25%,#e0eded 50%,#f0f7f7 75%)', backgroundSize:'200% auto', animation:'portalShimmer 1.5s linear infinite' }} />
-        ) : (
-          <CalendarView year={year} month={month} records={monthRecs} />
-        )}
-      </div>
-
-      {/* Summary stats */}
-      <div style={{ background:'white', borderRadius:'16px', padding:'14px 16px', marginBottom:'12px', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
-        <div style={{ fontSize:'10.5px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'10px' }}>
-          {MONTHS[month-1]} Summary
-        </div>
-
-        {total === 0 && !loading ? (
-          <div style={{ textAlign:'center', padding:'16px 0', color:'#94a3b8', fontSize:'13px', fontWeight:600 }}>
-            No attendance records for this month
-          </div>
-        ) : (
-          <>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px' }}>
-              {[
-                { key:'P',  label:'Present', count:present },
-                { key:'A',  label:'Absent',  count:absent  },
-                { key:'L',  label:'Late',    count:late    },
-                { key:'OL', label:'Leave',   count:leave   },
-              ].map(s => {
-                const meta = STATUS_META[s.key]
-                return (
-                  <div key={s.key} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px', borderRadius:'10px', background: meta.bg + '55' }}>
-                    <div style={{ width:'10px', height:'10px', borderRadius:'50%', background:meta.color, flexShrink:0 }} />
-                    <div>
-                      <div style={{ fontSize:'10px', fontWeight:700, color:meta.color, textTransform:'uppercase', letterSpacing:'0.04em' }}>{s.label}</div>
-                      <div style={{ fontSize:'18px', fontWeight:900, color:'#0f172a', lineHeight:1.1 }}>{s.count}</div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            {pct != null && (
               <div>
-                <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', fontWeight:700, color:'#64748b', marginBottom:'5px' }}>
-                  <span>Attendance rate</span>
-                  <span style={{ color: parseFloat(pct) >= 75 ? '#16a34a':'#dc2626' }}>{pct}%</span>
+                <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>
+                  Overall Attendance
                 </div>
-                <div style={{ height:'8px', background:'#f1f5f9', borderRadius:'4px', overflow:'hidden' }}>
-                  <div style={{
-                    height:'100%', borderRadius:'4px', transition:'width 0.6s ease',
-                    width:`${Math.min(parseFloat(pct), 100)}%`,
-                    background: parseFloat(pct) >= 75
-                      ? 'linear-gradient(90deg,#16a34a,#22c55e)'
-                      : 'linear-gradient(90deg,#dc2626,#f87171)',
-                  }} />
+                <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600, marginTop: 2 }}>
+                  {allPresent} present out of {allTotal} school days
                 </div>
-                {parseFloat(pct) < 75 && (
-                  <div style={{ marginTop:'8px', padding:'8px 10px', borderRadius:'8px', background:'#fee2e2', fontSize:'11.5px', fontWeight:700, color:'#b91c1c' }}>
-                    ⚠️ Below 75% minimum requirement
+                {parseFloat(allPct) < 75 && (
+                  <div style={{ fontSize: 11, fontWeight: 800, color: '#b91c1c', marginTop: 4 }}>
+                    ⚠️ Below 75% minimum
                   </div>
                 )}
               </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* Legend */}
-      <div style={{ background:'white', borderRadius:'16px', padding:'12px 16px', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
-        <div style={{ fontSize:'10.5px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'8px' }}>Legend</div>
-        <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-          {Object.entries(STATUS_META).map(([key, meta]) => (
-            <div key={key} style={{ display:'flex', alignItems:'center', gap:'6px' }}>
-              <div style={{ width:'20px', height:'20px', borderRadius:'6px', background:meta.bg, border:`1.5px solid ${meta.color}40`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'9px', fontWeight:800, color:meta.color }}>{key}</div>
-              <span style={{ fontSize:'12px', fontWeight:600, color:'#475569' }}>{meta.label}</span>
             </div>
-          ))}
-        </div>
-      </div>
+          )}
+          {loading && <Shimmer h="78px" r="14px" />}
+
+          {/* ── Calendar card ── */}
+          <div style={{
+            background: 'white', borderRadius: 16, padding: '14px 16px',
+            marginBottom: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+          }}>
+            {/* Month navigator */}
+            <div style={{
+              display: 'flex', alignItems: 'center',
+              justifyContent: 'space-between', marginBottom: 14,
+            }}>
+              <button
+                onClick={prevMonth}
+                style={{
+                  width: 34, height: 34, borderRadius: 10,
+                  border: '1px solid #e2e8f0', background: 'white',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', color: '#64748b', touchAction: 'manipulation',
+                }}
+              >
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 16, fontWeight: 900, color: '#0f172a' }}>
+                  {MONTHS[month - 1]} {year}
+                </div>
+                {!loading && pct !== null && (
+                  <div style={{
+                    fontSize: 13, fontWeight: 800, marginTop: 2,
+                    color: isLow ? '#dc2626' : '#16a34a',
+                  }}>
+                    {pct}% this month
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={nextMonth}
+                disabled={isThisMonth}
+                style={{
+                  width: 34, height: 34, borderRadius: 10,
+                  border: '1px solid #e2e8f0', background: 'white',
+                  cursor: isThisMonth ? 'default' : 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: isThisMonth ? '#cbd5e1' : '#64748b',
+                  touchAction: 'manipulation',
+                }}
+              >
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+
+            {loading ? (
+              <Shimmer h="200px" r="10px" />
+            ) : error ? (
+              <div style={{ textAlign: 'center', padding: '20px 0', color: '#94a3b8', fontSize: 13 }}>
+                Could not load attendance data
+              </div>
+            ) : (
+              <CalendarGrid year={year} month={month} records={monthRecs} />
+            )}
+          </div>
+
+          {/* ── Low attendance warning ── */}
+          {!loading && isLow && (
+            <div style={{
+              background: '#fee2e2', border: '1px solid #fecaca', borderRadius: 12,
+              padding: '12px 14px', marginBottom: 12,
+              display: 'flex', alignItems: 'flex-start', gap: 10,
+            }}>
+              <span style={{ fontSize: 18, flexShrink: 0 }}>⚠️</span>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: '#b91c1c' }}>
+                  Low attendance — {pct}%
+                </div>
+                <div style={{ fontSize: 12, color: '#dc2626', marginTop: 3, lineHeight: 1.5 }}>
+                  Minimum required is 75%. Please contact the school if there is a valid reason for absences.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Monthly summary stats ── */}
+          <div style={{
+            background: 'white', borderRadius: 16, padding: '14px 16px',
+            marginBottom: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+          }}>
+            <div style={{
+              fontSize: 10.5, fontWeight: 800, color: '#94a3b8',
+              textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10,
+            }}>
+              {MONTHS[month - 1]} Summary
+            </div>
+
+            {loading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {[1, 2, 3, 4].map(i => <Shimmer key={i} h="44px" r="10px" />)}
+              </div>
+            ) : total === 0 ? (
+              <div style={{ textAlign: 'center', padding: '16px 0', color: '#94a3b8', fontSize: 13, fontWeight: 600 }}>
+                No attendance records for {MONTHS[month - 1]}
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
+                  {[
+                    { key: 'P',  label: 'Present', count: present  },
+                    { key: 'A',  label: 'Absent',  count: absent   },
+                    { key: 'L',  label: 'Late',    count: late     },
+                    { key: 'OL', label: 'Leave',   count: onLeave  },
+                  ].map(s => {
+                    const meta = STATUS_META[s.key]
+                    return (
+                      <div key={s.key} style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '10px 12px', borderRadius: 10,
+                        background: `${meta.bg}55`,
+                        border: `1px solid ${meta.border}`,
+                      }}>
+                        <div style={{
+                          width: 10, height: 10, borderRadius: '50%',
+                          background: meta.color, flexShrink: 0,
+                        }} />
+                        <div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: meta.color, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            {s.label}
+                          </div>
+                          <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', lineHeight: 1.1 }}>
+                            {s.count}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Progress bar */}
+                {pct !== null && (
+                  <div>
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between',
+                      fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 5,
+                    }}>
+                      <span>{present} present of {total} school days</span>
+                      <span style={{ color: isLow ? '#dc2626' : '#16a34a' }}>{pct}%</span>
+                    </div>
+                    <div style={{ height: 8, background: '#f1f5f9', borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{
+                        height: '100%', borderRadius: 4,
+                        transition: 'width 0.6s ease',
+                        width: `${Math.min(parseFloat(pct), 100)}%`,
+                        background: isLow
+                          ? 'linear-gradient(90deg, #dc2626, #f87171)'
+                          : 'linear-gradient(90deg, #16a34a, #22c55e)',
+                      }} />
+                    </div>
+                    {/* 75% threshold marker */}
+                    <div style={{ position: 'relative', height: 12 }}>
+                      <div style={{
+                        position: 'absolute', left: '75%',
+                        top: 0, bottom: 0,
+                        borderLeft: '1.5px dashed #94a3b8',
+                      }} />
+                      <span style={{
+                        position: 'absolute', left: '75%',
+                        top: 2, fontSize: 9, fontWeight: 700,
+                        color: '#94a3b8', paddingLeft: 3, whiteSpace: 'nowrap',
+                      }}>
+                        75% min
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* ── Legend ── */}
+          <div style={{
+            background: 'white', borderRadius: 16, padding: '12px 16px',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+          }}>
+            <div style={{
+              fontSize: 10.5, fontWeight: 800, color: '#94a3b8',
+              textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8,
+            }}>
+              Legend
+            </div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              {Object.entries(STATUS_META).map(([key, meta]) => (
+                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{
+                    width: 22, height: 22, borderRadius: 6,
+                    background: meta.bg, border: `1.5px solid ${meta.border}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 9, fontWeight: 800, color: meta.color,
+                  }}>
+                    {key}
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>
+                    {meta.label}
+                  </span>
+                </div>
+              ))}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{
+                  width: 22, height: 22, borderRadius: 6,
+                  background: 'transparent', border: '1.5px dashed #94a3b8',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 9, fontWeight: 800, color: '#94a3b8',
+                }}>
+                  —
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>
+                  Not marked / holiday
+                </span>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </>
   )
 }

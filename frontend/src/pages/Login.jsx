@@ -90,6 +90,8 @@ export default function Login() {
         name: r.data.user_name,
         role: r.data.role,
         assignedClassIds: r.data.assigned_class_ids || [],
+        classTeacherClassIds: r.data.class_teacher_class_ids || [],
+        subjectAssignments: r.data.subject_assignments || [],
         linkedStudentId: r.data.linked_student_id || null,
         linkedStudentIds: r.data.linked_student_ids || [],
       })

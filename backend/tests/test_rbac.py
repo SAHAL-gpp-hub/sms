@@ -23,7 +23,7 @@ from app.core.database import Base, get_db
 from app.core.security import get_password_hash
 from app.main import app
 from app.models.base_models import (
-    AcademicYear, Class, Student, GenderEnum, StudentStatusEnum,
+    AcademicYear, Class, Exam, Student, GenderEnum, StudentStatusEnum, Subject,
     TeacherClassAssignment, User,
 )
 
@@ -72,6 +72,13 @@ def setup_database():
     db.add_all([cls_a, cls_b])
     db.flush()
 
+    subject_a = Subject(name="Mathematics", class_id=cls_a.id, max_theory=100, max_practical=0)
+    subject_b = Subject(name="Science", class_id=cls_a.id, max_theory=100, max_practical=0)
+    subject_other_class = Subject(name="English", class_id=cls_b.id, max_theory=100, max_practical=0)
+    exam_a = Exam(name="Unit Test 1", class_id=cls_a.id, academic_year_id=year.id)
+    db.add_all([subject_a, subject_b, subject_other_class, exam_a])
+    db.flush()
+
     # Users
     admin_user = User(name="Admin",        email="admin@test.com",    password_hash=get_password_hash("admin1234"),    role="admin",   is_active=True)
     teacher_a  = User(name="Teacher A",    email="teachera@test.com", password_hash=get_password_hash("teacher1234"), role="teacher", is_active=True)
@@ -82,8 +89,14 @@ def setup_database():
     db.add_all([admin_user, teacher_a, teacher_b, student_u, parent_u, inactive_u])
     db.flush()
 
-    # Teacher A assigned to class A only
+    # Teacher A is class teacher for class A and separately assigned one marks subject.
     db.add(TeacherClassAssignment(teacher_id=teacher_a.id, class_id=cls_a.id, academic_year_id=year.id))
+    db.add(TeacherClassAssignment(
+        teacher_id=teacher_a.id,
+        class_id=cls_a.id,
+        academic_year_id=year.id,
+        subject_id=subject_a.id,
+    ))
 
     # A student record linked to the student/parent users
     student = Student(
@@ -153,6 +166,8 @@ class TestLogin:
         assert data["role"] == "teacher"
         assert isinstance(data["assigned_class_ids"], list)
         assert len(data["assigned_class_ids"]) >= 1
+        assert isinstance(data["class_teacher_class_ids"], list)
+        assert isinstance(data["subject_assignments"], list)
 
     def test_student_login_includes_linked_student_id(self, client):
         res = login(client, "student@test.com", "student1234")
@@ -475,8 +490,10 @@ class TestTokenRevocation:
 # ══════════════════════════════════════════════════════════════════════════════
 
 class TestRegistrationGuard:
-    def test_register_disabled_by_default(self, client):
+    def test_register_disabled_by_default(self, client, monkeypatch):
         """REGISTRATION_ENABLED defaults to False — should return 403."""
+        from app.core import config as cfg_module
+        monkeypatch.setattr(cfg_module.settings, "REGISTRATION_ENABLED", False)
         res = client.post("/api/v1/auth/register", json={
             "name": "Hacker", "email": "hacker@test.com",
             "password": "hacker1234", "role": "admin",
@@ -531,6 +548,68 @@ class TestMarksScoping:
             "name": "Unit Test 1", "class_id": cls_a_id, "academic_year_id": 1,
         }, headers=auth(tok))
         assert res.status_code in (201, 422)  # 422 if year id invalid in test db
+
+    def test_teacher_sees_only_assigned_subjects(self, client):
+        cls_a_id, _ = self._class_ids(client)
+        tok = token(client, "teachera@test.com", "teacher1234")
+        res = client.get(
+            "/api/v1/marks/subjects",
+            params={"class_id": cls_a_id},
+            headers=auth(tok),
+        )
+        assert res.status_code == 200
+        subjects = res.json()
+        assert [s["name"] for s in subjects] == ["Mathematics"]
+
+    def test_teacher_can_enter_assigned_subject_marks(self, client):
+        cls_a_id, _ = self._class_ids(client)
+        tok = token(client, "teachera@test.com", "teacher1234")
+        subjects = client.get(
+            "/api/v1/marks/subjects",
+            params={"class_id": cls_a_id},
+            headers=auth(tok),
+        ).json()
+        students = client.get("/api/v1/students/", headers=auth(tok)).json()
+        exams = client.get(
+            "/api/v1/marks/exams",
+            params={"class_id": cls_a_id, "academic_year_id": 1},
+            headers=auth(tok),
+        ).json()
+        res = client.post("/api/v1/marks/bulk", json=[{
+            "student_id": students[0]["id"],
+            "subject_id": subjects[0]["id"],
+            "exam_id": exams[0]["id"],
+            "theory_marks": 88,
+            "practical_marks": None,
+            "is_absent": False,
+        }], headers=auth(tok))
+        assert res.status_code == 200
+
+    def test_teacher_cannot_enter_unassigned_subject_marks(self, client):
+        cls_a_id, _ = self._class_ids(client)
+        admin_tok = token(client, "admin@test.com", "admin1234")
+        teacher_tok = token(client, "teachera@test.com", "teacher1234")
+        all_subjects = client.get(
+            "/api/v1/marks/subjects",
+            params={"class_id": cls_a_id},
+            headers=auth(admin_tok),
+        ).json()
+        science = next(s for s in all_subjects if s["name"] == "Science")
+        students = client.get("/api/v1/students/", headers=auth(teacher_tok)).json()
+        exams = client.get(
+            "/api/v1/marks/exams",
+            params={"class_id": cls_a_id, "academic_year_id": 1},
+            headers=auth(teacher_tok),
+        ).json()
+        res = client.post("/api/v1/marks/bulk", json=[{
+            "student_id": students[0]["id"],
+            "subject_id": science["id"],
+            "exam_id": exams[0]["id"],
+            "theory_marks": 75,
+            "practical_marks": None,
+            "is_absent": False,
+        }], headers=auth(teacher_tok))
+        assert res.status_code == 403
 
 
 # ══════════════════════════════════════════════════════════════════════════════

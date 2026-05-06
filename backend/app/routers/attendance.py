@@ -5,7 +5,12 @@ from typing import Optional, Union
 from pydantic import BaseModel
 from app.core.database import get_db
 from app.models.base_models import Student
-from app.routers.auth import CurrentUser, ensure_class_access, require_role
+from app.routers.auth import (
+    CurrentUser,
+    ensure_class_access,
+    ensure_class_teacher_access,
+    require_role,
+)
 from app.schemas.attendance import AttendanceBulk, AttendanceOut, AttendanceEntry
 from app.services import attendance_service
 
@@ -18,7 +23,7 @@ def get_daily_attendance(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_role("admin", "teacher")),
 ):
-    ensure_class_access(current_user, class_id)
+    ensure_class_teacher_access(current_user, class_id)
     return attendance_service.get_attendance_for_date(db, class_id, date)
 
 @router.post("/bulk")
@@ -33,9 +38,22 @@ def mark_attendance(
     else:
         entries = data.entries
     if current_user.role == "teacher":
+        class_ids = {entry.class_id for entry in entries}
+        for class_id in class_ids:
+            ensure_class_teacher_access(current_user, class_id)
         for entry in entries:
-            ensure_class_access(current_user, entry.class_id)
-    return attendance_service.mark_attendance_bulk(db, entries)
+            student = db.query(Student).filter_by(id=entry.student_id).first()
+            if not student:
+                raise HTTPException(status_code=404, detail=f"Student {entry.student_id} not found")
+            if student.class_id != entry.class_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Student {entry.student_id} does not belong to class {entry.class_id}",
+                )
+    try:
+        return attendance_service.mark_attendance_bulk(db, entries)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 @router.get("/monthly")
 def get_monthly_summary(

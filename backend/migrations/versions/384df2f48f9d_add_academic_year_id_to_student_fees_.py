@@ -23,7 +23,7 @@ from sqlalchemy import inspect
 
 
 revision: str = '384df2f48f9d'
-down_revision: Union[str, None] = None
+down_revision: Union[str, None] = "c26f0f9005b0"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

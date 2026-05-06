@@ -1,8 +1,9 @@
 // MarksEntry.jsx — Full rebuild with Subject Manager + per-exam custom marks
-// 📱 Fully responsive across all device sizes (logic unchanged)
+// Fully responsive across all device sizes (logic unchanged)
 import { useState, useEffect, useCallback } from 'react'
 import toast from 'react-hot-toast'
-import { marksAPI, setupAPI, extractError } from '../../services/api'
+import { marksAPI, setupAPI, extractError, openSignedPdf } from '../../services/api'
+import { getAuthUser } from '../../services/auth'
 import {
   PageHeader, FilterRow, Select, EmptyState,
   TableSkeleton, TabBar, InlineBanner, ConfirmModal,
@@ -27,7 +28,7 @@ const GRADE_COLORS = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 📱 Responsive CSS — injected once
+// Responsive CSS — injected once
 // ─────────────────────────────────────────────────────────────────────────────
 const RESPONSIVE_CSS = `
   /* ───── Base layout helpers ───── */
@@ -133,7 +134,7 @@ const RESPONSIVE_CSS = `
   }
 
   /* ════════════════════════════════════════════════════════════════════
-     📲 TABLET (≤ 900px)
+     TABLET (≤ 900px)
      ════════════════════════════════════════════════════════════════════ */
   @media (max-width: 900px) {
     .me-add-grid {
@@ -148,7 +149,7 @@ const RESPONSIVE_CSS = `
   }
 
   /* ════════════════════════════════════════════════════════════════════
-     📱 MOBILE (≤ 640px)
+     MOBILE (≤ 640px)
      ════════════════════════════════════════════════════════════════════ */
   @media (max-width: 640px) {
     .me-add-grid {
@@ -206,7 +207,7 @@ const RESPONSIVE_CSS = `
   }
 
   /* ════════════════════════════════════════════════════════════════════
-     📱 EXTRA SMALL (≤ 420px)
+     EXTRA SMALL (≤ 420px)
      ════════════════════════════════════════════════════════════════════ */
   @media (max-width: 420px) {
     .me-info-bar > span { font-size: 10.5px; }
@@ -410,7 +411,7 @@ function SubjectManager({ classId, onSubjectsChanged }) {
           >
             {seedingSubjects
               ? <><span className="spinner" style={{ width: '12px', height: '12px' }} /> Loading…</>
-              : '📚 Load GSEB Defaults'
+              : 'Load GSEB Defaults'
             }
           </button>
         </div>
@@ -611,7 +612,7 @@ function SubjectManager({ classId, onSubjectsChanged }) {
                           }}
                           title={subject.is_active ? 'Click to hide from grids' : 'Click to restore'}
                         >
-                          {subject.is_active ? '✓ Active' : '○ Hidden'}
+                          {subject.is_active ? 'Active' : 'Hidden'}
                         </button>
                       </td>
                       <td style={{ textAlign: 'right' }}>
@@ -954,6 +955,10 @@ function ExamConfigPanel({ examId, classId, onConfigSaved }) {
 // Main MarksEntry page
 // ─────────────────────────────────────────────────────────────────────────────
 export default function MarksEntry() {
+  const authUser = getAuthUser()
+  const isTeacher = authUser?.role === 'teacher'
+  const subjectAssignments = authUser?.subjectAssignments || []
+  const marksClassIds = [...new Set(subjectAssignments.map(a => a.class_id))]
   const [classes, setClasses]         = useState([])
   const [years, setYears]             = useState([])
   const [exams, setExams]             = useState([])
@@ -977,7 +982,14 @@ export default function MarksEntry() {
   const [creatingExam, setCreatingExam] = useState(false)
 
   useEffect(() => {
-    setupAPI.getClasses().then(r => setClasses(r.data))
+    setupAPI.getClasses().then(r => {
+      const allClasses = r.data || []
+      setClasses(
+        isTeacher
+          ? allClasses.filter(c => marksClassIds.includes(c.id))
+          : allClasses
+      )
+    })
     setupAPI.getAcademicYears().then(r => {
       setYears(r.data)
       const curr = r.data.find(y => y.is_current)
@@ -1019,8 +1031,8 @@ export default function MarksEntry() {
         })
       })
       setLocalMarks(map)
-    } catch {
-      toast.error('Failed to load marks grid')
+    } catch (err) {
+      toast.error(extractError(err))
     } finally {
       setLoadingGrid(false)
     }
@@ -1073,8 +1085,8 @@ export default function MarksEntry() {
     try {
       const r = await marksAPI.getResults(selectedExam, selectedClass)
       setResults(r.data)
-    } catch {
-      toast.error('Failed to load results')
+    } catch (err) {
+      toast.error(extractError(err))
     } finally {
       setLoadingResults(false)
     }
@@ -1110,10 +1122,10 @@ export default function MarksEntry() {
   const examName     = exams.find(e => String(e.id) === selectedExam)?.name || 'Exam'
 
   const mainTabs = [
-    { value: 'entry',     label: 'Marks Entry', icon: '📝' },
-    { value: 'results',   label: 'Results',      icon: '📊' },
-    { value: 'subjects',  label: 'Subjects',     icon: '📚' },
-    ...(selectedExam ? [{ value: 'examconfig', label: 'Exam Marks Setup', icon: '⚙️' }] : []),
+    { value: 'entry',     label: 'Marks Entry' },
+    { value: 'results',   label: 'Results' },
+    ...(!isTeacher ? [{ value: 'subjects',  label: 'Subjects' }] : []),
+    ...(!isTeacher && selectedExam ? [{ value: 'examconfig', label: 'Exam Marks Setup' }] : []),
   ]
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -1150,19 +1162,21 @@ export default function MarksEntry() {
             <option value="">Select exam…</option>
             {exams.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
           </select>
-          <button
-            className="btn btn-secondary"
-            onClick={() => setShowNewExam(s => !s)}
-            disabled={!selectedClass}
-            title="Create new exam"
-          >
-            + New
-          </button>
+          {!isTeacher && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => setShowNewExam(s => !s)}
+              disabled={!selectedClass}
+              title="Create new exam"
+            >
+              + New
+            </button>
+          )}
         </div>
       </FilterRow>
 
       {/* New exam form */}
-      {showNewExam && selectedClass && (
+      {!isTeacher && showNewExam && selectedClass && (
         <div style={{ background: 'var(--brand-50)', border: '1px solid var(--brand-200)', borderRadius: '12px', padding: '18px 20px', marginBottom: '16px' }}>
           <div style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--brand-700)', marginBottom: '12px' }}>
             Create New Exam
@@ -1191,8 +1205,8 @@ export default function MarksEntry() {
         <div className="card">
           <EmptyState
             icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>}
-            title="Select a class to begin"
-            description="Choose a class and academic year from the filters above"
+            title={isTeacher && classes.length === 0 ? 'No subject assignments' : 'Select a class to begin'}
+            description={isTeacher && classes.length === 0 ? 'Ask an admin to assign you to subjects before entering marks' : 'Choose a class and academic year from the filters above'}
           />
         </div>
       )}
@@ -1220,7 +1234,7 @@ export default function MarksEntry() {
                     background: 'var(--brand-100)', color: 'var(--brand-700)',
                     border: '1px solid var(--brand-200)',
                   }}>
-                    ⚙ Custom marks active
+                    Custom marks active
                   </span>
                 )}
                 {saved && (
@@ -1239,22 +1253,20 @@ export default function MarksEntry() {
 
             {view === 'results' && selectedExam && (
               <div className="me-action-group">
-                <a
-                  href={`/api/v1/pdf/report/results?exam_id=${selectedExam}&class_id=${selectedClass}`}
-                  target="_blank" rel="noreferrer"
+                <button
+                  onClick={() => openSignedPdf('/pdf/token/report/results', '/pdf/report/results', { exam_id: selectedExam, class_id: selectedClass })}
                   className="btn btn-secondary"
                   style={{ textDecoration: 'none', fontSize: '12.5px' }}
                 >
-                  📋 Class Result PDF
-                </a>
-                <a
-                  href={`/api/v1/pdf/marksheet/class/${selectedClass}?exam_id=${selectedExam}`}
-                  target="_blank" rel="noreferrer"
+                  Class Result PDF
+                </button>
+                <button
+                  onClick={() => openSignedPdf(`/pdf/token/marksheet/class/${selectedClass}`, `/pdf/marksheet/class/${selectedClass}`, { exam_id: selectedExam })}
                   className="btn btn-secondary"
                   style={{ textDecoration: 'none', fontSize: '12.5px' }}
                 >
-                  📄 Marksheets PDF
-                </a>
+                  Marksheets PDF
+                </button>
               </div>
             )}
           </div>
@@ -1337,10 +1349,10 @@ export default function MarksEntry() {
                         <span>Check <strong>Abs</strong> to mark absent</span>
                         {hasCustomConfig && (
                           <span style={{ color: 'var(--brand-700)', fontWeight: 700, background: 'var(--brand-50)', padding: '2px 8px', borderRadius: '6px', border: '1px solid var(--brand-200)' }}>
-                            ⚙ Custom max marks active for this exam
+                            Custom max marks active for this exam
                           </span>
                         )}
-                        <span style={{ color: 'var(--warning-600)', fontWeight: 600 }}>💡 Scroll right to see all subjects</span>
+                        <span style={{ color: 'var(--warning-600)', fontWeight: 600 }}>Scroll right to see all subjects</span>
                       </div>
                       <div className="me-grid-scroll">
                         <table style={{ borderCollapse: 'separate', borderSpacing: 0, fontSize: '12.5px', minWidth: '100%' }}>
@@ -1377,7 +1389,7 @@ export default function MarksEntry() {
                                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
                                     {sub.name}
                                     {sub.has_custom_config && (
-                                      <span title="Custom marks for this exam" style={{ fontSize: '10px' }}>⚙</span>
+                                      <span title="Custom marks for this exam" style={{ fontSize: '10px', fontWeight: 800 }}>C</span>
                                     )}
                                   </div>
                                   <div style={{ fontSize: '10px', fontWeight: 500, marginTop: '2px', color: sub.has_custom_config ? 'var(--brand-600)' : 'var(--text-tertiary)' }}>
@@ -1547,13 +1559,16 @@ export default function MarksEntry() {
                           </span>
                         </td>
                         <td style={{ textAlign: 'center' }}>
-                          <a
-                            href={`/api/v1/pdf/marksheet/student/${r.student_id}?exam_id=${selectedExam}&class_id=${selectedClass}`}
-                            target="_blank" rel="noreferrer"
+                          <button
+                            onClick={() => openSignedPdf(
+                              `/pdf/token/marksheet/student/${r.student_id}`,
+                              `/pdf/marksheet/student/${r.student_id}`,
+                              { exam_id: selectedExam, class_id: selectedClass },
+                            )}
                             style={{ fontSize: '12px', fontWeight: 600, color: 'var(--danger-600)', textDecoration: 'none' }}
                           >
-                            📄 PDF
-                          </a>
+                            PDF
+                          </button>
                         </td>
                       </tr>
                     ))}

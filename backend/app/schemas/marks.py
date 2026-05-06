@@ -185,12 +185,6 @@ class MarkOut(BaseModel):
     def marks_obtained(self) -> Optional[Decimal]:
         return self.theory_marks
 
-    @computed_field
-    @property
-    def rank(self) -> Optional[int]:
-        return None
-
-
 class StudentResult(BaseModel):
     student_id:   int
     student_name: str

@@ -4,6 +4,7 @@ from typing import Optional
 from pydantic import BaseModel
 from app.core.database import get_db
 from app.models.base_models import AcademicYear, Class
+from app.routers.auth import CurrentUser, require_role
 
 router = APIRouter(prefix="/api/v1/setup", tags=["Setup"])
 
@@ -14,7 +15,10 @@ class ClassCreate(BaseModel):
     academic_year_id: int
 
 @router.post("/seed")
-def seed_data(db: Session = Depends(get_db)):
+def seed_data(
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
     year = db.query(AcademicYear).filter_by(label="2025-26").first()
     if not year:
         year = AcademicYear(
@@ -53,7 +57,11 @@ def get_classes(
     return [{"id": c.id, "name": c.name, "division": c.division, "academic_year_id": c.academic_year_id} for c in classes]
 
 @router.post("/classes", status_code=201)
-def create_class(data: ClassCreate, db: Session = Depends(get_db)):
+def create_class(
+    data: ClassCreate,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
     class_name = data.name or str(data.standard)
     # Check for duplicate
     existing = db.query(Class).filter_by(
@@ -70,7 +78,11 @@ def create_class(data: ClassCreate, db: Session = Depends(get_db)):
     return {"id": cls.id, "name": cls.name, "division": cls.division, "academic_year_id": cls.academic_year_id}
 
 @router.delete("/classes/{class_id}")
-def delete_class(class_id: int, db: Session = Depends(get_db)):
+def delete_class(
+    class_id: int,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
     cls = db.query(Class).filter_by(id=class_id).first()
     if not cls:
         raise HTTPException(status_code=404, detail="Class not found")

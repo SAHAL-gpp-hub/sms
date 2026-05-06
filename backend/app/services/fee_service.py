@@ -12,8 +12,7 @@ FIXES APPLIED:
   The service code below that references it now works correctly.
 
   Additional fixes in this file:
-  - generate_receipt_number: uses MAX(id) not COUNT(*) — avoids TOCTOU race
-    under concurrent payment submissions.
+  - generate_receipt_number: uses a PostgreSQL sequence when available.
   - get_defaulters: single aggregating GROUP BY query (was N+1 loop).
   - get_student_ledger: filters StudentFee by its own academic_year_id
     column so fee history isn't lost after student promotion.
@@ -225,19 +224,15 @@ def get_student_ledger(db: Session, student_id: int) -> Optional[StudentLedger]:
     if not student:
         return None
 
-    # Filter StudentFee by its OWN academic_year_id stamp (written at assign time).
-    # After promotion, student.academic_year_id changes to the new year, but the
-    # old StudentFee rows keep their original year — so we can still see them.
+    # Show the complete ledger across years. Student.academic_year_id changes on
+    # promotion, while old invoices keep their original year stamp.
     student_fees = (
         db.query(StudentFee)
         .options(
             joinedload(StudentFee.fee_structure).joinedload(FeeStructure.fee_head),
             joinedload(StudentFee.payments),
         )
-        .filter(
-            StudentFee.student_id == student_id,
-            StudentFee.academic_year_id == student.academic_year_id,
-        )
+        .filter(StudentFee.student_id == student_id)
         .all()
     )
 
@@ -288,10 +283,17 @@ def generate_receipt_number(db: Session) -> str:
     pg_advisory_xact_lock(RECEIPT_NUMBER_LOCK_KEY) holds the lock for the
     current transaction; it is released automatically on COMMIT or ROLLBACK.
     """
-    db.execute(text(f"SELECT pg_advisory_xact_lock({RECEIPT_NUMBER_LOCK_KEY})"))
-    year    = date.today().year
-    last_id = db.query(func.max(FeePayment.id)).scalar() or 0
-    return f"RCPT-{year}-{str(last_id + 1).zfill(5)}"
+    year = date.today().year
+    try:
+        num = db.execute(text("SELECT nextval('receipt_number_seq')")).scalar()
+    except Exception:
+        db.rollback()
+        try:
+            db.execute(text(f"SELECT pg_advisory_xact_lock({RECEIPT_NUMBER_LOCK_KEY})"))
+        except Exception:
+            pass
+        num = (db.query(func.max(FeePayment.id)).scalar() or 0) + 1
+    return f"RCPT-{year}-{int(num):05d}"
 
 
 def record_payment(db: Session, data: PaymentCreate) -> FeePayment:
@@ -387,6 +389,7 @@ def get_defaulters(
                 "student_id":   student.id,
                 "student_name": student.name_en,
                 "class_id":     student.class_id,
+                "class_name":   db.query(Class.name).filter_by(id=student.class_id).scalar() or "—",
                 "contact":      student.contact,
                 "total_due":    float(total_due),
                 "total_paid":   float(total_paid),

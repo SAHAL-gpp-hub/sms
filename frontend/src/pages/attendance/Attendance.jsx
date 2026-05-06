@@ -1,7 +1,8 @@
 // Attendance.jsx — Fully responsive with mobile-optimized status toggles
 import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
-import { setupAPI, attendanceAPI, extractError } from '../../services/api'
+import { setupAPI, attendanceAPI, extractError, openSignedPdf } from '../../services/api'
+import { getAuthUser } from '../../services/auth'
 import { PageHeader, FilterRow, Select, EmptyState, TableSkeleton, TabBar } from '../../components/UI'
 
 const STATUS_OPTIONS = [
@@ -84,6 +85,9 @@ function AttendanceSummaryBar({ statuses }) {
 }
 
 export default function Attendance() {
+  const authUser = getAuthUser()
+  const isTeacher = authUser?.role === 'teacher'
+  const classTeacherClassIds = authUser?.classTeacherClassIds || []
   const [classes, setClasses]               = useState([])
   const [selectedClass, setSelectedClass]   = useState('')
   const [selectedDate, setSelectedDate]     = useState(new Date().toISOString().split('T')[0])
@@ -101,7 +105,14 @@ export default function Attendance() {
   })
 
   useEffect(() => {
-    setupAPI.getClasses().then(r => setClasses(r.data))
+    setupAPI.getClasses().then(r => {
+      const allClasses = r.data || []
+      setClasses(
+        isTeacher
+          ? allClasses.filter(c => classTeacherClassIds.includes(c.id))
+          : allClasses
+      )
+    })
   }, [])
 
   useEffect(() => {
@@ -121,8 +132,8 @@ export default function Attendance() {
       const map = {}
       r.data.forEach(s => { map[s.student_id] = s.status || 'P' })
       setStatuses(map)
-    } catch {
-      toast.error('Failed to load attendance')
+    } catch (err) {
+      toast.error(extractError(err))
     } finally {
       setLoading(false)
     }
@@ -134,8 +145,8 @@ export default function Attendance() {
     try {
       const r = await attendanceAPI.getMonthlySummary(selectedClass, monthYear.year, monthYear.month)
       setMonthlySummary(r.data)
-    } catch {
-      toast.error('Failed to load monthly summary')
+    } catch (err) {
+      toast.error(extractError(err))
     } finally {
       setLoadingMonthly(false)
     }
@@ -151,7 +162,7 @@ export default function Attendance() {
     roster.forEach(s => { map[s.student_id] = status })
     setStatuses(map)
     setSaved(false)
-    toast(`All marked as ${STATUS_OPTIONS.find(o => o.value === status)?.label}`, { icon: '✓' })
+    toast(`All marked as ${STATUS_OPTIONS.find(o => o.value === status)?.label}`)
   }
 
   const handleSave = async () => {
@@ -357,14 +368,17 @@ export default function Attendance() {
               )}
             </div>
             {selectedClass && (
-              <a
-                href={`/api/v1/pdf/report/attendance?class_id=${selectedClass}&year=${monthYear.year}&month=${monthYear.month}`}
-                target="_blank" rel="noreferrer"
+              <button
+                onClick={() => openSignedPdf('/pdf/token/report/attendance', '/pdf/report/attendance', {
+                  class_id: selectedClass,
+                  year: monthYear.year,
+                  month: monthYear.month,
+                })}
                 className="btn btn-secondary"
                 style={{ textDecoration: 'none', fontSize: '12.5px', whiteSpace: 'nowrap' }}
               >
-                📄 PDF Report
-              </a>
+                PDF Report
+              </button>
             )}
           </div>
           <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
@@ -407,9 +421,9 @@ export default function Attendance() {
                         </td>
                         <td style={{ textAlign: 'center' }}>
                           {isLow ? (
-                            <span className="badge badge-danger">⚠ Low</span>
+                            <span className="badge badge-danger">Low</span>
                           ) : (
-                            <span className="badge badge-success">✓ Good</span>
+                            <span className="badge badge-success">Good</span>
                           )}
                         </td>
                       </tr>
@@ -426,8 +440,8 @@ export default function Attendance() {
         <div className="card">
           <EmptyState
             icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>}
-            title="Select a class to begin"
-            description="Choose a class from the dropdown above"
+            title={isTeacher && classes.length === 0 ? 'No class teacher assignment' : 'Select a class to begin'}
+            description={isTeacher && classes.length === 0 ? 'Ask an admin to assign you as class teacher before marking attendance' : 'Choose a class from the dropdown above'}
           />
         </div>
       )}

@@ -18,6 +18,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from app.core.database import Base, check_db_connection, engine
+from app.core.config import settings
 from app.models.base_models import *  # noqa — registers all models with Base
 from app.routers import (
     admin_users,
@@ -43,6 +44,8 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if not settings.SECRET_KEY or "change-this" in settings.SECRET_KEY:
+        raise RuntimeError("SECRET_KEY not configured; set a strong random value in .env")
     Base.metadata.create_all(bind=engine)
     logger.info("SQLAlchemy tables ensured.")
 
@@ -70,14 +73,7 @@ app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost",
-        "http://localhost:80",
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -1,324 +1,1089 @@
-// YearEnd.jsx — Fully responsive
-import { useState, useEffect } from 'react'
+// frontend/src/pages/yearend/YearEnd.jsx
+// Full rebuild covering every planning-doc requirement:
+//   • Draft → Activate year lifecycle
+//   • Pre-promotion validation gate
+//   • Per-student candidate list with suggested actions
+//   • Bulk promotion with student_actions overrides
+//   • Undo promotion
+//   • Mark locking
+//   • Clone fee structure / subjects
+//   • Academic calendar (holiday CRUD + seed)
+//   • Audit log viewer
+//   • Enrollment backfill (one-time)
+//   • TC generation
+
+import { useState, useEffect, useCallback } from 'react'
 import toast from 'react-hot-toast'
 import { setupAPI, yearendAPI, classAPI, extractError } from '../../services/api'
-import { PageHeader, ConfirmModal, EmptyState, InlineBanner } from '../../components/UI'
+import {
+  PageHeader, TabBar, EmptyState, InlineBanner,
+  ConfirmModal, Select,
+} from '../../components/UI'
 
-const STANDARD_NAMES = ['Nursery','LKG','UKG','1','2','3','4','5','6','7','8','9','10']
+// ─────────────────────────────────────────────────────────────────────────────
+// Design tokens — editorial charcoal + saffron accent palette
+// Matches the school's existing SMS design language but with more structure
+// ─────────────────────────────────────────────────────────────────────────────
+const YE_CSS = `
+  .ye-root { font-family: var(--font-sans); }
 
-function StepCard({ step, icon, title, description, children }) {
+  /* Section cards */
+  .ye-card {
+    background: var(--surface-0);
+    border: 1px solid var(--border-default);
+    border-radius: 14px;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    margin-bottom: 14px;
+  }
+  .ye-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--gray-50);
+  }
+  .ye-card-icon {
+    width: 34px; height: 34px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0;
+    background: var(--brand-100); color: var(--brand-700);
+  }
+  .ye-card-title { font-size: 14px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.01em; }
+  .ye-card-sub   { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+  .ye-card-body  { padding: 20px; }
+
+  /* Year status pill */
+  .ye-status-draft    { background:#fef3c7; color:#b45309; border:1px solid #fde68a; }
+  .ye-status-active   { background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; }
+  .ye-status-closed   { background:#f1f5f9; color:#64748b; border:1px solid #e2e8f0; }
+  .ye-status-pill {
+    font-size:10.5px; font-weight:800; padding:2px 9px;
+    border-radius:20px; text-transform:uppercase; letter-spacing:0.05em;
+  }
+
+  /* Candidate action selector */
+  .ye-action-btn {
+    padding: 4px 10px; border-radius: 6px; font-size: 11.5px;
+    font-weight: 700; border: 1.5px solid; cursor: pointer;
+    font-family: var(--font-sans); transition: all 0.12s; white-space: nowrap;
+    touch-action: manipulation;
+  }
+  .ye-action-promoted   { background:#eff6ff; color:#1d4ed8; border-color:#bfdbfe; }
+  .ye-action-retained   { background:#fef3c7; color:#b45309; border-color:#fde68a; }
+  .ye-action-graduated  { background:#f0fdf4; color:#15803d; border-color:#bbf7d0; }
+  .ye-action-transferred{ background:#faf5ff; color:#7c3aed; border-color:#e9d5ff; }
+  .ye-action-dropped    { background:#fff1f2; color:#be123c; border-color:#fecdd3; }
+  .ye-action-on_hold    { background:#f8fafc; color:#64748b; border-color:#cbd5e1; }
+  .ye-action-active.ye-action-promoted   { background:#1d4ed8; color:white; border-color:#1d4ed8; }
+  .ye-action-active.ye-action-retained   { background:#b45309; color:white; border-color:#b45309; }
+  .ye-action-active.ye-action-graduated  { background:#15803d; color:white; border-color:#15803d; }
+  .ye-action-active.ye-action-transferred{ background:#7c3aed; color:white; border-color:#7c3aed; }
+  .ye-action-active.ye-action-dropped    { background:#be123c; color:white; border-color:#be123c; }
+  .ye-action-active.ye-action-on_hold    { background:#64748b; color:white; border-color:#64748b; }
+
+  /* Candidate row flags */
+  .ye-flag { display:inline-flex; align-items:center; gap:3px; font-size:10.5px; font-weight:700; padding:1px 7px; border-radius:20px; }
+  .ye-flag-dues { background:#fee2e2; color:#b91c1c; }
+  .ye-flag-att  { background:#fef3c7; color:#b45309; }
+  .ye-flag-nomarks { background:#f1f5f9; color:#64748b; }
+
+  /* Audit log */
+  .ye-audit-row { display:flex; gap:12px; padding:10px 0; border-bottom:1px solid var(--border-subtle); align-items:flex-start; }
+  .ye-audit-op { font-size:11px; font-weight:800; padding:2px 8px; border-radius:6px; background:var(--brand-50); color:var(--brand-700); white-space:nowrap; }
+  .ye-audit-success { background:#dcfce7; color:#15803d; }
+  .ye-audit-failed  { background:#fee2e2; color:#b91c1c; }
+  .ye-audit-partial { background:#fef3c7; color:#b45309; }
+
+  /* Calendar event type */
+  .ye-evt-holiday    { background:#fee2e2; color:#b91c1c; }
+  .ye-evt-exam_period{ background:#eff6ff; color:#1d4ed8; }
+  .ye-evt-term_start { background:#f0fdf4; color:#15803d; }
+  .ye-evt-event      { background:#faf5ff; color:#7c3aed; }
+
+  /* Two-column grid on wider screens */
+  .ye-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:700px) { .ye-grid-2 { grid-template-columns:1fr; } }
+
+  /* Responsive form row */
+  .ye-form-row { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+  .ye-form-row > * { flex:1; min-width:140px; }
+
+  /* Step badge */
+  .ye-step-badge {
+    width:26px; height:26px; border-radius:50%; background:var(--brand-600);
+    color:white; font-size:12px; font-weight:900; display:flex;
+    align-items:center; justify-content:center; flex-shrink:0;
+  }
+
+  /* Scrollable table wrapper */
+  .ye-table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .ye-table-wrap::-webkit-scrollbar { height:3px; }
+`
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Small helpers
+// ─────────────────────────────────────────────────────────────────────────────
+if (typeof document !== 'undefined' && !document.getElementById('ye-css')) {
+  const s = document.createElement('style')
+  s.id = 'ye-css'
+  s.textContent = YE_CSS
+  document.head.appendChild(s)
+}
+
+const ACTIONS = ['promoted', 'retained', 'graduated', 'transferred', 'dropped', 'on_hold']
+const ACTION_LABELS = {
+  promoted: 'Promote', retained: 'Retain', graduated: 'Graduate',
+  transferred: 'Transfer', dropped: 'Drop', on_hold: 'Hold',
+}
+
+function YeCard({ icon, title, sub, children, badge, right }) {
   return (
-    <div className="card" style={{ marginBottom: '14px' }}>
-      <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--gray-50)', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-        <div style={{ width: '32px', height: '32px', borderRadius: '9px', background: 'var(--brand-600)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 900, flexShrink: 0, boxShadow: '0 3px 8px rgba(37,99,235,0.25)' }}>
-          {step}
-        </div>
+    <div className="ye-card">
+      <div className="ye-card-header">
+        <div className="ye-card-icon">{icon}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '16px' }}>{icon}</span>
-            <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>{title}</div>
-          </div>
-          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px', lineHeight: 1.5 }}>{description}</div>
+          <div className="ye-card-title">{title}</div>
+          {sub && <div className="ye-card-sub">{sub}</div>}
         </div>
+        {badge}
+        {right}
       </div>
-      <div style={{ padding: '18px' }}>{children}</div>
+      <div className="ye-card-body">{children}</div>
     </div>
   )
 }
 
-export default function YearEnd() {
-  const [classes, setClasses]         = useState([])
-  const [years, setYears]             = useState([])
-  const [currentYear, setCurrentYear] = useState(null)
+function StatusPill({ status }) {
+  const cls = `ye-status-pill ye-status-${status}`
+  const labels = { draft: 'Draft', active: 'Active', closed: 'Closed' }
+  return <span className={cls}>{labels[status] || status}</span>
+}
 
-  const [newYear, setNewYear]           = useState({ label: '', start_date: '', end_date: '' })
-  const [creatingYear, setCreatingYear] = useState(false)
+function Spinner({ size = 14 }) {
+  return <span className="spinner" style={{ width: size, height: size }} />
+}
 
-  const [classYear, setClassYear]           = useState('')
-  const [classesForYear, setClassesForYear] = useState([])
-  const [newClass, setNewClass]             = useState({ name: '', division: 'A' })
-  const [addingClass, setAddingClass]       = useState(false)
-  const [deleteClassTarget, setDeleteClassTarget] = useState(null)
-  const [deletingClass, setDeletingClass]   = useState(false)
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB: Academic Year Lifecycle
+// ─────────────────────────────────────────────────────────────────────────────
+function YearLifecycleTab({ years, currentYear, onRefresh }) {
+  const [form, setForm] = useState({ label: '', start_date: '', end_date: '' })
+  const [creating, setCreating] = useState(false)
+  const [activating, setActivating] = useState(null)
 
-  const [selectedClass, setSelectedClass]     = useState('')
-  const [selectedNewYear, setSelectedNewYear] = useState('')
-  const [promoting, setPromoting]             = useState(false)
-  const [promoteResult, setPromoteResult]     = useState(null)
-  const [confirmPromote, setConfirmPromote]   = useState(false)
-
-  useEffect(() => {
-    setupAPI.getClasses().then(r => setClasses(r.data))
-    setupAPI.getAcademicYears().then(r => {
-      setYears(r.data)
-      const curr = r.data.find(y => y.is_current)
-      if (curr) setCurrentYear(curr)
-    })
-  }, [])
-
-  useEffect(() => {
-    if (classYear) setupAPI.getClasses(classYear).then(r => setClassesForYear(r.data))
-    else setClassesForYear([])
-  }, [classYear])
-
-  const handleCreateYear = async () => {
-    if (!newYear.label)      { toast.error('Please enter a year label (e.g. 2026-27)'); return }
-    if (!newYear.start_date) { toast.error('Please enter a start date'); return }
-    if (!newYear.end_date)   { toast.error('Please enter an end date'); return }
-    if (newYear.start_date >= newYear.end_date) { toast.error('End date must be after start date'); return }
-    setCreatingYear(true)
+  const handleCreate = async () => {
+    if (!form.label || !form.start_date || !form.end_date) {
+      toast.error('All fields required')
+      return
+    }
+    if (form.start_date >= form.end_date) {
+      toast.error('End date must be after start date')
+      return
+    }
+    setCreating(true)
     try {
-      const r = await yearendAPI.createNewYear(newYear)
-      toast.success(`Academic year ${r.data.label} created`)
-      setNewYear({ label: '', start_date: '', end_date: '' })
-      const yearsRes = await setupAPI.getAcademicYears()
-      setYears(yearsRes.data)
-      const curr = yearsRes.data.find(y => y.is_current)
-      if (curr) setCurrentYear(curr)
-      await setupAPI.getClasses().then(res => setClasses(res.data))
+      const r = await yearendAPI.createNewYear(form)
+      toast.success(`${r.data.label} created as Draft`)
+      setForm({ label: '', start_date: '', end_date: '' })
+      onRefresh()
     } catch (err) {
       toast.error(extractError(err))
     } finally {
-      setCreatingYear(false)
+      setCreating(false)
     }
   }
 
-  const handleAddClass = async () => {
-    if (!classYear)     { toast.error('Please select an academic year'); return }
-    if (!newClass.name) { toast.error('Please select a standard'); return }
-    setAddingClass(true)
+  const handleActivate = async (yearId, label) => {
+    setActivating(yearId)
     try {
-      await classAPI.create({ ...newClass, academic_year_id: parseInt(classYear) })
-      toast.success(`Class ${newClass.name} — Division ${newClass.division} added`)
-      const r = await setupAPI.getClasses(classYear)
-      setClassesForYear(r.data)
-      setNewClass({ name: '', division: 'A' })
+      await yearendAPI.activateYear(yearId, false)
+      toast.success(`${label} is now Active`)
+      onRefresh()
+    } catch (err) {
+      const msg = extractError(err)
+      // If validation fails, offer to skip
+      if (msg.includes('No classes') || msg.includes('No fee') || msg.includes('No subject')) {
+        toast.error(`Validation: ${msg}. Use force-activate if intentional.`)
+      } else {
+        toast.error(msg)
+      }
+    } finally {
+      setActivating(null)
+    }
+  }
+
+  const handleForceActivate = async (yearId, label) => {
+    setActivating(yearId)
+    try {
+      await yearendAPI.activateYear(yearId, true)
+      toast.success(`${label} force-activated`)
+      onRefresh()
     } catch (err) {
       toast.error(extractError(err))
     } finally {
-      setAddingClass(false)
+      setActivating(null)
     }
   }
-
-  const handleDeleteClassConfirm = async () => {
-    if (!deleteClassTarget) return
-    setDeletingClass(true)
-    try {
-      await classAPI.delete(deleteClassTarget.id)
-      setClassesForYear(prev => prev.filter(x => x.id !== deleteClassTarget.id))
-      toast.success(`Class removed`)
-      setDeleteClassTarget(null)
-    } catch (err) {
-      toast.error(extractError(err))
-    } finally {
-      setDeletingClass(false)
-    }
-  }
-
-  const handlePromote = async () => {
-    setConfirmPromote(false)
-    setPromoting(true)
-    setPromoteResult(null)
-    try {
-      const r = await yearendAPI.promoteClass(selectedClass, selectedNewYear)
-      setPromoteResult({ type: 'success', data: r.data })
-      toast.success(`${r.data.promoted} students promoted`)
-    } catch (err) {
-      const msg = err?.response?.data?.detail || extractError(err)
-      setPromoteResult({ type: 'error', message: msg })
-      toast.error(msg)
-    } finally {
-      setPromoting(false)
-    }
-  }
-
-  const selectedClassName = classes.find(c => String(c.id) === selectedClass)?.name
-  const yearOptions   = years.map(y => ({ value: String(y.id), label: y.label + (y.is_current ? ' (Current)' : '') }))
-  const classOptions  = classes.map(c => ({ value: String(c.id), label: `Class ${c.name} — ${c.division}` }))
 
   return (
     <div>
-      <PageHeader
-        title="Year-End Management"
-        subtitle="Create new year, manage classes, promote students, issue TCs"
-      />
-
-      {currentYear && (
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '5px 12px', background: 'var(--brand-50)', border: '1px solid var(--brand-200)', borderRadius: '20px', marginBottom: '18px', fontSize: '13px', fontWeight: 700, color: 'var(--brand-700)' }}>
-          <span style={{ width: '7px', height: '7px', background: 'var(--brand-500)', borderRadius: '50%' }} />
-          Current Year: {currentYear.label}
-        </div>
-      )}
-
-      {/* Step 1 */}
-      <StepCard step="1" icon="📅" title="Create New Academic Year" description="Set up the next year. It becomes active and classes are auto-created.">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '14px' }}>
+      {/* Create new year */}
+      <YeCard icon="📅" title="Create Academic Year" sub="New years start as Draft — configure classes, fees, subjects, then activate">
+        <div className="ye-form-row" style={{ marginBottom: 14 }}>
           <div>
             <label className="label">Year Label *</label>
-            <input className="input" type="text" value={newYear.label} onChange={e => setNewYear(y => ({ ...y, label: e.target.value }))} placeholder="e.g. 2026-27" />
+            <input className="input" value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} placeholder="e.g. 2026-27" />
           </div>
           <div>
             <label className="label">Start Date *</label>
-            <input className="input" type="date" value={newYear.start_date} onChange={e => setNewYear(y => ({ ...y, start_date: e.target.value }))} />
+            <input type="date" className="input" value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} />
           </div>
           <div>
             <label className="label">End Date *</label>
-            <input className="input" type="date" value={newYear.end_date} onChange={e => setNewYear(y => ({ ...y, end_date: e.target.value }))} />
+            <input type="date" className="input" value={form.end_date} onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))} />
           </div>
         </div>
-        <button className="btn btn-primary" onClick={handleCreateYear} disabled={creatingYear || !newYear.label} style={{ width: '100%' }}>
-          {creatingYear ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Creating…</> : 'Create New Academic Year'}
+        <button className="btn btn-primary" style={{ width: '100%' }} onClick={handleCreate} disabled={creating}>
+          {creating ? <><Spinner /> Creating…</> : '+ Create Draft Year'}
         </button>
-      </StepCard>
+      </YeCard>
 
-      {/* Step 2 */}
-      <StepCard step="2" icon="🏫" title="Manage Class Divisions" description="Add or remove class divisions for a given year (e.g. Class 5A, 5B).">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-          <div>
-            <label className="label">Academic Year</label>
-            <select className="input" value={classYear} onChange={e => setClassYear(e.target.value)}>
-              <option value="">Select year…</option>
-              {years.map(y => <option key={y.id} value={y.id}>{y.label}{y.is_current ? ' (Current)' : ''}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="label">Standard</label>
-            <select className="input" value={newClass.name} onChange={e => setNewClass(c => ({ ...c, name: e.target.value }))}>
-              <option value="">Select…</option>
-              {STANDARD_NAMES.map(n => <option key={n} value={n}>Std {n}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="label">Division</label>
-            <select className="input" value={newClass.division} onChange={e => setNewClass(c => ({ ...c, division: e.target.value }))}>
-              {['A','B','C','D','E'].map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
-          </div>
-        </div>
-        <button className="btn btn-primary" onClick={handleAddClass} disabled={!classYear || !newClass.name || addingClass} style={{ width: '100%', marginBottom: '14px' }}>
-          {addingClass ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Adding…</> : '+ Add Division'}
-        </button>
-
-        {classYear && classesForYear.length === 0 && (
-          <p style={{ color: 'var(--text-tertiary)', fontSize: '13px', textAlign: 'center', padding: '16px 0' }}>No classes found for this year. Add divisions above.</p>
-        )}
-
-        {classesForYear.length > 0 && (
-          <div style={{ border: '1px solid var(--border-default)', borderRadius: '10px', overflow: 'hidden' }}>
-            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-              <table className="data-table" style={{ minWidth: '300px' }}>
-                <thead>
-                  <tr>
-                    <th>Standard</th>
-                    <th>Division</th>
-                    <th style={{ textAlign: 'right' }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...classesForYear]
-                    .sort((a, b) => STANDARD_NAMES.indexOf(a.name) - STANDARD_NAMES.indexOf(b.name) || a.division.localeCompare(b.division))
-                    .map(c => (
-                      <tr key={c.id}>
-                        <td style={{ fontWeight: 700 }}>Std {c.name}</td>
-                        <td><span style={{ fontSize: '12px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px', background: 'var(--brand-50)', color: 'var(--brand-700)', border: '1px solid var(--brand-200)' }}>Div {c.division}</span></td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button onClick={() => setDeleteClassTarget(c)} style={{ padding: '5px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--danger-600)', background: 'var(--danger-50)', border: '1px solid var(--danger-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)', touchAction: 'manipulation' }}>Remove</button>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </StepCard>
-
-      {/* Step 3 */}
-      <StepCard step="3" icon="🎓" title="Bulk Student Promotion" description="Move all active students in a class to the next standard in the new academic year.">
-        <InlineBanner type="warning" title="Irreversible action" message="This moves ALL active students from the selected class. Run only after the academic year has ended." />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', margin: '14px 0' }}>
-          <div>
-            <label className="label">Promote From Class</label>
-            <select className="input" value={selectedClass} onChange={e => { setSelectedClass(e.target.value); setPromoteResult(null) }}>
-              <option value="">Select class…</option>
-              {classes.map(c => <option key={c.id} value={c.id}>Class {c.name} — {c.division}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="label">Into Academic Year</label>
-            <select className="input" value={selectedNewYear} onChange={e => { setSelectedNewYear(e.target.value); setPromoteResult(null) }}>
-              <option value="">Select target year…</option>
-              {years.map(y => <option key={y.id} value={y.id}>{y.label}{y.is_current ? ' (Current)' : ''}</option>)}
-            </select>
-          </div>
-        </div>
-        <button className="btn btn-success" onClick={() => setConfirmPromote(true)} disabled={promoting || !selectedClass || !selectedNewYear} style={{ width: '100%' }}>
-          {promoting ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Promoting…</> : 'Promote Students'}
-        </button>
-
-        {promoteResult && (
-          <div style={{ marginTop: '14px', padding: '14px', borderRadius: '10px', background: promoteResult.type === 'success' ? 'var(--success-50)' : 'var(--danger-50)', border: `1px solid ${promoteResult.type === 'success' ? 'var(--success-100)' : 'var(--danger-100)'}`, fontSize: '13.5px', color: promoteResult.type === 'success' ? 'var(--success-700)' : 'var(--danger-700)', fontWeight: 600 }}>
-            {promoteResult.type === 'success'
-              ? `✅ ${promoteResult.data.promoted} students promoted from Std ${promoteResult.data.from_class} → Std ${promoteResult.data.to_class}`
-              : `❌ ${promoteResult.message}`}
-          </div>
-        )}
-      </StepCard>
-
-      {/* Step 4 */}
-      <StepCard step="4" icon="📄" title="Transfer Certificates" description="Generate TCs for leaving students from the Students page.">
-        <p style={{ fontSize: '13.5px', color: 'var(--text-secondary)', marginBottom: '14px', lineHeight: 1.6 }}>
-          Go to the <strong>Students</strong> page, find the student, and click the <strong>TC</strong> button. The TC PDF opens in a new tab ready for printing.
-        </p>
-        <a href="/students" className="btn btn-secondary" style={{ textDecoration: 'none', display: 'inline-flex' }}>Go to Students →</a>
-      </StepCard>
-
-      {/* Academic Years list */}
-      <div className="card">
-        <div className="card-header">
-          <div className="card-title">All Academic Years</div>
-        </div>
+      {/* Year list */}
+      <YeCard icon="🗂" title="All Academic Years" sub="Draft → Active → Closed lifecycle">
         {years.length === 0 ? (
           <EmptyState
-            icon={<svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>}
-            title="No academic years yet"
-            description="Create the first academic year using Step 1 above"
+            icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>}
+            title="No years yet"
           />
         ) : (
-          <div style={{ padding: '4px 0' }}>
+          <div>
             {years.map(y => (
-              <div key={y.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', borderBottom: '1px solid var(--border-subtle)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: y.is_current ? 'var(--success-500)' : 'var(--gray-300)', flexShrink: 0 }} />
-                  <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{y.label}</span>
+              <div key={y.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{y.label}</span>
+                    <StatusPill status={y.status} />
+                    {y.is_current && <span style={{ fontSize: 10, fontWeight: 800, background: 'var(--brand-600)', color: 'white', padding: '1px 7px', borderRadius: 20 }}>CURRENT</span>}
+                    {y.is_upcoming && <span style={{ fontSize: 10, fontWeight: 800, background: '#7c3aed', color: 'white', padding: '1px 7px', borderRadius: 20 }}>UPCOMING</span>}
+                  </div>
                 </div>
-                {y.is_current && <span className="badge badge-success">Current</span>}
+                {y.status === 'draft' && (
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      className="btn btn-success btn-sm"
+                      disabled={activating === y.id}
+                      onClick={() => handleActivate(y.id, y.label)}
+                    >
+                      {activating === y.id ? <Spinner /> : '✓ Activate'}
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      disabled={activating === y.id}
+                      onClick={() => handleForceActivate(y.id, y.label)}
+                      title="Skip validation checks"
+                    >
+                      Force
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
-      </div>
+      </YeCard>
 
+      {/* Backfill */}
+      <YeCard icon="🔧" title="Backfill Enrollments" sub="One-time migration — run once after deploying the new schema">
+        <InlineBanner type="info" message="Creates Enrollment records for all existing students. Safe to run multiple times (idempotent)." />
+        <button
+          className="btn btn-secondary"
+          style={{ marginTop: 12, width: '100%' }}
+          onClick={async () => {
+            try {
+              const r = await yearendAPI.backfillEnrollments()
+              toast.success(`Backfill complete — ${r.data.created} created, ${r.data.skipped} skipped`)
+            } catch (err) {
+              toast.error(extractError(err))
+            }
+          }}
+        >
+          Run Enrollment Backfill
+        </button>
+      </YeCard>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB: Bulk Promotion
+// ─────────────────────────────────────────────────────────────────────────────
+function PromotionTab({ classes, years, onRefresh }) {
+  const [selectedClass, setSelectedClass]   = useState('')
+  const [selectedNewYear, setSelectedNewYear] = useState('')
+  const [validation, setValidation]         = useState(null)
+  const [candidates, setCandidates]         = useState(null)
+  const [studentActions, setStudentActions] = useState({})
+  const [rollStrategy, setRollStrategy]     = useState('sequential')
+  const [forcePromote, setForcePromote]     = useState(false)
+  const [promoting, setPromoting]           = useState(false)
+  const [undoing, setUndoing]               = useState(false)
+  const [confirmPromote, setConfirmPromote] = useState(false)
+  const [result, setResult]                 = useState(null)
+  const [phase, setPhase]                   = useState('setup') // setup | review | done
+
+  const fetchValidation = useCallback(async () => {
+    if (!selectedClass || !selectedNewYear) return
+    try {
+      const r = await yearendAPI.validatePromotion(selectedClass, selectedNewYear)
+      setValidation(r.data)
+    } catch (err) {
+      toast.error(extractError(err))
+    }
+  }, [selectedClass, selectedNewYear])
+
+  const fetchCandidates = useCallback(async () => {
+    if (!selectedClass) return
+    try {
+      const r = await yearendAPI.getCandidates(selectedClass)
+      const list = r.data.candidates || []
+      setCandidates(list)
+      // Pre-populate actions from suggested
+      const actions = {}
+      list.forEach(c => { actions[c.student_id] = c.suggested_action })
+      setStudentActions(actions)
+    } catch (err) {
+      toast.error(extractError(err))
+    }
+  }, [selectedClass])
+
+  const handleReview = async () => {
+    await fetchValidation()
+    await fetchCandidates()
+    setPhase('review')
+    setResult(null)
+  }
+
+  const handlePromote = async () => {
+    if (!selectedClass || !selectedNewYear) return
+    setPromoting(true)
+    try {
+      const r = await yearendAPI.promoteClass(selectedClass, {
+        new_academic_year_id: parseInt(selectedNewYear),
+        student_actions: studentActions,
+        roll_strategy:   rollStrategy,
+        force:           forcePromote,
+      })
+      setResult({ type: 'success', data: r.data })
+      setPhase('done')
+      toast.success(`Promotion complete — ${r.data.promoted} promoted`)
+      onRefresh?.()
+    } catch (err) {
+      const msg = extractError(err)
+      setResult({ type: 'error', message: msg })
+      toast.error(msg)
+    } finally {
+      setPromoting(false)
+      setConfirmPromote(false)
+    }
+  }
+
+  const handleUndo = async () => {
+    if (!selectedClass || !selectedNewYear) return
+    setUndoing(true)
+    try {
+      const r = await yearendAPI.undoPromotion(selectedClass, parseInt(selectedNewYear))
+      toast.success(`Undo complete — ${r.data.undone} records reversed`)
+      setPhase('setup')
+      setResult(null)
+      setCandidates(null)
+      setValidation(null)
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setUndoing(false)
+    }
+  }
+
+  const setAll = (action) => {
+    const actions = {}
+    candidates?.forEach(c => { actions[c.student_id] = action })
+    setStudentActions(actions)
+  }
+
+  const classDraftYears = years.filter(y => y.status === 'draft' || y.status === 'active')
+  const classOptions  = classes.map(c => ({ value: String(c.id), label: `Std ${c.name} — Div ${c.division}` }))
+  const yearOptions   = classDraftYears.map(y => ({ value: String(y.id), label: y.label + (y.is_current ? ' (Current)' : y.status === 'draft' ? ' (Draft)' : '') }))
+
+  return (
+    <div>
+      {/* Step 1 — Select class + year */}
+      <YeCard icon="🎓" title="Bulk Promotion" sub="Move students from one standard to the next">
+        <div className="ye-form-row" style={{ marginBottom: 14 }}>
+          <div>
+            <label className="label">From Class</label>
+            <select className="input" value={selectedClass} onChange={e => { setSelectedClass(e.target.value); setPhase('setup'); setResult(null); setCandidates(null); setValidation(null) }}>
+              <option value="">Select class…</option>
+              {classOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Into Academic Year</label>
+            <select className="input" value={selectedNewYear} onChange={e => { setSelectedNewYear(e.target.value); setPhase('setup'); setResult(null) }}>
+              <option value="">Select target year…</option>
+              {yearOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Roll Strategy</label>
+            <select className="input" value={rollStrategy} onChange={e => setRollStrategy(e.target.value)}>
+              <option value="sequential">Sequential (keep order)</option>
+              <option value="alphabetical">Alphabetical (A–Z)</option>
+              <option value="carry_forward">Carry Forward (same numbers)</option>
+            </select>
+          </div>
+        </div>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 700, color: 'var(--text-secondary)' }}>
+          <input type="checkbox" checked={forcePromote} onChange={e => setForcePromote(e.target.checked)} />
+          Force promotion when preflight has blocking issues
+        </label>
+
+        {phase === 'setup' && (
+          <button
+            className="btn btn-primary"
+            style={{ width: '100%' }}
+            disabled={!selectedClass || !selectedNewYear}
+            onClick={handleReview}
+          >
+            Review Candidates →
+          </button>
+        )}
+
+        {/* Validation banner */}
+        {validation && (
+          <div style={{ marginTop: 14 }}>
+            {validation.errors?.length > 0 && (
+              <InlineBanner type="danger" title="Blocking issues" message={validation.errors.join(' · ')} />
+            )}
+            {validation.warnings?.length > 0 && (
+              <InlineBanner type="warning" message={validation.warnings.join(' · ')} />
+            )}
+            {validation.can_proceed && validation.errors?.length === 0 && (
+              <InlineBanner type="success" message="Preflight checks passed — ready to promote." />
+            )}
+          </div>
+        )}
+      </YeCard>
+
+      {/* Step 2 — Candidate list */}
+      {phase !== 'setup' && candidates && (
+        <YeCard
+          icon="👥"
+          title={`Candidate List — ${candidates.length} students`}
+          sub="Review and override suggested actions before running"
+          right={
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {ACTIONS.map(a => (
+                <button
+                  key={a}
+                  className={`ye-action-btn ye-action-${a}`}
+                  onClick={() => setAll(a)}
+                  style={{ fontSize: 10 }}
+                >
+                  All {ACTION_LABELS[a]}
+                </button>
+              ))}
+            </div>
+          }
+        >
+          <div className="ye-table-wrap">
+            <table className="data-table" style={{ minWidth: 700 }}>
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Roll</th>
+                  <th style={{ textAlign: 'center' }}>Exam Result</th>
+                  <th style={{ textAlign: 'center' }}>Att %</th>
+                  <th style={{ textAlign: 'right' }}>Dues</th>
+                  <th>Flags</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {candidates.map(c => (
+                  <tr key={c.student_id}>
+                    <td style={{ fontWeight: 600 }}>{c.student_name}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-tertiary)' }}>{c.roll_number || '—'}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <span style={{ fontSize: 12, fontWeight: 700 }}>{c.exam_result}</span>
+                      {c.percentage != null && <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginLeft: 4 }}>({c.percentage?.toFixed(0)}%)</span>}
+                    </td>
+                    <td style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: c.attendance_pct < 75 ? 'var(--danger-600)' : 'var(--text-secondary)' }}>
+                      {c.attendance_pct != null ? `${c.attendance_pct.toFixed(0)}%` : '—'}
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: c.pending_dues > 0 ? 'var(--danger-600)' : 'var(--text-tertiary)', fontSize: 12 }}>
+                      {c.pending_dues > 0 ? `₹${c.pending_dues.toLocaleString('en-IN')}` : '—'}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {c.flags?.has_pending_dues && <span className="ye-flag ye-flag-dues">Dues</span>}
+                        {c.flags?.low_attendance   && <span className="ye-flag ye-flag-att">Low Att.</span>}
+                        {c.flags?.no_marks_entered && <span className="ye-flag ye-flag-nomarks">No Marks</span>}
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                        {ACTIONS.map(a => (
+                          <button
+                            key={a}
+                            className={`ye-action-btn ye-action-${a}${studentActions[c.student_id] === a ? ' ye-action-active' : ''}`}
+                            onClick={() => setStudentActions(prev => ({ ...prev, [c.student_id]: a }))}
+                            style={{ fontSize: 10, padding: '3px 8px' }}
+                          >
+                            {ACTION_LABELS[a]}
+                          </button>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Summary counts */}
+          {candidates.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border-subtle)' }}>
+              {ACTIONS.map(a => {
+                const count = Object.values(studentActions).filter(v => v === a).length
+                if (!count) return null
+                return (
+                  <div key={a} className={`ye-action-btn ye-action-${a}`} style={{ cursor: 'default', fontSize: 11 }}>
+                    {count} {ACTION_LABELS[a]}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Execute */}
+          <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+            <button
+              className="btn btn-success"
+              style={{ flex: 1, minWidth: 160 }}
+              disabled={promoting || (!validation?.can_proceed && !forcePromote)}
+              onClick={() => setConfirmPromote(true)}
+            >
+              {promoting ? <><Spinner /> Promoting…</> : `▶ Run Promotion (${candidates.length} students)`}
+            </button>
+            <button className="btn btn-secondary" onClick={() => setPhase('setup')}>← Back</button>
+          </div>
+        </YeCard>
+      )}
+
+      {/* Result card */}
+      {result && (
+        <div style={{
+          padding: 16, borderRadius: 12, marginTop: 0,
+          background: result.type === 'success' ? 'var(--success-50)' : 'var(--danger-50)',
+          border: `1px solid ${result.type === 'success' ? 'var(--success-100)' : 'var(--danger-100)'}`,
+        }}>
+          {result.type === 'success' ? (
+            <>
+              <div style={{ fontWeight: 800, color: 'var(--success-700)', marginBottom: 8 }}>
+                ✅ Promotion complete
+              </div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+                {Object.entries(result.data).filter(([k, v]) => typeof v === 'number' && v > 0 && !['total_processed'].includes(k)).map(([k, v]) => (
+                  <span key={k} style={{ fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 20, background: 'white', color: 'var(--success-700)', border: '1px solid var(--success-100)' }}>
+                    {v} {k}
+                  </span>
+                ))}
+              </div>
+              {result.data.errors?.length > 0 && (
+                <div style={{ fontSize: 12, color: 'var(--danger-700)' }}>
+                  {result.data.errors.length} skipped: {result.data.errors.map(e => e.student_name || e.student_id).join(', ')}
+                </div>
+              )}
+              <button
+                className="btn btn-secondary btn-sm"
+                style={{ marginTop: 10 }}
+                disabled={undoing}
+                onClick={handleUndo}
+              >
+                {undoing ? <><Spinner size={12} /> Undoing…</> : '↩ Undo This Promotion'}
+              </button>
+            </>
+          ) : (
+            <div style={{ fontWeight: 700, color: 'var(--danger-700)' }}>❌ {result.message}</div>
+          )}
+        </div>
+      )}
       <ConfirmModal
         open={confirmPromote}
-        title="Confirm Promotion"
-        message={`Promote ALL active students in Class ${selectedClassName || ''} to the next standard? This action moves their class and academic year.`}
-        confirmLabel="Yes, Promote"
-        confirmVariant="success"
+        title={forcePromote ? 'Force Promotion' : 'Run Promotion'}
+        message={
+          forcePromote
+            ? 'This will run promotion even though preflight found blocking issues. Confirm that missing marks, duplicate runs, and mappings have been reviewed.'
+            : 'This will create target-year enrollments, update student class/year placement, and carry forward arrears where needed.'
+        }
+        confirmLabel={forcePromote ? 'Force Promote' : 'Run Promotion'}
+        confirmVariant={forcePromote ? 'danger' : 'success'}
+        loading={promoting}
         onConfirm={handlePromote}
         onCancel={() => setConfirmPromote(false)}
-        loading={promoting}
       />
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB: Year-End Operations (lock, clone, TC)
+// ─────────────────────────────────────────────────────────────────────────────
+function OperationsTab({ years }) {
+  const [lockYear, setLockYear]     = useState('')
+  const [locking, setLocking]       = useState(false)
+  const [cloneFrom, setCloneFrom]   = useState('')
+  const [cloneTo, setCloneTo]       = useState('')
+  const [cloningFees, setCloningFees] = useState(false)
+  const [cloningSubs, setCloningSubs] = useState(false)
+  const [confirmOp, setConfirmOp]     = useState(null)
+
+  const yearOptions = years.map(y => ({
+    value: String(y.id),
+    label: y.label + (y.is_current ? ' (Current)' : ` (${y.status})`),
+  }))
+
+  const handleLockMarks = async () => {
+    if (!lockYear) { toast.error('Select a year'); return }
+    setLocking(true)
+    try {
+      const r = await yearendAPI.lockMarks(parseInt(lockYear))
+      toast.success(`${r.data.locked} mark records locked`)
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setLocking(false)
+      setConfirmOp(null)
+    }
+  }
+
+  const handleCloneFees = async () => {
+    if (!cloneFrom || !cloneTo) { toast.error('Select both years'); return }
+    setCloningFees(true)
+    try {
+      const r = await yearendAPI.cloneFees(parseInt(cloneFrom), parseInt(cloneTo))
+      toast.success(`Fee structure cloned — ${r.data.created} created, ${r.data.skipped} skipped`)
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setCloningFees(false)
+      setConfirmOp(null)
+    }
+  }
+
+  const handleCloneSubjects = async () => {
+    if (!cloneFrom || !cloneTo) { toast.error('Select both years'); return }
+    setCloningSubs(true)
+    try {
+      const r = await yearendAPI.cloneSubjects(parseInt(cloneFrom), parseInt(cloneTo))
+      toast.success(`Subjects cloned — ${r.data.created} created, ${r.data.skipped} skipped`)
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setCloningSubs(false)
+      setConfirmOp(null)
+    }
+  }
+
+  return (
+    <div className="ye-grid-2">
+      {/* Lock marks */}
+      <YeCard icon="🔒" title="Lock Exam Marks" sub="Prevents editing after year closes. Idempotent — safe to run twice.">
+        <InlineBanner type="warning" message="Run this before promotion. Marks cannot be edited after locking without admin override." />
+        <div style={{ marginTop: 14 }}>
+          <label className="label">Academic Year</label>
+          <select className="input" style={{ marginBottom: 12 }} value={lockYear} onChange={e => setLockYear(e.target.value)}>
+            <option value="">Select year…</option>
+            {yearOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <button className="btn btn-danger" style={{ width: '100%' }} onClick={() => setConfirmOp('lock')} disabled={locking || !lockYear}>
+            {locking ? <><Spinner /> Locking…</> : '🔒 Lock All Marks'}
+          </button>
+        </div>
+      </YeCard>
+
+      {/* Clone */}
+      <YeCard icon="📋" title="Clone Fees & Subjects" sub="Copy structure from one year to the next. Use at year start.">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div>
+            <label className="label">From Year</label>
+            <select className="input" value={cloneFrom} onChange={e => setCloneFrom(e.target.value)}>
+              <option value="">Select source year…</option>
+              {yearOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">To Year (target)</label>
+            <select className="input" value={cloneTo} onChange={e => setCloneTo(e.target.value)}>
+              <option value="">Select target year…</option>
+              {yearOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => setConfirmOp('fees')} disabled={cloningFees || !cloneFrom || !cloneTo || cloneFrom === cloneTo}>
+              {cloningFees ? <><Spinner /> Cloning…</> : 'Clone Fees'}
+            </button>
+            <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setConfirmOp('subjects')} disabled={cloningSubs || !cloneFrom || !cloneTo || cloneFrom === cloneTo}>
+              {cloningSubs ? <><Spinner /> Cloning…</> : 'Clone Subjects'}
+            </button>
+          </div>
+          {cloneFrom === cloneTo && <InlineBanner type="danger" message="Source and target years must be different." />}
+        </div>
+      </YeCard>
+
+      {/* TC */}
+      <YeCard icon="📄" title="Transfer Certificates" sub="Generate TC PDFs for leaving students">
+        <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+          Go to <strong>Students</strong>, find the student, click <strong>TC</strong>. The PDF opens for printing.
+          The TC now includes attendance percentage (using the calendar-aware working day count).
+        </p>
+        <a href="/students" className="btn btn-secondary" style={{ display: 'inline-flex', marginTop: 12, textDecoration: 'none' }}>
+          Go to Students →
+        </a>
+      </YeCard>
       <ConfirmModal
-        open={!!deleteClassTarget}
-        title="Remove Class Division"
-        message={`Remove Class ${deleteClassTarget?.name} — Division ${deleteClassTarget?.division}? Students must be moved first.`}
-        confirmLabel="Remove"
-        confirmVariant="danger"
-        onConfirm={handleDeleteClassConfirm}
-        onCancel={() => setDeleteClassTarget(null)}
-        loading={deletingClass}
+        open={!!confirmOp}
+        title={confirmOp === 'lock' ? 'Lock Marks' : confirmOp === 'fees' ? 'Clone Fee Structure' : 'Clone Subjects'}
+        message={
+          confirmOp === 'lock'
+            ? 'This locks all currently entered marks for the selected year and prevents normal mark edits afterward.'
+            : 'This copies setup data into the target year and skips records that already exist.'
+        }
+        confirmLabel={confirmOp === 'lock' ? 'Lock Marks' : 'Continue'}
+        confirmVariant={confirmOp === 'lock' ? 'danger' : 'primary'}
+        loading={locking || cloningFees || cloningSubs}
+        onConfirm={confirmOp === 'lock' ? handleLockMarks : confirmOp === 'fees' ? handleCloneFees : handleCloneSubjects}
+        onCancel={() => setConfirmOp(null)}
       />
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB: Academic Calendar
+// ─────────────────────────────────────────────────────────────────────────────
+function CalendarTab({ years }) {
+  const [selectedYear, setSelectedYear] = useState('')
+  const [events, setEvents]     = useState([])
+  const [loading, setLoading]   = useState(false)
+  const [seeding, setSeeding]   = useState(false)
+  const [form, setForm] = useState({
+    event_type: 'holiday', title: '', start_date: '', end_date: '',
+    description: '', affects_attendance: true,
+  })
+  const [adding, setAdding] = useState(false)
+
+  const fetchEvents = useCallback(async () => {
+    if (!selectedYear) return
+    setLoading(true)
+    try {
+      const r = await yearendAPI.getCalendar(selectedYear)
+      setEvents(r.data)
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setLoading(false)
+    }
+  }, [selectedYear])
+
+  useEffect(() => { fetchEvents() }, [fetchEvents])
+
+  const handleAdd = async () => {
+    if (!form.title || !form.start_date || !form.end_date) {
+      toast.error('Title, start and end date required')
+      return
+    }
+    setAdding(true)
+    try {
+      await yearendAPI.addCalendarEvent(selectedYear, form)
+      toast.success('Event added')
+      setForm({ event_type: 'holiday', title: '', start_date: '', end_date: '', description: '', affects_attendance: true })
+      fetchEvents()
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  const handleDelete = async (eventId) => {
+    try {
+      await yearendAPI.deleteCalendarEvent(eventId)
+      toast.success('Event deleted')
+      fetchEvents()
+    } catch (err) {
+      toast.error(extractError(err))
+    }
+  }
+
+  const handleSeedHolidays = async () => {
+    setSeeding(true)
+    try {
+      const r = await yearendAPI.seedHolidays(selectedYear)
+      toast.success(`Seeded ${r.data.seeded} standard Gujarat holidays`)
+      fetchEvents()
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setSeeding(false)
+    }
+  }
+
+  const yearOptions = years.map(y => ({ value: String(y.id), label: y.label }))
+  const TYPE_LABELS = { holiday: 'Holiday', exam_period: 'Exam Period', term_start: 'Term', event: 'Event' }
+  const TYPES = Object.keys(TYPE_LABELS)
+
+  return (
+    <div>
+      <div style={{ marginBottom: 14 }}>
+        <label className="label">Academic Year</label>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <select className="input" value={selectedYear} onChange={e => setSelectedYear(e.target.value)} style={{ flex: 1 }}>
+            <option value="">Select year…</option>
+            {yearOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          {selectedYear && (
+            <button className="btn btn-secondary" onClick={handleSeedHolidays} disabled={seeding}>
+              {seeding ? <Spinner /> : '🇮🇳 Seed Gujarat Holidays'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {selectedYear && (
+        <>
+          {/* Add event form */}
+          <YeCard icon="➕" title="Add Calendar Event" sub="Holidays and exam periods affect attendance working-day count">
+            <div className="ye-form-row" style={{ marginBottom: 10 }}>
+              <div>
+                <label className="label">Type</label>
+                <select className="input" value={form.event_type} onChange={e => setForm(f => ({ ...f, event_type: e.target.value }))}>
+                  {TYPES.map(t => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
+                </select>
+              </div>
+              <div style={{ flex: 2 }}>
+                <label className="label">Title *</label>
+                <input className="input" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Diwali Vacation" />
+              </div>
+              <div>
+                <label className="label">Start Date *</label>
+                <input type="date" className="input" value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">End Date *</label>
+                <input type="date" className="input" value={form.end_date} onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                <input type="checkbox" checked={form.affects_attendance} onChange={e => setForm(f => ({ ...f, affects_attendance: e.target.checked }))} style={{ accentColor: 'var(--brand-500)' }} />
+                Affects attendance denominator
+              </label>
+            </div>
+            <button className="btn btn-primary" style={{ width: '100%' }} onClick={handleAdd} disabled={adding}>
+              {adding ? <><Spinner /> Adding…</> : '+ Add Event'}
+            </button>
+          </YeCard>
+
+          {/* Event list */}
+          <YeCard icon="📆" title={`Events (${events.length})`}>
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-tertiary)' }}><Spinner /> Loading…</div>
+            ) : events.length === 0 ? (
+              <EmptyState icon="📅" title="No events yet" description="Seed standard holidays or add manually" />
+            ) : (
+              <div>
+                {events.map(ev => {
+                  const typeClass = `ye-flag ye-evt-${ev.event_type}`
+                  return (
+                    <div key={ev.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
+                      <span className={typeClass}>{TYPE_LABELS[ev.event_type] || ev.event_type}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{ev.title}</div>
+                        <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>
+                          {ev.start_date} → {ev.end_date}
+                          {ev.affects_attendance && <span style={{ marginLeft: 6, color: 'var(--brand-600)', fontWeight: 700 }}>· affects attendance</span>}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDelete(ev.id)}
+                        style={{ padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, color: 'var(--danger-600)', background: 'var(--danger-50)', border: '1px solid var(--danger-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </YeCard>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB: Audit Log
+// ─────────────────────────────────────────────────────────────────────────────
+function AuditLogTab({ years }) {
+  const [logs, setLogs]       = useState([])
+  const [total, setTotal]     = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [opFilter, setOpFilter] = useState('')
+  const [yearFilter, setYearFilter] = useState('')
+  const [offset, setOffset]   = useState(0)
+  const LIMIT = 25
+
+  const fetchLogs = useCallback(async () => {
+    setLoading(true)
+    try {
+      const params = { limit: LIMIT, offset }
+      if (opFilter)   params.operation        = opFilter
+      if (yearFilter) params.academic_year_id = yearFilter
+      const r = await yearendAPI.getAuditLog(params)
+      setLogs(r.data.logs)
+      setTotal(r.data.total)
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setLoading(false)
+    }
+  }, [opFilter, yearFilter, offset])
+
+  useEffect(() => { fetchLogs() }, [fetchLogs])
+
+  const OPS = ['bulk_promote', 'lock_marks', 'clone_fees', 'clone_subjects', 'undo_promotion', 'activate_year']
+  const yearOptions = years.map(y => ({ value: String(y.id), label: y.label }))
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+        <select className="input" style={{ flex: 1, minWidth: 160 }} value={opFilter} onChange={e => { setOpFilter(e.target.value); setOffset(0) }}>
+          <option value="">All operations</option>
+          {OPS.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+        <select className="input" style={{ flex: 1, minWidth: 160 }} value={yearFilter} onChange={e => { setYearFilter(e.target.value); setOffset(0) }}>
+          <option value="">All years</option>
+          {yearOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        {(opFilter || yearFilter) && (
+          <button className="btn btn-ghost btn-sm" onClick={() => { setOpFilter(''); setYearFilter(''); setOffset(0) }}>Clear</button>
+        )}
+      </div>
+
+      <div className="ye-card" style={{ marginBottom: 0 }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span className="card-title">Audit Log</span>
+          <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{total} entries</span>
+        </div>
+        <div style={{ padding: '0 16px' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-tertiary)' }}><Spinner /> Loading…</div>
+          ) : logs.length === 0 ? (
+            <EmptyState icon="📋" title="No audit entries" description="Operations will appear here once run" />
+          ) : (
+            logs.map(log => (
+              <div key={log.id} className="ye-audit-row">
+                <div>
+                  <span className={`ye-audit-op ${log.result === 'success' ? 'ye-audit-success' : log.result === 'failed' ? 'ye-audit-failed' : 'ye-audit-partial'}`}>
+                    {log.operation}
+                  </span>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>
+                    {log.affected_count != null ? `${log.affected_count} records affected` : '—'}
+                    {log.error_detail && <span style={{ color: 'var(--danger-600)', marginLeft: 8 }}>{log.error_detail}</span>}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>{log.created_at?.split('T')[0]} {log.created_at?.split('T')[1]?.slice(0, 8)}</div>
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 20, whiteSpace: 'nowrap',
+                  background: log.result === 'success' ? '#dcfce7' : log.result === 'failed' ? '#fee2e2' : '#fef3c7',
+                  color:      log.result === 'success' ? '#15803d' : log.result === 'failed' ? '#b91c1c' : '#b45309',
+                }}>
+                  {log.result}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+        {total > LIMIT && (
+          <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 8, justifyContent: 'center' }}>
+            <button className="btn btn-secondary btn-sm" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - LIMIT))}>← Prev</button>
+            <span style={{ fontSize: 12, color: 'var(--text-tertiary)', alignSelf: 'center' }}>{offset + 1}–{Math.min(offset + LIMIT, total)} of {total}</span>
+            <button className="btn btn-secondary btn-sm" disabled={offset + LIMIT >= total} onClick={() => setOffset(offset + LIMIT)}>Next →</button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Root component
+// ─────────────────────────────────────────────────────────────────────────────
+export default function YearEnd() {
+  const [tab, setTab]           = useState('lifecycle')
+  const [classes, setClasses]   = useState([])
+  const [years, setYears]       = useState([])
+  const [currentYear, setCurrentYear] = useState(null)
+
+  const loadData = useCallback(async () => {
+    const [classRes, yearRes] = await Promise.all([
+      setupAPI.getClasses(),
+      setupAPI.getAcademicYears(),
+    ])
+    setClasses(classRes.data)
+    setYears(yearRes.data)
+    const curr = yearRes.data.find(y => y.is_current)
+    if (curr) setCurrentYear(curr)
+  }, [])
+
+  useEffect(() => { loadData() }, [loadData])
+
+  const tabs = [
+    { value: 'lifecycle',  label: 'Year Lifecycle', icon: '📅' },
+    { value: 'promotion',  label: 'Promotion',       icon: '🎓' },
+    { value: 'operations', label: 'Operations',      icon: '⚙️'  },
+    { value: 'calendar',   label: 'Calendar',        icon: '📆' },
+    { value: 'audit',      label: 'Audit Log',       icon: '📋' },
+  ]
+
+  return (
+    <div className="ye-root">
+      <PageHeader
+        title="Year-End Management"
+        subtitle="Draft → Activate → Promote → Lock → Close"
+      />
+
+      {currentYear && (
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 14px', background: 'var(--brand-50)', border: '1px solid var(--brand-200)', borderRadius: 20, marginBottom: 18, fontSize: 13, fontWeight: 700, color: 'var(--brand-700)' }}>
+          <span style={{ width: 7, height: 7, background: 'var(--success-500)', borderRadius: '50%' }} />
+          Current Year: {currentYear.label}
+        </div>
+      )}
+
+      <div style={{ marginBottom: 18, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <TabBar tabs={tabs} active={tab} onChange={setTab} />
+      </div>
+
+      {tab === 'lifecycle'  && <YearLifecycleTab  years={years} currentYear={currentYear} onRefresh={loadData} />}
+      {tab === 'promotion'  && <PromotionTab       classes={classes} years={years} onRefresh={loadData} />}
+      {tab === 'operations' && <OperationsTab      years={years} />}
+      {tab === 'calendar'   && <CalendarTab        years={years} />}
+      {tab === 'audit'      && <AuditLogTab        years={years} />}
     </div>
   )
 }

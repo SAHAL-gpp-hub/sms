@@ -2,11 +2,13 @@
 import { useState, useEffect } from 'react'
 import { usePortalContext } from '../../layouts/PortalLayout'
 import { portalAPI } from '../../services/api'
+import api from '../../services/api'
 
 const GRADE_COLORS = {
   A1:'#15803d', A2:'#065f46', B1:'#1d4ed8', B2:'#4338ca',
   C1:'#d97706', C2:'#c2410c', D:'#b91c1c',  E:'#9f1239',
 }
+
 function GradePill({ grade }) {
   const color = GRADE_COLORS[grade] || '#64748b'
   return (
@@ -17,12 +19,48 @@ function GradePill({ grade }) {
 }
 
 function Shimmer() {
-  return <div style={{ height:'80px', borderRadius:'16px', background:'linear-gradient(90deg,#f0f7f7 25%,#e0eded 50%,#f0f7f7 75%)', backgroundSize:'200% auto', animation:'portalShimmer 1.5s linear infinite', marginBottom:'10px' }} />
+  return (
+    <div style={{ height:'80px', borderRadius:'16px', background:'linear-gradient(90deg,#f0f7f7 25%,#e0eded 50%,#f0f7f7 75%)', backgroundSize:'200% auto', animation:'portalShimmer 1.5s linear infinite', marginBottom:'10px' }} />
+  )
 }
 
-function ExamCard({ exam }) {
+// --- FIX: Authenticated PDF download using axios (not plain <a href>) ---
+// Plain anchor tags never send sessionStorage tokens → 401 Not Authenticated.
+// We use axios which attaches the Bearer token via the request interceptor,
+// receive the response as a blob, then trigger a programmatic download.
+async function downloadMarksheet(examId, studentId, examName) {
+  try {
+    const params = studentId ? { student_id: studentId } : {}
+    const res = await api.get(`/portal/me/marksheet/${examId}`, {
+      params,
+      responseType: 'blob',
+    })
+    const blobUrl = window.URL.createObjectURL(
+      new Blob([res.data], { type: 'application/pdf' })
+    )
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.download = `Marksheet_${examName || examId}.pdf`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(blobUrl)
+  } catch (err) {
+    alert('Failed to download marksheet. Please try again.')
+  }
+}
+
+// ExamCard accepts onDownload prop so it can trigger authenticated download
+function ExamCard({ exam, onDownload }) {
   const [expanded, setExpanded] = useState(false)
+  const [downloading, setDownloading] = useState(false)
   const isPassed = exam.result === 'PASS'
+
+  const handleDownload = async () => {
+    setDownloading(true)
+    await onDownload(exam.exam_id, null, exam.name)
+    setDownloading(false)
+  }
 
   return (
     <div style={{ background:'white', borderRadius:'16px', overflow:'hidden', marginBottom:'10px', boxShadow:'0 1px 4px rgba(0,0,0,0.06)' }}>
@@ -62,6 +100,7 @@ function ExamCard({ exam }) {
               </div>
             ))}
           </div>
+
           {/* Subject rows */}
           {(exam.subjects || []).map((sub, i) => {
             const total    = sub.total ?? ((sub.theory_marks != null) ? (sub.theory_marks + (sub.practical_marks||0)) : null)
@@ -86,19 +125,42 @@ function ExamCard({ exam }) {
               </div>
             )
           })}
-          {/* Marksheet link */}
+
+          {/* Download button — uses authenticated axios fetch, NOT a plain <a href> */}
           {exam.exam_id && (
             <div style={{ padding:'8px 14px 12px' }}>
-              <a
-                href={portalAPI.getMarksheet(exam.exam_id)}
-                target="_blank" rel="noreferrer"
-                style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'6px', padding:'10px', borderRadius:'10px', background:'#0d737710', color:'#0d7377', fontWeight:700, fontSize:'13px', textDecoration:'none', border:'1px solid #0d737730' }}
+              <button
+                onClick={handleDownload}
+                disabled={downloading}
+                style={{
+                  display:'flex', alignItems:'center', justifyContent:'center', gap:'6px',
+                  padding:'10px', borderRadius:'10px',
+                  background: downloading ? '#f0f7f7' : '#0d737710',
+                  color: downloading ? '#94a3b8' : '#0d7377',
+                  fontWeight:700, fontSize:'13px',
+                  border:'1px solid #0d737730',
+                  cursor: downloading ? 'not-allowed' : 'pointer',
+                  width:'100%',
+                  fontFamily:'Nunito,sans-serif',
+                  transition:'background 0.15s',
+                }}
               >
-                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-                Download Marksheet PDF
-              </a>
+                {downloading ? (
+                  <>
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ animation:'spin 1s linear infinite' }}>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Downloading…
+                  </>
+                ) : (
+                  <>
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Download Marksheet PDF
+                  </>
+                )}
+              </button>
             </div>
           )}
         </div>
@@ -129,9 +191,25 @@ export default function PortalResults() {
        .catch(() => { setError(true); setLoading(false) })
   }, [isParent, selectedChildId])
 
+  // Pass selectedChildId so parent can download their child's marksheet
+  const handleDownload = (examId, _unused, examName) => {
+    const studentId = isParent ? selectedChildId : null
+    return downloadMarksheet(examId, studentId, examName)
+  }
+
   return (
     <>
-      <style>{`@keyframes portalShimmer{0%{background-position:-200% center}100%{background-position:200% center}}`}</style>
+      <style>{`
+        @keyframes portalShimmer {
+          0%   { background-position: -200% center }
+          100% { background-position:  200% center }
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg) }
+          to   { transform: rotate(360deg) }
+        }
+      `}</style>
+
       <div style={{ marginBottom:'14px' }}>
         <h2 style={{ fontSize:'18px', fontWeight:900, color:'#0f172a', letterSpacing:'-0.02em' }}>Results</h2>
         <p style={{ fontSize:'12.5px', color:'#64748b', marginTop:'2px', fontWeight:600 }}>
@@ -140,12 +218,14 @@ export default function PortalResults() {
       </div>
 
       {loading && [1,2,3].map(i => <Shimmer key={i} />)}
+
       {error && (
         <div style={{ textAlign:'center', padding:'40px 20px', background:'white', borderRadius:'16px' }}>
           <div style={{ fontSize:'36px', marginBottom:'10px' }}>⚠️</div>
           <div style={{ fontWeight:700, color:'#0f172a' }}>Couldn't load results</div>
         </div>
       )}
+
       {!loading && !error && results.length === 0 && (
         <div style={{ textAlign:'center', padding:'40px 20px', background:'white', borderRadius:'16px' }}>
           <div style={{ fontSize:'36px', marginBottom:'10px' }}>📊</div>
@@ -153,7 +233,10 @@ export default function PortalResults() {
           <div style={{ fontSize:'13px', color:'#64748b', marginTop:'4px' }}>Results appear once marks are entered</div>
         </div>
       )}
-      {!loading && !error && results.map((exam, i) => <ExamCard key={i} exam={exam} />)}
+
+      {!loading && !error && results.map((exam, i) => (
+        <ExamCard key={i} exam={exam} onDownload={handleDownload} />
+      ))}
     </>
   )
 }

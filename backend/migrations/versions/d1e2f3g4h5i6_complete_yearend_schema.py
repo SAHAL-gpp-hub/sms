@@ -77,6 +77,12 @@ def upgrade() -> None:
     # ── 1. academic_years.status ─────────────────────────────────────────────
     if not _enum_exists("yearsstatusenum"):
         op.execute(text("CREATE TYPE yearsstatusenum AS ENUM ('draft', 'active', 'closed')"))
+    if not _enum_exists("auditoperationenum"):
+        op.execute(text(
+            "CREATE TYPE auditoperationenum AS ENUM "
+            "('bulk_promote','undo_promote','new_year','activate_year','close_year',"
+            "'lock_marks','issue_tc','clone_subjects','clone_fees')"
+        ))
 
     if _table_exists("academic_years"):
         if not _column_exists("academic_years", "status"):
@@ -154,6 +160,8 @@ def upgrade() -> None:
         for val in ("Alumni", "On_Hold", "Detained", "Provisional"):
             if val not in existing_vals:
                 conn.execute(text(f"ALTER TYPE studentstatusenum ADD VALUE IF NOT EXISTS '{val}'"))
+        op.execute(text("UPDATE students SET status='TC_Issued' WHERE status::text='TC Issued'"))
+        op.execute(text("UPDATE students SET status='Passed_Out' WHERE status::text='Passed Out'"))
 
     # ── 6. marks.locked_at ───────────────────────────────────────────────────
     if _table_exists("marks"):
@@ -203,6 +211,7 @@ def upgrade() -> None:
             sa.Column("academic_year_id", sa.Integer(), sa.ForeignKey("academic_years.id"), nullable=False),
             sa.Column("class_id",         sa.Integer(), sa.ForeignKey("classes.id"), nullable=False),
             sa.Column("roll_number",      sa.String(30), nullable=True),   # string for composite formats
+            sa.Column("original_roll_number", sa.String(30), nullable=True),
             sa.Column("status",           sa.String(20), nullable=False, server_default="active"),
                                           # active / retained / graduated / transferred / dropped / provisional / on_hold
             sa.Column("promotion_action", sa.String(20), nullable=True),
@@ -229,6 +238,8 @@ def upgrade() -> None:
             "enrollments",
             ["status"],
         )
+    elif not _column_exists("enrollments", "original_roll_number"):
+        op.add_column("enrollments", sa.Column("original_roll_number", sa.String(30), nullable=True))
 
     # ── 9. academic_calendar table ────────────────────────────────────────────
     if not _table_exists("academic_calendar"):
@@ -270,7 +281,11 @@ def upgrade() -> None:
         op.create_table(
             "audit_logs",
             sa.Column("id",           sa.Integer(), primary_key=True),
-            sa.Column("operation",    sa.String(50), nullable=False),
+            sa.Column("operation",    sa.Enum(
+                "bulk_promote", "undo_promote", "new_year", "activate_year", "close_year",
+                "lock_marks", "issue_tc", "clone_subjects", "clone_fees",
+                name="auditoperationenum",
+            ), nullable=False),
                                       # bulk_promote / new_year / issue_tc / lock_marks / undo_promote
             sa.Column("performed_by", sa.Integer(), sa.ForeignKey("users.id"), nullable=True),
             sa.Column("academic_year_id", sa.Integer(), nullable=True),
@@ -285,6 +300,29 @@ def upgrade() -> None:
         op.create_index("ix_audit_logs_operation",    "audit_logs", ["operation"])
         op.create_index("ix_audit_logs_year",         "audit_logs", ["academic_year_id"])
         op.create_index("ix_audit_logs_performed_by", "audit_logs", ["performed_by"])
+
+    # ── 11b. token pruning and sequence-backed document numbers ───────────────
+    if _table_exists("token_blocklist") and not _column_exists("token_blocklist", "expires_at"):
+        op.add_column(
+            "token_blocklist",
+            sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        )
+
+    op.execute(text("CREATE SEQUENCE IF NOT EXISTS receipt_number_seq"))
+    op.execute(text("CREATE SEQUENCE IF NOT EXISTS tc_number_seq"))
+
+    if not _table_exists("transfer_certificates"):
+        op.create_table(
+            "transfer_certificates",
+            sa.Column("id", sa.Integer(), primary_key=True),
+            sa.Column("tc_number", sa.String(30), nullable=False, unique=True),
+            sa.Column("student_id", sa.Integer(), sa.ForeignKey("students.id"), nullable=False),
+            sa.Column("reason", sa.Text(), nullable=True),
+            sa.Column("conduct", sa.String(100), nullable=True),
+            sa.Column("issued_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        )
+        op.create_index("ix_transfer_certificates_tc_number", "transfer_certificates", ["tc_number"], unique=True)
+        op.create_index("ix_transfer_certificates_student_id", "transfer_certificates", ["student_id"])
 
     # ── 12. Indexes on frequently-queried columns ──────────────────────────────
     if _table_exists("students"):
@@ -310,19 +348,21 @@ def upgrade() -> None:
     # then map to new enrollment status values.
     if _table_exists("enrollments") and _table_exists("students"):
         op.execute(text("""
-            INSERT INTO enrollments (student_id, academic_year_id, class_id, roll_number, status, enrolled_on)
+            INSERT INTO enrollments (student_id, academic_year_id, class_id, roll_number, original_roll_number, status, promotion_status, enrolled_on)
             SELECT
                 s.id,
                 s.academic_year_id,
                 s.class_id,
                 s.roll_number::text,
+                s.roll_number::text,
                 CASE s.status::text
                     WHEN 'Active'     THEN 'active'
-                    WHEN 'TC Issued'  THEN 'transferred'
+                    WHEN 'TC_Issued'  THEN 'transferred'
                     WHEN 'Left'       THEN 'dropped'
-                    WHEN 'Passed Out' THEN 'graduated'
+                    WHEN 'Passed_Out' THEN 'graduated'
                     ELSE 'active'
                 END,
+                'completed',
                 s.admission_date
             FROM students s
             WHERE s.class_id IS NOT NULL
@@ -334,9 +374,11 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Drop new tables
-    for tbl in ("audit_logs", "report_cards", "academic_calendar", "enrollments"):
+    for tbl in ("transfer_certificates", "audit_logs", "report_cards", "academic_calendar", "enrollments"):
         if _table_exists(tbl):
             op.drop_table(tbl)
+    op.execute(text("DROP SEQUENCE IF EXISTS receipt_number_seq"))
+    op.execute(text("DROP SEQUENCE IF EXISTS tc_number_seq"))
 
     # Drop added columns (reverse order)
     col_drops = [
@@ -362,3 +404,5 @@ def downgrade() -> None:
     # Drop enum
     if _enum_exists("yearsstatusenum"):
         op.execute(text("DROP TYPE yearsstatusenum"))
+    if _enum_exists("auditoperationenum"):
+        op.execute(text("DROP TYPE auditoperationenum"))

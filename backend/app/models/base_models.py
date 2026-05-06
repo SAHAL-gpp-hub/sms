@@ -40,9 +40,9 @@ class GenderEnum(str, enum.Enum):
 
 class StudentStatusEnum(str, enum.Enum):
     Active      = "Active"
-    TC_Issued   = "TC Issued"
+    TC_Issued   = "TC_Issued"
     Left        = "Left"
-    Passed_Out  = "Passed Out"
+    Passed_Out  = "Passed_Out"
     Alumni      = "Alumni"       # NEW: Std 10/12 graduate, permanent record
     On_Hold     = "On_Hold"      # NEW: decision pending (compartment etc.)
     Detained    = "Detained"     # NEW: failed, will repeat same standard
@@ -170,6 +170,7 @@ class Enrollment(Base):
     academic_year_id = Column(Integer, ForeignKey("academic_years.id"), nullable=False)
     class_id         = Column(Integer, ForeignKey("classes.id"), nullable=False)
     roll_number      = Column(String(30), nullable=True)   # string: supports "2025-07-A-01"
+    original_roll_number = Column(String(30), nullable=True)
     status           = Column(
         Enum(EnrollmentStatusEnum),
         nullable=False,
@@ -371,6 +372,17 @@ class FeePayment(Base):
     collected_by   = Column(String(100), nullable=True)
 
 
+class TransferCertificate(Base):
+    __tablename__ = "transfer_certificates"
+
+    id          = Column(Integer, primary_key=True)
+    tc_number   = Column(String(30), unique=True, nullable=False, index=True)
+    student_id  = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
+    reason      = Column(Text, nullable=True)
+    conduct     = Column(String(100), nullable=True)
+    issued_at   = Column(DateTime(timezone=True), server_default=func.now())
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Attendance
 # ─────────────────────────────────────────────────────────────────────────────
@@ -450,6 +462,7 @@ class TokenBlocklist(Base):
 
     id         = Column(Integer, primary_key=True)
     jti        = Column(String(36), unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

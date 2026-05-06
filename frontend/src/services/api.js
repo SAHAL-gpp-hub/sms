@@ -1,4 +1,4 @@
-// frontend/src/services/api.js — Updated with complete adminAPI
+// frontend/src/services/api.js
 import axios from 'axios'
 import { getToken, clearToken } from './auth'
 
@@ -6,6 +6,16 @@ const api = axios.create({
   baseURL: '/api/v1',
   headers: { 'Content-Type': 'application/json' },
 })
+
+export async function openSignedPdf(tokenPath, pdfPath, params = {}) {
+  const { data } = await api.get(tokenPath, { params })
+  const query = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') query.set(key, value)
+  })
+  query.set('token', data.token)
+  window.open(`/api/v1${pdfPath}?${query.toString()}`, '_blank', 'noopener,noreferrer')
+}
 
 api.interceptors.request.use(config => {
   const token = getToken()
@@ -35,34 +45,34 @@ export const authAPI = {
     })
   },
   register: (data) => api.post('/auth/register', data),
-  me: () => api.get('/auth/me'),
-  logout: () => api.post('/auth/logout'),
+  me:       ()     => api.get('/auth/me'),
+  logout:   ()     => api.post('/auth/logout'),
 }
 
 // ── Students ──────────────────────────────────────────────────────────────────
 export const studentAPI = {
-  list:   (params) => api.get('/students/', { params }),
-  get:    (id)     => api.get(`/students/${id}`),
-  create: (data)   => api.post('/students/', data),
-  update: (id, data) => api.put(`/students/${id}`, data),
-  delete: (id)     => api.delete(`/students/${id}`),
+  list:   (params)     => api.get('/students/', { params }),
+  get:    (id)         => api.get(`/students/${id}`),
+  create: (data)       => api.post('/students/', data),
+  update: (id, data)   => api.put(`/students/${id}`, data),
+  delete: (id)         => api.delete(`/students/${id}`),
 }
 
 // ── Fees ──────────────────────────────────────────────────────────────────────
 export const feeAPI = {
-  getFeeHeads:       ()     => api.get('/fees/heads'),
-  createFeeHead:     (data) => api.post('/fees/heads', data),
-  seedFeeHeads:      ()     => api.post('/fees/heads/seed'),
-  getFeeStructures:  (params) => api.get('/fees/structure', { params }),
-  getFeeStructure:   (id)   => api.get(`/fees/structure/${id}`),
-  createFeeStructure:(data) => api.post('/fees/structure', data),
-  deleteFeeStructure:(id)   => api.delete(`/fees/structure/${id}`),
+  getFeeHeads:        ()       => api.get('/fees/heads'),
+  createFeeHead:      (data)   => api.post('/fees/heads', data),
+  seedFeeHeads:       ()       => api.post('/fees/heads/seed'),
+  getFeeStructures:   (params) => api.get('/fees/structure', { params }),
+  getFeeStructure:    (id)     => api.get(`/fees/structure/${id}`),
+  createFeeStructure: (data)   => api.post('/fees/structure', data),
+  deleteFeeStructure: (id)     => api.delete(`/fees/structure/${id}`),
   assignFees: (classId, academicYearId) =>
     api.post(`/fees/assign/${classId}?academic_year_id=${academicYearId}`),
-  getLedger:  (studentId) => api.get(`/fees/ledger/${studentId}`),
-  recordPayment: (data)   => api.post('/fees/payment', data),
+  getLedger:     (studentId) => api.get(`/fees/ledger/${studentId}`),
+  recordPayment: (data)      => api.post('/fees/payment', data),
   getPayments:   (studentId) => api.get(`/fees/payments/${studentId}`),
-  getDefaulters: (params) => api.get('/fees/defaulters', { params }),
+  getDefaulters: (params)    => api.get('/fees/defaulters', { params }),
 }
 
 // ── Marks ─────────────────────────────────────────────────────────────────────
@@ -71,32 +81,27 @@ export const marksAPI = {
     api.get('/marks/subjects', {
       params: { class_id: classId, include_inactive: includeInactive ? 'true' : 'false' },
     }),
-  createSubject: (data) => api.post('/marks/subjects', {
+  createSubject:  (data) => api.post('/marks/subjects', {
     ...data,
     class_id:      parseInt(data.class_id),
     max_theory:    parseInt(data.max_theory) || 100,
     max_practical: parseInt(data.max_practical) || 0,
   }),
-  updateSubject: (id, data) => {
-    const payload = { ...data }
-    if (payload.max_theory    != null) payload.max_theory    = parseInt(payload.max_theory)
-    if (payload.max_practical != null) payload.max_practical = parseInt(payload.max_practical)
-    return api.patch(`/marks/subjects/${id}`, payload)
-  },
-  deleteSubject:  (id)      => api.delete(`/marks/subjects/${id}`),
-  seedSubjects:   (classId) => api.post(`/marks/subjects/seed/${classId}`),
+  updateSubject:  (id, data) => api.patch(`/marks/subjects/${id}`, data),
+  deleteSubject:  (id)       => api.delete(`/marks/subjects/${id}`),
+  seedSubjects:   (classId)  => api.post(`/marks/subjects/seed/${classId}`),
 
-  getExams: (params) => api.get('/marks/exams', { params }),
-  createExam: (data) => api.post('/marks/exams', {
+  getExams:   (params) => api.get('/marks/exams', { params }),
+  createExam: (data)   => api.post('/marks/exams', {
     ...data,
     class_id:         parseInt(data.class_id),
     academic_year_id: parseInt(data.academic_year_id),
   }),
   deleteExam: (id) => api.delete(`/marks/exams/${id}`),
 
-  getExamConfigs:  (examId)          => api.get(`/marks/exams/${examId}/configs`),
-  setExamConfigs:  (examId, configs) => api.put(`/marks/exams/${examId}/configs`, { configs }),
-  clearExamConfigs:(examId)          => api.delete(`/marks/exams/${examId}/configs`),
+  getExamConfigs:   (examId)          => api.get(`/marks/exams/${examId}/configs`),
+  setExamConfigs:   (examId, configs) => api.put(`/marks/exams/${examId}/configs`, { configs }),
+  clearExamConfigs: (examId)          => api.delete(`/marks/exams/${examId}/configs`),
 
   getMarksEntry: (examId, classId) =>
     api.get('/marks/entry', { params: { exam_id: examId, class_id: classId } }),
@@ -116,24 +121,78 @@ export const attendanceAPI = {
   getDashboardStats: () => api.get('/attendance/dashboard-stats'),
 }
 
-// ── Year-End ──────────────────────────────────────────────────────────────────
+// ── Year-End (full rebuild) ────────────────────────────────────────────────────
 export const yearendAPI = {
+  // Academic year lifecycle
+  createNewYear:  (data)    => api.post('/yearend/new-year', data),
+  activateYear:   (yearId, skipValidation = false) =>
+    api.post(`/yearend/activate/${yearId}`, { skip_validation: skipValidation }),
+  getCurrentYear: ()        => api.get('/yearend/current-year'),
+  getYears:       ()        => api.get('/yearend/years'),
+  getAllYears:     ()        => api.get('/yearend/years'),
+
+  // Promotion workflow
+  validatePromotion: (classId, newYearId) =>
+    api.get(`/yearend/promote/${classId}/validate`, {
+      params: { new_academic_year_id: newYearId },
+    }),
+  getCandidates: (classId) =>
+    api.get(`/yearend/promote/${classId}/candidates`),
   previewPromotion: (classId, newYearId) =>
-    api.get(`/yearend/promote/${classId}/preview?new_academic_year_id=${newYearId}`),
-  promoteClass: (classId, newYearId) =>
-    api.post(`/yearend/promote/${classId}?new_academic_year_id=${newYearId}`),
-  createNewYear: (data)   => api.post('/yearend/new-year', data),
-  issueTC:       (studentId) => api.post(`/yearend/issue-tc/${studentId}`),
-  getCurrentYear:()       => api.get('/yearend/current-year'),
-  getYears:      ()       => api.get('/yearend/years'),
-  getAllYears:    ()       => api.get('/yearend/years'),
-  tcPdfUrl: (studentId, reason = "Parent's Request", conduct = 'Good') =>
-    `/api/v1/yearend/tc-pdf/${studentId}?reason=${encodeURIComponent(reason)}&conduct=${encodeURIComponent(conduct)}`,
+    api.get(`/yearend/promote/${classId}/preview`, {
+      params: { new_academic_year_id: newYearId },
+    }),
+  promoteClass: (classId, payload) =>
+    api.post(`/yearend/promote/${classId}`, payload),
+  // payload: { new_academic_year_id, student_actions, roll_strategy, force }
+  undoPromotion: (classId, newYearId) =>
+    api.post(`/yearend/promote/${classId}/undo`, { new_academic_year_id: newYearId }),
+
+  // Year-end operations
+  lockMarks:     (academicYearId) =>
+    api.post('/yearend/lock-marks', { academic_year_id: academicYearId }),
+  cloneFees:     (fromYearId, toYearId) =>
+    api.post('/yearend/clone-fees', { from_year_id: fromYearId, to_year_id: toYearId }),
+  cloneSubjects: (fromYearId, toYearId) =>
+    api.post('/yearend/clone-subjects', { from_year_id: fromYearId, to_year_id: toYearId }),
+  issueTC:       (studentId)   => api.post(`/yearend/issue-tc/${studentId}`),
+  backfillEnrollments: ()      => api.post('/yearend/backfill-enrollments'),
+
+  // Calendar
+  getCalendar:       (yearId, eventType) =>
+    api.get(`/yearend/calendar/${yearId}`, { params: eventType ? { event_type: eventType } : {} }),
+  addCalendarEvent:  (yearId, data) => api.post(`/yearend/calendar/${yearId}`, data),
+  updateCalendarEvent: (eventId, data) => api.put(`/yearend/calendar/event/${eventId}`, data),
+  deleteCalendarEvent: (eventId)      => api.delete(`/yearend/calendar/event/${eventId}`),
+  seedHolidays:      (yearId)         => api.post(`/yearend/calendar/${yearId}/seed-holidays`),
+
+  // Audit
+  getAuditLog: (params) => api.get('/yearend/audit-log', { params }),
+  // params: { operation, academic_year_id, limit, offset }
+
+  openTcPdf: (studentId, reason = "Parent's Request", conduct = 'Good') =>
+    openSignedPdf(`/yearend/tc-pdf-token/${studentId}`, `/yearend/tc-pdf/${studentId}`, { reason, conduct }),
+}
+
+// ── Enrollments (new) ─────────────────────────────────────────────────────────
+export const enrollmentsAPI = {
+  list: (params) => api.get('/enrollments/', { params }),
+  // params: { academic_year_id, class_id, status, student_id }
+
+  getById:       (enrollmentId)         => api.get(`/enrollments/${enrollmentId}`),
+  getHistory:    (studentId)            => api.get(`/enrollments/student/${studentId}`),
+  getRollList:   (classId, academicYearId) =>
+    api.get(`/enrollments/class/${classId}/roll-list`, {
+      params: { academic_year_id: academicYearId },
+    }),
+  reassignRolls: (classId, academicYearId, strategy = 'alphabetical') =>
+    api.post('/enrollments/reassign-rolls', {
+      class_id: classId, academic_year_id: academicYearId, strategy,
+    }),
 }
 
 // ── Admin / Users ─────────────────────────────────────────────────────────────
 export const adminAPI = {
-  // User CRUD
   listUsers:     (params) => api.get('/admin/users', { params }),
   getUser:       (id)     => api.get(`/admin/users/${id}`),
   createUser:    (data)   => api.post('/admin/users', data),
@@ -142,7 +201,6 @@ export const adminAPI = {
     api.post(`/admin/users/${id}/reset-password`, { new_password: newPassword }),
   deleteUser:    (id)     => api.delete(`/admin/users/${id}`),
 
-  // Teacher class assignments
   listTeacherAssignments: (teacherId) =>
     api.get(`/admin/teachers/${teacherId}/assignments`),
   assignTeacherClass: (teacherId, data) =>
@@ -150,32 +208,27 @@ export const adminAPI = {
   removeTeacherClass: (teacherId, classId, params = {}) =>
     api.delete(`/admin/teachers/${teacherId}/assign-class/${classId}`, { params }),
 
-  // Portal linking
-  linkStudent:       (data) => api.post('/admin/portal/link-student', data),
-  listPortalAccounts:()     => api.get('/admin/portal/accounts'),
+  linkStudent:        (data) => api.post('/admin/portal/link-student', data),
+  listPortalAccounts: ()     => api.get('/admin/portal/accounts'),
 }
+
+// ── Portal ────────────────────────────────────────────────────────────────────
 export const portalAPI = {
-  // Shared — student role always uses own record, parent can pass ?student_id=
   getProfile:           (studentId) => api.get('/portal/me/profile',           { params: studentId ? { student_id: studentId } : {} }),
   getResults:           (studentId) => api.get('/portal/me/results',            { params: studentId ? { student_id: studentId } : {} }),
   getAttendance:        (studentId) => api.get('/portal/me/attendance',         { params: studentId ? { student_id: studentId } : {} }),
   getAttendanceSummary: (studentId) => api.get('/portal/me/attendance/summary', { params: studentId ? { student_id: studentId } : {} }),
   getFees:              (studentId) => api.get('/portal/me/fees',               { params: studentId ? { student_id: studentId } : {} }),
-  getMarksheet:         (examId, studentId) => `/api/v1/portal/me/marksheet/${examId}${studentId ? `?student_id=${studentId}` : ''}`,
+  getMarksheet: (examId, studentId) =>
+    `/api/v1/portal/me/marksheet/${examId}${studentId ? `?student_id=${studentId}` : ''}`,
 
   // Parent multi-child
-  getChildren:          ()    => api.get('/portal/me/children'),
-  getChildProfile:      (sid) => api.get(`/portal/me/children/${sid}/profile`),
-  getChildResults:      (sid) => api.get(`/portal/me/children/${sid}/results`),
-  getChildFees:         (sid) => api.get(`/portal/me/children/${sid}/fees`),
-  getChildAttendance:   (sid) => api.get(`/portal/me/children/${sid}/attendance`),
+  getChildren:        ()    => api.get('/portal/me/children'),
+  getChildProfile:    (sid) => api.get(`/portal/me/children/${sid}/profile`),
+  getChildResults:    (sid) => api.get(`/portal/me/children/${sid}/results`),
+  getChildFees:       (sid) => api.get(`/portal/me/children/${sid}/fees`),
+  getChildAttendance: (sid) => api.get(`/portal/me/children/${sid}/attendance`),
 }
- 
-
-
-
-
-
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
 export const setupAPI = {
@@ -195,10 +248,8 @@ export const classAPI = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 export const formatINR = (amount) =>
   new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
+    style: 'currency', currency: 'INR',
+    minimumFractionDigits: 0, maximumFractionDigits: 2,
   }).format(Number(amount) || 0)
 
 export const extractError = (err) => {

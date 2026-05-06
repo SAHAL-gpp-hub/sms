@@ -352,7 +352,7 @@ export default function Sidebar({ open, onClose }) {
             background: 'rgba(255,255,255,0.04)',
           }}>
 
-            {/* ✅ Avatar */}
+            {/* Avatar */}
             <div style={{
               width: '32px',
               height: '32px',
@@ -369,7 +369,7 @@ export default function Sidebar({ open, onClose }) {
               {(user?.name || user?.username || 'U')[0].toUpperCase()}
             </div>
 
-            {/* ✅ User Info */}
+            {/* User Info */}
             <div style={{ flex: 1, minWidth: 0 }}>
 
               <div style={{

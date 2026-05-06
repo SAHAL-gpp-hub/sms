@@ -43,8 +43,8 @@ from sqlalchemy.orm import Session
 
 from app.models.base_models import (
     AcademicYear, AuditLog, AuditOperationEnum, Class, Enrollment,
-    EnrollmentStatusEnum, FeePayment, FeeStructure, Mark, Student,
-    StudentFee, StudentStatusEnum, Subject, YearStatusEnum,
+    EnrollmentStatusEnum, Exam, FeePayment, FeeStructure, Mark, Student,
+    StudentFee, StudentStatusEnum, Subject, TransferCertificate, YearStatusEnum,
 )
 from app.services.marks_service import GSEB_SUBJECTS, get_class_results
 
@@ -62,6 +62,8 @@ CLASS_ORDER = [
 ]
 
 PASSING_PERCENTAGE = Decimal("33.00")   # default GSEB passing threshold
+PROMOTION_ACTIONS = {"promoted", "retained", "graduated", "transferred", "dropped", "on_hold"}
+ROLL_STRATEGIES = {"sequential", "alphabetical", "carry_forward"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -126,6 +128,19 @@ def _write_audit(
     return log
 
 
+def _max_numeric_roll(db: Session, class_id: int, academic_year_id: int) -> int:
+    rows = (
+        db.query(Enrollment.roll_number)
+        .filter(
+            Enrollment.class_id == class_id,
+            Enrollment.academic_year_id == academic_year_id,
+        )
+        .all()
+    )
+    nums = [int(r[0]) for r in rows if r[0] and str(r[0]).isdigit()]
+    return max(nums, default=0)
+
+
 def get_attendance_percentage(
     db: Session, student_id: int, class_id: int
 ) -> Optional[float]:
@@ -133,8 +148,7 @@ def get_attendance_percentage(
     Returns the student's attendance % for the given class.
     Used by TC generation and the promotion candidate list.
     """
-    from app.services.attendance_service import get_monthly_summary
-    from calendar import monthrange
+    from app.services.calendar_service import count_working_days
 
     # Get class's academic year
     cls = db.query(Class).filter_by(id=class_id).first()
@@ -145,22 +159,13 @@ def get_attendance_percentage(
         return None
 
     from app.models.base_models import Attendance
-    total_working = 0
-    total_present = 0
-
-    from datetime import timedelta
     start = year_obj.start_date
     end   = year_obj.end_date if year_obj.end_date <= date.today() else date.today()
 
     if start > end:
         return None
 
-    # Count working days (Mon-Sat)
-    current = start
-    while current <= end:
-        if current.weekday() != 6:   # not Sunday
-            total_working += 1
-        current += timedelta(days=1)
+    total_working = count_working_days(db, year_obj.id, start, end)
 
     present_count = db.query(func.count(Attendance.id)).filter(
         Attendance.student_id == student_id,
@@ -242,18 +247,25 @@ def validate_pre_promotion(
         errors.append(f"Target academic year (id={new_academic_year_id}) does not exist.")
     elif new_year.status == YearStatusEnum.closed:
         errors.append(f"Target academic year '{new_year.label}' is closed. Cannot promote into a closed year.")
+    elif current_class.academic_year_id == new_academic_year_id:
+        errors.append("Target academic year must be different from the source class year.")
 
     # 3. Idempotency — has this class already been promoted to this year?
-    already_promoted = db.query(Enrollment).filter(
-        Enrollment.academic_year_id == new_academic_year_id,
-        Enrollment.class_id.in_(
-            db.query(Class.id).filter_by(
-                name=next_name,
-                division=current_class.division,
-                academic_year_id=new_academic_year_id,
-            )
-        ),
-    ).count()
+    target_class_ids = [
+        r[0]
+        for r in db.query(Class.id).filter(
+            Class.academic_year_id == new_academic_year_id,
+            Class.division == current_class.division,
+            Class.name.in_([current_class.name, next_name]),
+        ).all()
+    ]
+    already_promoted = 0
+    if target_class_ids:
+        already_promoted = db.query(Enrollment).filter(
+            Enrollment.academic_year_id == new_academic_year_id,
+            Enrollment.class_id.in_(target_class_ids),
+            Enrollment.promotion_action.in_(["promoted", "retained"]),
+        ).count()
     if already_promoted > 0:
         errors.append(
             f"Std {current_class.name} has already been promoted to {new_year.label if new_year else new_academic_year_id}. "
@@ -263,11 +275,38 @@ def validate_pre_promotion(
     # 4. Count students in various states
     active_students = db.query(Student).filter(
         Student.class_id == class_id,
-        Student.status   == StudentStatusEnum.Active,
+        Student.academic_year_id == current_class.academic_year_id,
+        Student.status.in_([
+            StudentStatusEnum.Active,
+            StudentStatusEnum.Detained,
+            StudentStatusEnum.On_Hold,
+            StudentStatusEnum.Provisional,
+        ]),
     ).all()
 
+    active_count = sum(1 for s in active_students if s.status == StudentStatusEnum.Active)
+    detained_count = sum(1 for s in active_students if s.status == StudentStatusEnum.Detained)
     on_hold_count = sum(1 for s in active_students if s.status == StudentStatusEnum.On_Hold)
     provisional_count = sum(1 for s in active_students if s.status == StudentStatusEnum.Provisional)
+
+    if not active_students:
+        errors.append("No students are assigned to this class/year for promotion.")
+
+    missing_enrollments = 0
+    if active_students:
+        enrolled_student_ids = {
+            r[0]
+            for r in db.query(Enrollment.student_id).filter(
+                Enrollment.student_id.in_([s.id for s in active_students]),
+                Enrollment.academic_year_id == current_class.academic_year_id,
+            ).all()
+        }
+        missing_enrollments = sum(1 for s in active_students if s.id not in enrolled_student_ids)
+        if missing_enrollments:
+            warnings.append(
+                f"{missing_enrollments} student(s) do not have enrollment rows for the source year. "
+                "Run enrollment backfill before promotion to preserve year-scoped history."
+            )
 
     if on_hold_count > 0:
         warnings.append(
@@ -278,18 +317,52 @@ def validate_pre_promotion(
             f"{provisional_count} student(s) are Provisional (compartment) and will be excluded."
         )
 
-    # 5. Are marks finalised? (warning only — not blocking)
-    exams_in_class = db.query(Mark.exam_id).join(
-        Subject, Mark.subject_id == Subject.id
-    ).filter(Subject.class_id == class_id).distinct().all()
+    # 5. Are marks finalised? (warning only — force/confirmation is handled by caller/UI)
+    exams_in_class = db.query(Exam).filter_by(
+        class_id=class_id,
+        academic_year_id=current_class.academic_year_id,
+    ).all()
+    exam_ids = [e.id for e in exams_in_class]
+    subject_ids = [
+        r[0]
+        for r in db.query(Subject.id).filter(
+            Subject.class_id == class_id,
+            Subject.is_exam_eligible == True,  # noqa: E712
+        ).all()
+    ]
+    promotable_student_ids = [
+        s.id
+        for s in active_students
+        if s.status not in (StudentStatusEnum.On_Hold, StudentStatusEnum.Provisional)
+    ]
 
     unlocked_marks = 0
-    for (exam_id,) in exams_in_class:
-        count = db.query(func.count(Mark.id)).filter(
-            Mark.exam_id  == exam_id,
+    existing_marks = 0
+    expected_marks = len(exam_ids) * len(subject_ids) * len(promotable_student_ids)
+    if exam_ids and promotable_student_ids:
+        existing_marks = db.query(func.count(Mark.id)).filter(
+            Mark.exam_id.in_(exam_ids),
+            Mark.student_id.in_(promotable_student_ids),
+        ).scalar() or 0
+    if exam_ids:
+        unlocked_marks = db.query(func.count(Mark.id)).filter(
+            Mark.exam_id.in_(exam_ids),
             Mark.locked_at == None,  # noqa: E711
-        ).scalar()
-        unlocked_marks += count
+        ).scalar() or 0
+
+    if not exams_in_class or not subject_ids or expected_marks == 0:
+        warnings.append(
+            "Promotion marks could not be fully assessed because exams, subjects, or eligible students are missing."
+        )
+    elif existing_marks == 0:
+        warnings.append(
+            "No marks are entered for this class/year. Review candidates carefully or keep students on hold."
+        )
+    elif existing_marks < expected_marks:
+        warnings.append(
+            f"Marks are partially entered ({existing_marks}/{expected_marks} expected records found). "
+            "Review candidates carefully before promotion."
+        )
 
     if unlocked_marks > 0:
         warnings.append(
@@ -304,9 +377,14 @@ def validate_pre_promotion(
         "next_class_name":   next_name,
         "new_year_id":       new_academic_year_id,
         "total_active":      len(active_students),
+        "active":            active_count,
+        "detained":          detained_count,
         "on_hold":           on_hold_count,
         "provisional":       provisional_count,
         "eligible":          len(active_students) - on_hold_count - provisional_count,
+        "missing_enrollments": missing_enrollments,
+        "expected_marks":     expected_marks,
+        "entered_marks":      existing_marks,
         "unlocked_marks":    unlocked_marks,
     }
 
@@ -327,8 +405,13 @@ def generate_candidate_list(db: Session, class_id: int) -> list[dict]:
     Returns a per-student list for admin review before promotion.
     Each entry includes: name, roll, exam result, pending dues, attendance %.
     """
+    cls = db.query(Class).filter_by(id=class_id).first()
+    if not cls:
+        return []
+
     students = db.query(Student).filter(
         Student.class_id == class_id,
+        Student.academic_year_id == cls.academic_year_id,
         Student.status.in_([
             StudentStatusEnum.Active,
             StudentStatusEnum.Detained,
@@ -338,7 +421,6 @@ def generate_candidate_list(db: Session, class_id: int) -> list[dict]:
     ).order_by(Student.roll_number).all()
 
     # Get all exam results for this class in one shot
-    cls = db.query(Class).filter_by(id=class_id).first()
     results_map: dict[int, dict] = {}
     if cls:
         # Get the most recent annual/final exam for this class
@@ -422,6 +504,7 @@ def bulk_promote_students(
     new_academic_year_id: int,
     performed_by: Optional[int] = None,
     student_actions: Optional[dict[int, str]] = None,
+    candidate_list: Optional[list[dict]] = None,
     roll_strategy: str = "sequential",   # sequential / alphabetical / carry_forward
     force: bool = False,
 ) -> dict:
@@ -445,6 +528,18 @@ def bulk_promote_students(
 
     Returns a detailed report dict.
     """
+    if roll_strategy not in ROLL_STRATEGIES:
+        raise ValueError(
+            f"Invalid roll_strategy '{roll_strategy}'. Expected one of: {', '.join(sorted(ROLL_STRATEGIES))}."
+        )
+
+    invalid_actions = sorted(set((student_actions or {}).values()) - PROMOTION_ACTIONS)
+    if invalid_actions:
+        raise ValueError(
+            f"Invalid promotion action(s): {', '.join(invalid_actions)}. "
+            f"Expected one of: {', '.join(sorted(PROMOTION_ACTIONS))}."
+        )
+
     # ── 0. Advisory lock — serialise concurrent promotion calls ──────────────
     # pg_advisory_xact_lock is PostgreSQL-only; skip on SQLite (tests)
     try:
@@ -480,6 +575,7 @@ def bulk_promote_students(
     # ── 3. Get students eligible for this run ─────────────────────────────────
     students = db.query(Student).filter(
         Student.class_id == class_id,
+        Student.academic_year_id == current_class.academic_year_id,
         Student.status.notin_([
             StudentStatusEnum.Left,
             StudentStatusEnum.TC_Issued,
@@ -490,7 +586,8 @@ def bulk_promote_students(
     student_actions = student_actions or {}
 
     # ── 4. Compute auto-actions for students without explicit override ─────────
-    candidate_list = generate_candidate_list(db, class_id)
+    if candidate_list is None:
+        candidate_list = generate_candidate_list(db, class_id)
     candidate_map  = {c["student_id"]: c for c in candidate_list}
 
     resolved_actions: dict[int, str] = {}
@@ -510,7 +607,9 @@ def bulk_promote_students(
                 resolved_actions[sid] = "graduated"
 
     next_class = None
-    same_class = current_class   # for retained students
+    same_class = _get_or_create_class(
+        db, current_class.name, current_class.division, new_academic_year_id
+    )
 
     if next_name:
         next_class = _get_or_create_class(
@@ -518,22 +617,12 @@ def bulk_promote_students(
         )
 
     # ── 6. Get existing enrollments in target class (for roll number continuity)
-    existing_roll_max = db.query(func.max(
-        func.cast(Enrollment.roll_number, Integer_type())
-    )).filter(
-        Enrollment.class_id == (next_class.id if next_class else same_class.id),
-        Enrollment.academic_year_id == new_academic_year_id,
-    ).scalar() or 0
+    existing_roll_max = _max_numeric_roll(
+        db, next_class.id if next_class else same_class.id, new_academic_year_id
+    )
 
     roll_counter_next = existing_roll_max + 1
-    roll_counter_same = (
-        db.query(func.max(func.cast(Enrollment.roll_number, Integer_type())))
-        .filter(
-            Enrollment.class_id         == same_class.id,
-            Enrollment.academic_year_id == new_academic_year_id,
-        )
-        .scalar() or 0
-    ) + 1
+    roll_counter_same = _max_numeric_roll(db, same_class.id, new_academic_year_id) + 1
 
     # Sort for sequential/alphabetical strategies
     if roll_strategy == "alphabetical":
@@ -553,6 +642,7 @@ def bulk_promote_students(
     # ── 8. THE MAIN LOOP — everything inside the same transaction ─────────────
     for student in students:
         action = resolved_actions.get(student.id, "promoted")
+        sp = db.begin_nested()
 
         try:
             # Check idempotency: student already enrolled in new year?
@@ -566,27 +656,32 @@ def bulk_promote_students(
                     "name": student.name_en,
                     "error": "Already enrolled in target year — skipped",
                 })
+                sp.commit()
                 continue
 
             if action == "on_hold":
                 report["on_hold"].append(student.id)
+                sp.commit()
                 continue
 
             if action == "promoted" and next_class:
                 target_class_id = next_class.id
-                roll_num        = str(roll_counter_next)
-                roll_counter_next += 1
+                if roll_strategy == "carry_forward" and student.roll_number is not None:
+                    roll_num = str(student.roll_number)
+                else:
+                    roll_num = str(roll_counter_next)
+                    roll_counter_next += 1
                 enroll_status   = EnrollmentStatusEnum.active
                 new_student_status = StudentStatusEnum.Active
 
             elif action == "retained":
                 # Create enrollment in same standard for new year
-                retained_class = _get_or_create_class(
-                    db, current_class.name, current_class.division, new_academic_year_id
-                )
-                target_class_id = retained_class.id
-                roll_num        = str(roll_counter_same)
-                roll_counter_same += 1
+                target_class_id = same_class.id
+                if roll_strategy == "carry_forward" and student.roll_number is not None:
+                    roll_num = str(student.roll_number)
+                else:
+                    roll_num = str(roll_counter_same)
+                    roll_counter_same += 1
                 enroll_status   = EnrollmentStatusEnum.retained
                 new_student_status = StudentStatusEnum.Detained
 
@@ -594,21 +689,25 @@ def bulk_promote_students(
                 # No enrollment in new year — they're done
                 student.status = StudentStatusEnum.Alumni
                 report["graduated"].append(student.id)
+                sp.commit()
                 continue
 
             elif action == "transferred":
                 student.status = StudentStatusEnum.TC_Issued
                 report["transferred"].append(student.id)
+                sp.commit()
                 continue
 
             elif action == "dropped":
                 student.status = StudentStatusEnum.Left
                 report["dropped"].append(student.id)
+                sp.commit()
                 continue
 
             else:
                 # Unrecognised action — treat as on_hold
                 report["on_hold"].append(student.id)
+                sp.commit()
                 continue
 
             # ── Create new Enrollment ─────────────────────────────────────
@@ -617,6 +716,7 @@ def bulk_promote_students(
                 academic_year_id = new_academic_year_id,
                 class_id         = target_class_id,
                 roll_number      = roll_num,
+                original_roll_number = str(student.roll_number) if student.roll_number is not None else None,
                 status           = enroll_status,
                 promotion_action = action,
                 promotion_status = "completed",
@@ -651,8 +751,10 @@ def bulk_promote_students(
                     db.add(arrear)
 
             report["promoted" if action == "promoted" else "retained"].append(student.id)
+            sp.commit()
 
         except Exception as exc:
+            sp.rollback()
             report["errors"].append({
                 "student_id": student.id,
                 "name":       student.name_en,
@@ -708,12 +810,6 @@ def bulk_promote_students(
         "validation_warnings": validation.get("warnings", []),
         "roll_strategy":  roll_strategy,
     }
-
-
-# helper for SQLAlchemy cast inside bulk_promote
-def Integer_type():
-    from sqlalchemy import Integer
-    return Integer
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -774,7 +870,13 @@ def undo_promotion(
 
     retained_enrollments = db.query(Enrollment).filter(
         Enrollment.academic_year_id == new_academic_year_id,
-        Enrollment.class_id         == class_id,
+        Enrollment.class_id.in_(
+            db.query(Class.id).filter_by(
+                name=current_class.name,
+                division=current_class.division,
+                academic_year_id=new_academic_year_id,
+            )
+        ),
         Enrollment.promotion_action == "retained",
     ).all()
 
@@ -788,8 +890,8 @@ def undo_promotion(
             student.class_id         = class_id
             student.academic_year_id = current_class.academic_year_id
             student.status           = StudentStatusEnum.Active
-            if enroll.roll_number and enroll.roll_number.isdigit():
-                student.roll_number = int(enroll.roll_number)
+            source_roll = enroll.original_roll_number or enroll.roll_number
+            student.roll_number = int(source_roll) if source_roll and str(source_roll).isdigit() else None
 
         # Delete arrear fees created during this promotion
         arrears = db.query(StudentFee).filter(
@@ -829,7 +931,9 @@ def lock_marks_for_year(
     Locks all marks for all exams in a given academic year.
     After locking, the application layer rejects any write to locked marks.
     """
-    from app.models.base_models import Exam
+    year = db.query(AcademicYear).filter_by(id=academic_year_id).first()
+    if not year:
+        raise ValueError(f"Academic year {academic_year_id} not found")
 
     exams = db.query(Exam).filter_by(academic_year_id=academic_year_id).all()
     exam_ids = [e.id for e in exams]
@@ -872,6 +976,16 @@ def clone_fee_structure(
     Clones at the class name level — matches classes by name+division across years.
     Returns count of records created.
     """
+    if from_year_id == to_year_id:
+        raise ValueError("Source and target academic years must be different.")
+
+    from_year = db.query(AcademicYear).filter_by(id=from_year_id).first()
+    to_year = db.query(AcademicYear).filter_by(id=to_year_id).first()
+    if not from_year or not to_year:
+        raise ValueError("Source or target academic year not found.")
+    if to_year.status == YearStatusEnum.closed:
+        raise ValueError(f"Target academic year '{to_year.label}' is closed.")
+
     # Map old class IDs to new class IDs by name+division
     old_classes = db.query(Class).filter_by(academic_year_id=from_year_id).all()
     new_classes  = db.query(Class).filter_by(academic_year_id=to_year_id).all()
@@ -932,6 +1046,16 @@ def clone_subjects(
     Copies all Subject rows from one academic year's classes to the next year's
     matching classes (matched by name+division).
     """
+    if from_year_id == to_year_id:
+        raise ValueError("Source and target academic years must be different.")
+
+    from_year = db.query(AcademicYear).filter_by(id=from_year_id).first()
+    to_year = db.query(AcademicYear).filter_by(id=to_year_id).first()
+    if not from_year or not to_year:
+        raise ValueError("Source or target academic year not found.")
+    if to_year.status == YearStatusEnum.closed:
+        raise ValueError(f"Target academic year '{to_year.label}' is closed.")
+
     old_classes = db.query(Class).filter_by(academic_year_id=from_year_id).all()
     new_classes  = db.query(Class).filter_by(academic_year_id=to_year_id).all()
 
@@ -945,7 +1069,11 @@ def clone_subjects(
             skipped += 1
             continue
 
-        old_subjects = db.query(Subject).filter_by(class_id=old_cls.id, is_active=True).all()
+        from app.services.marks_service import _has_is_active_column
+        q = db.query(Subject).filter_by(class_id=old_cls.id)
+        if _has_is_active_column(db):
+            q = q.filter(Subject.is_active == True)  # noqa: E712
+        old_subjects = q.all()
         for subj in old_subjects:
             exists = db.query(Subject).filter_by(
                 name=subj.name, class_id=new_class_id
@@ -1003,6 +1131,8 @@ def create_academic_year(
         start_date = _dt.strptime(start_date, "%Y-%m-%d").date()
     if isinstance(end_date, str):
         end_date = _dt.strptime(end_date, "%Y-%m-%d").date()
+    if end_date <= start_date:
+        raise ValueError("Academic year end_date must be after start_date")
 
     new_year = AcademicYear(
         label      = label,
@@ -1088,11 +1218,24 @@ def activate_academic_year(
         if errors:
             raise ValueError("Activation validation failed: " + "; ".join(errors))
 
+    active_years = db.query(AcademicYear).filter_by(is_current=True).all()
+    if len(active_years) > 1 and not skip_validation:
+        labels = ", ".join(y.label for y in active_years)
+        raise ValueError(
+            f"Multiple active/current academic years already exist ({labels}). "
+            "Resolve the conflict or use skip_validation only after confirming the intended active year."
+        )
+
     # Close current active year
-    db.query(AcademicYear).filter_by(is_current=True).update(
+    db.query(AcademicYear).filter(
+        AcademicYear.is_current == True,  # noqa: E712
+        AcademicYear.id != year_id,
+    ).update(
         {"is_current": False, "status": YearStatusEnum.closed.value},
         synchronize_session=False,
     )
+    db.expire_all()
+    year = db.query(AcademicYear).filter_by(id=year_id).first()
 
     year.is_current  = True
     year.is_upcoming = False
@@ -1135,14 +1278,23 @@ def get_tc_data(db: Session, student_id: int, reason: str, conduct: str) -> Opti
     cls  = db.query(Class).filter_by(id=student.class_id).first()
     year = db.query(AcademicYear).filter_by(id=student.academic_year_id).first()
 
-    try:
-        db.execute(text(f"SELECT pg_advisory_xact_lock({TC_NUMBER_LOCK_KEY})"))
-    except Exception:
-        pass
-    last_id   = db.query(func.max(Student.id)).filter(
-        Student.status == StudentStatusEnum.TC_Issued
-    ).scalar() or 0
-    tc_number = f"TC-{date.today().year}-{str(last_id + 1).zfill(4)}"
+    cert = db.query(TransferCertificate).filter_by(student_id=student_id).first()
+    if not cert:
+        try:
+            db.execute(text(f"SELECT pg_advisory_xact_lock({TC_NUMBER_LOCK_KEY})"))
+            seq_val = db.execute(text("SELECT nextval('tc_number_seq')")).scalar()
+        except Exception:
+            seq_val = (db.query(func.max(TransferCertificate.id)).scalar() or 0) + 1
+        cert = TransferCertificate(
+            tc_number=f"TC-{date.today().year}-{int(seq_val):04d}",
+            student_id=student_id,
+            reason=reason,
+            conduct=conduct,
+        )
+        db.add(cert)
+        db.commit()
+        db.refresh(cert)
+    tc_number = cert.tc_number
 
     def fmt(d):
         return d.strftime("%d/%m/%Y") if d else "—"

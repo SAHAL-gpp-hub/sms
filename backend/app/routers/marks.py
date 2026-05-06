@@ -17,8 +17,14 @@ from typing import Optional
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.models.base_models import Class, Exam, Student
-from app.routers.auth import CurrentUser, ensure_class_access, ensure_student_access, require_role
+from app.models.base_models import Class, Exam, Student, Subject
+from app.routers.auth import (
+    CurrentUser,
+    ensure_class_access,
+    ensure_student_access,
+    ensure_subject_assignment_access,
+    require_role,
+)
 from app.schemas.marks import (
     SubjectCreate, SubjectUpdate, SubjectOut,
     ExamCreate, ExamOut,
@@ -49,17 +55,30 @@ def get_subjects(
 ):
     if class_id:
         ensure_class_access(current_user, class_id)
+        subjects = marks_service.get_subjects(db, class_id, include_inactive)
+        if current_user.role == "teacher":
+            allowed_subject_ids = {
+                a["subject_id"]
+                for a in current_user.subject_assignments
+                if a["class_id"] == class_id
+            }
+            subjects = [s for s in subjects if s.id in allowed_subject_ids]
+        return subjects
     if standard is not None:
         cls = db.query(Class).filter(Class.name == str(standard)).first()
         if cls:
             ensure_class_access(current_user, cls.id)
-    if class_id:
-        return marks_service.get_subjects(db, class_id, include_inactive)
-    if standard is not None:
-        cls = db.query(Class).filter(Class.name == str(standard)).first()
         if not cls:
             return []
-        return marks_service.get_subjects(db, cls.id, include_inactive)
+        subjects = marks_service.get_subjects(db, cls.id, include_inactive)
+        if current_user.role == "teacher":
+            allowed_subject_ids = {
+                a["subject_id"]
+                for a in current_user.subject_assignments
+                if a["class_id"] == cls.id
+            }
+            subjects = [s for s in subjects if s.id in allowed_subject_ids]
+        return subjects
     return []
 
 
@@ -260,7 +279,19 @@ def get_marks(
       - default_max_theory/practical : original subject defaults
       - has_custom_config            : whether an override is active
     """
-    return marks_service.get_marks(db, exam_id, class_id)
+    allowed_subject_ids = None
+    if current_user.role == "teacher":
+        allowed_subject_ids = [
+            a["subject_id"]
+            for a in current_user.subject_assignments
+            if a["class_id"] == class_id
+        ]
+        if not allowed_subject_ids:
+            raise HTTPException(
+                status_code=403,
+                detail="You are not assigned to any subjects for this class",
+            )
+    return marks_service.get_marks(db, exam_id, class_id, allowed_subject_ids)
 
 
 @router.post("/bulk")
@@ -270,14 +301,40 @@ def bulk_save_marks(
     current_user: CurrentUser = Depends(require_role("admin", "teacher")),
 ):
     if current_user.role == "teacher":
+        if not entries:
+            return {"saved": 0}
         student_ids = {entry.student_id for entry in entries}
         students = db.query(Student).filter(Student.id.in_(student_ids)).all()
         found_ids = {student.id for student in students}
         missing_ids = student_ids - found_ids
         if missing_ids:
             raise HTTPException(status_code=404, detail=f"Students not found: {sorted(missing_ids)}")
-        for student in students:
-            ensure_class_access(current_user, student.class_id)
+        students_by_id = {student.id: student for student in students}
+        exam_ids = {entry.exam_id for entry in entries}
+        subject_ids = {entry.subject_id for entry in entries}
+        exams = db.query(Exam).filter(Exam.id.in_(exam_ids)).all()
+        subjects = db.query(Subject).filter(Subject.id.in_(subject_ids)).all()
+        exams_by_id = {exam.id: exam for exam in exams}
+        subjects_by_id = {subject.id: subject for subject in subjects}
+        if missing_exam_ids := exam_ids - set(exams_by_id):
+            raise HTTPException(status_code=404, detail=f"Exams not found: {sorted(missing_exam_ids)}")
+        if missing_subject_ids := subject_ids - set(subjects_by_id):
+            raise HTTPException(status_code=404, detail=f"Subjects not found: {sorted(missing_subject_ids)}")
+        for entry in entries:
+            student = students_by_id[entry.student_id]
+            exam = exams_by_id[entry.exam_id]
+            subject = subjects_by_id[entry.subject_id]
+            if student.class_id != exam.class_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Student {student.id} does not belong to exam class {exam.class_id}",
+                )
+            if subject.class_id != exam.class_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Subject {subject.id} does not belong to exam class {exam.class_id}",
+                )
+            ensure_subject_assignment_access(current_user, exam.class_id, subject.id)
     try:
         return marks_service.bulk_save_marks(db, entries)
     except ValueError as exc:

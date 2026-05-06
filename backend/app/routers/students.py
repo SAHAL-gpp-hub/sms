@@ -91,7 +91,11 @@ def delete_student(
 
 
 @router.get("/{student_id}/tc")
-def get_student_tc(student_id: int, db: Session = Depends(get_db)):
+def get_student_tc(
+    student_id: int,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
     pdf = render_tc_pdf(db, student_id, "Parent's Request", "Good")
     if not pdf:
         raise HTTPException(status_code=404, detail="Student not found")

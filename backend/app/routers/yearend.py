@@ -38,7 +38,7 @@ New vs original:
     GET  /yearend/audit-log                           — view audit log
 """
 
-from datetime import date as date_type
+from datetime import date as date_type, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -47,6 +47,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.security import create_access_token, decode_access_token
 from app.models.base_models import AuditLog, AcademicYear, Class, Student
 from app.routers.auth import CurrentUser, require_role
 from app.services import yearend_service, calendar_service
@@ -113,9 +114,16 @@ def download_tc(
     student_id: int,
     reason:  str = Query(default="Parent's Request"),
     conduct: str = Query(default="Good"),
+    token: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
-    """Generate TC PDF — no auth required (browser direct download)."""
+    """Generate TC PDF using a short-lived signed download token."""
+    try:
+        payload = decode_access_token(token or "")
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Invalid or expired TC download token") from exc
+    if payload.get("typ") != "pdf-download" or payload.get("resource") != f"tc:{student_id}":
+        raise HTTPException(status_code=403, detail="TC download token does not match this student")
     pdf = render_tc_pdf(db, student_id, reason, conduct)
     if not pdf:
         raise HTTPException(status_code=404, detail="Student not found")
@@ -124,6 +132,20 @@ def download_tc(
         media_type="application/pdf",
         headers={"Content-Disposition": f"inline; filename=TC_{student_id}.pdf"},
     )
+
+
+@router.get("/tc-pdf-token/{student_id}")
+def tc_pdf_token(
+    student_id: int,
+    current_user: CurrentUser = Depends(require_role("admin")),
+):
+    token = create_access_token(
+        subject=current_user.id,
+        role=current_user.role,
+        expires_delta=timedelta(seconds=60),
+        extra_claims={"typ": "pdf-download", "resource": f"tc:{student_id}"},
+    )
+    return {"token": token, "expires_in": 60, "resource": f"tc:{student_id}"}
 
 
 @router.get("/current-year")
@@ -359,9 +381,12 @@ def lock_marks(
     After locking, marks cannot be edited (enforced at application layer).
     Run this before bulk promotion.
     """
-    result = yearend_service.lock_marks_for_year(
-        db, data.academic_year_id, performed_by=current_user.id
-    )
+    try:
+        result = yearend_service.lock_marks_for_year(
+            db, data.academic_year_id, performed_by=current_user.id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return result
 
 
@@ -375,9 +400,12 @@ def clone_fees(
     Copies all fee structures from one year to another.
     Useful at year start — clone last year's fees, then adjust amounts.
     """
-    result = yearend_service.clone_fee_structure(
-        db, data.from_year_id, data.to_year_id, performed_by=current_user.id
-    )
+    try:
+        result = yearend_service.clone_fee_structure(
+            db, data.from_year_id, data.to_year_id, performed_by=current_user.id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return result
 
 
@@ -391,9 +419,12 @@ def clone_subjects(
     Copies all active subjects from one year's classes to the next year's
     matching classes (matched by name + division).
     """
-    result = yearend_service.clone_subjects(
-        db, data.from_year_id, data.to_year_id, performed_by=current_user.id
-    )
+    try:
+        result = yearend_service.clone_subjects(
+            db, data.from_year_id, data.to_year_id, performed_by=current_user.id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return result
 
 

@@ -53,18 +53,22 @@ def generate_student_id(db: Session, year: int) -> str:
     # Serialize all concurrent ID generation for this admission year.
     # pg_advisory_xact_lock takes a bigint; using year directly is fine
     # (years are small positive integers well within bigint range).
-    db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": year})
+    try:
+        db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": year})
+    except Exception:
+        pass
 
-    result = db.execute(
-        text(
-            "SELECT MAX(CAST(SPLIT_PART(student_id, '-', 3) AS INTEGER)) "
-            "FROM students "
-            "WHERE student_id LIKE :prefix"
-        ),
+    rows = db.execute(
+        text("SELECT student_id FROM students WHERE student_id LIKE :prefix"),
         {"prefix": f"SMS-{year}-%"},
-    ).scalar()
+    ).fetchall()
+    nums = []
+    for row in rows:
+        parts = str(row[0]).split("-")
+        if len(parts) >= 3 and parts[2].isdigit():
+            nums.append(int(parts[2]))
 
-    next_num = (result or 0) + 1
+    next_num = max(nums, default=0) + 1
     return f"SMS-{year}-{str(next_num).zfill(3)}"
 
 

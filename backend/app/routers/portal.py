@@ -13,9 +13,11 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from app.core.database import get_db
-from app.models.base_models import Student, Class, AcademicYear
+from app.models.base_models import Student, Class, AcademicYear, Attendance, Exam
 from app.routers.auth import CurrentUser, require_role
 from app.services import fee_service, attendance_service, marks_service
+from app.services.calendar_service import count_working_days_for_month
+from app.core.config import settings
 from app.pdf.marksheet_pdf import render_marksheet_pdf
 
 router = APIRouter(prefix="/api/v1/portal", tags=["Portal"])
@@ -95,7 +97,6 @@ def get_my_results(
     if not student:
         raise HTTPException(404, "Student record not found")
 
-    from app.models.base_models import Exam
     exams = db.query(Exam).filter_by(class_id=student.class_id).all()
 
     all_results = []
@@ -126,7 +127,6 @@ def get_my_attendance(
     db: Session = Depends(get_db),
 ):
     """Last 3 months daily attendance records."""
-    from app.models.base_models import Attendance
     from datetime import date, timedelta
 
     sid = _resolve_student_id(user, student_id)
@@ -155,7 +155,6 @@ def get_my_attendance_summary(
     db: Session = Depends(get_db),
 ):
     """Monthly attendance % per month for last N months."""
-    from app.models.base_models import Attendance
     from datetime import date, timedelta
     from calendar import monthrange
 
@@ -179,10 +178,7 @@ def get_my_attendance_summary(
         month_start = date(y, m, 1)
         month_end   = date(y, m, days_in_month)
 
-        working_days = sum(
-            1 for d in range(days_in_month)
-            if date(y, m, d + 1).weekday() != 6  # not Sunday
-        )
+        working_days = count_working_days_for_month(db, student.academic_year_id, y, m)
 
         records = (
             db.query(Attendance)
@@ -197,7 +193,8 @@ def get_my_attendance_summary(
         present    = sum(1 for r in records if r.status == "P")
         absent     = sum(1 for r in records if r.status == "A")
         late       = sum(1 for r in records if r.status == "L")
-        percentage = round((present / working_days * 100), 1) if working_days > 0 else 0
+        effective_present = present + (late if settings.LATE_COUNTS_AS_PRESENT else 0)
+        percentage = round((effective_present / working_days * 100), 1) if working_days > 0 else 0
 
         summaries.append({
             "year":         y,

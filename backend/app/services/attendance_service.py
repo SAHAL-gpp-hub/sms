@@ -23,10 +23,17 @@ from app.models.base_models import (
 )
 from app.schemas.attendance import AttendanceEntry
 from app.services.calendar_service import count_working_days_for_month
+from app.core.config import settings
 
 
 def mark_attendance_bulk(db: Session, entries: list[AttendanceEntry]):
     for entry in entries:
+        cls = db.query(Class).filter_by(id=entry.class_id).first()
+        if not cls:
+            raise ValueError(f"Class {entry.class_id} not found")
+        year = db.query(AcademicYear).filter_by(id=cls.academic_year_id).first()
+        if year and not (year.start_date <= entry.date <= year.end_date):
+            raise ValueError(f"{entry.date} is outside academic year {year.label}")
         existing = db.query(Attendance).filter_by(
             student_id=entry.student_id,
             class_id=entry.class_id,
@@ -107,7 +114,8 @@ def get_monthly_summary(db: Session, class_id: int, year: int, month: int) -> li
         present     = sum(1 for s in status_map.values() if s == "P")
         absent      = sum(1 for s in status_map.values() if s == "A")
         late        = sum(1 for s in status_map.values() if s == "L")
-        percentage  = round((present / working_days * 100), 1) if working_days > 0 else 0
+        effective_present = present + (late if settings.LATE_COUNTS_AS_PRESENT else 0)
+        percentage  = round((effective_present / working_days * 100), 1) if working_days > 0 else 0
 
         results.append({
             "student_id":         student.id,

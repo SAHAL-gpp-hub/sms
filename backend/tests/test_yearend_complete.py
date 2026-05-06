@@ -1323,11 +1323,20 @@ class TestYearEndAPIEndpoints:
         assert res.status_code == 200
         assert "created" in res.json()
 
-    def test_tc_pdf_is_public(self, client):
-        """TC PDF must be accessible without auth."""
-        res = client.get("/api/v1/yearend/tc-pdf/99999")
-        assert res.status_code in (200, 404)
-        assert res.status_code != 401
+    def test_tc_pdf_requires_signed_download_token(self, client):
+        """TC PDF downloads require a short-lived signed token."""
+        unauth = client.get("/api/v1/yearend/tc-pdf/99999")
+        assert unauth.status_code == 401
+
+        headers = _auth(client)
+        token_res = client.get("/api/v1/yearend/tc-pdf-token/99999", headers=headers)
+        assert token_res.status_code == 200
+
+        res = client.get(
+            "/api/v1/yearend/tc-pdf/99999",
+            params={"token": token_res.json()["token"]},
+        )
+        assert res.status_code == 404
 
     def test_undo_endpoint(self, client):
         headers = _auth(client)

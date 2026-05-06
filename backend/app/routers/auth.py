@@ -14,7 +14,7 @@ Endpoints:
 """
 
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -53,6 +53,8 @@ class Token(BaseModel):
     user_name:    str
     role:         str
     assigned_class_ids: list[int] = []
+    class_teacher_class_ids: list[int] = []
+    subject_assignments: list[dict] = []
     linked_student_id: int | None = None
     linked_student_ids: list[int] = []
 
@@ -71,6 +73,8 @@ class UserOut(BaseModel):
     role:     str
     is_active: bool
     assigned_class_ids: list[int] = []
+    class_teacher_class_ids: list[int] = []
+    subject_assignments: list[dict] = []
     linked_student_id: int | None = None
     linked_student_ids: list[int] = []
 
@@ -85,12 +89,16 @@ class CurrentUser:
     role: str
     is_active: bool
     assigned_class_ids: list[int] = field(default_factory=list)
+    class_teacher_class_ids: list[int] = field(default_factory=list)
+    subject_assignments: list[dict] = field(default_factory=list)
     linked_student_id: int | None = None
     linked_student_ids: list[int] = field(default_factory=list)
 
 
 def build_current_user(db: Session, user: User) -> CurrentUser:
     assigned_class_ids: list[int] = []
+    class_teacher_class_ids: list[int] = []
+    subject_assignments: list[dict] = []
     linked_student_id = None
     linked_student_ids: list[int] = []
 
@@ -101,6 +109,16 @@ def build_current_user(db: Session, user: User) -> CurrentUser:
             .all()
         )
         assigned_class_ids = sorted({a.class_id for a in assignments})
+        class_teacher_class_ids = sorted({a.class_id for a in assignments if a.subject_id is None})
+        subject_assignments = [
+            {
+                "class_id": a.class_id,
+                "academic_year_id": a.academic_year_id,
+                "subject_id": a.subject_id,
+            }
+            for a in assignments
+            if a.subject_id is not None
+        ]
     elif user.role == "student":
         student = db.query(Student).filter_by(student_user_id=user.id).first()
         if student:
@@ -116,6 +134,8 @@ def build_current_user(db: Session, user: User) -> CurrentUser:
         role=user.role,
         is_active=user.is_active,
         assigned_class_ids=assigned_class_ids,
+        class_teacher_class_ids=class_teacher_class_ids,
+        subject_assignments=subject_assignments,
         linked_student_id=linked_student_id,
         linked_student_ids=linked_student_ids,
     )
@@ -171,10 +191,45 @@ def require_role(*allowed_roles: str):
 
 
 def ensure_class_access(current_user: CurrentUser, class_id: int | None) -> None:
+    if current_user.role == "teacher" and class_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="class_id is required for teacher role",
+        )
     if current_user.role == "teacher" and class_id not in current_user.assigned_class_ids:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not assigned to this class",
+        )
+
+
+def ensure_class_teacher_access(current_user: CurrentUser, class_id: int | None) -> None:
+    if current_user.role == "teacher" and class_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="class_id is required for teacher role",
+        )
+    if current_user.role == "teacher" and class_id not in current_user.class_teacher_class_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the class teacher can manage attendance for this class",
+        )
+
+
+def ensure_subject_assignment_access(
+    current_user: CurrentUser,
+    class_id: int | None,
+    subject_id: int | None,
+) -> None:
+    if current_user.role != "teacher":
+        return
+    if not any(
+        a.get("class_id") == class_id and a.get("subject_id") == subject_id
+        for a in current_user.subject_assignments
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not assigned to this subject for this class",
         )
 
 
@@ -223,6 +278,7 @@ def login(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    db.query(TokenBlocklist).filter(TokenBlocklist.expires_at < datetime.now(timezone.utc)).delete()
 
     token = create_access_token(
         subject=user.id,
@@ -236,6 +292,8 @@ def login(
         user_name=user.name,
         role=user.role,
         assigned_class_ids=current_user.assigned_class_ids,
+        class_teacher_class_ids=current_user.class_teacher_class_ids,
+        subject_assignments=current_user.subject_assignments,
         linked_student_id=current_user.linked_student_id,
         linked_student_ids=current_user.linked_student_ids,
     )
@@ -308,8 +366,15 @@ def logout(
             detail="Token does not contain a jti claim and cannot be revoked.",
         )
 
+    exp = payload.get("exp")
+    expires_at = (
+        datetime.fromtimestamp(exp, tz=timezone.utc)
+        if isinstance(exp, (int, float))
+        else datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+
     if not db.query(TokenBlocklist).filter_by(jti=jti).first():
-        db.add(TokenBlocklist(jti=jti))
+        db.add(TokenBlocklist(jti=jti, expires_at=expires_at))
         db.commit()
 
     return {"message": "Successfully logged out"}

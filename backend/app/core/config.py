@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-this-in-production-use-a-64-char-random-hex-string"
     ALGORITHM:  str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours — one full school day
+    LATE_COUNTS_AS_PRESENT: bool = True
+    CORS_ORIGINS: list[str] = []
 
     # ── Registration guard ────────────────────────────────────────────────
     # Set REGISTRATION_ENABLED=true only for first-run setup (creating the

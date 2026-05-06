@@ -1,7 +1,8 @@
 // Dashboard.jsx — Fully responsive with proper mobile layout
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { attendanceAPI, formatINR } from '../services/api'
+import { attendanceAPI, formatINR, setupAPI } from '../services/api'
+import { getAuthUser } from '../services/auth'
 import { StatCard, EmptyState, Skeleton } from '../components/UI'
 
 const STAT_ICONS = {
@@ -40,20 +41,227 @@ const QUICK_ACTIONS = [
   { label: 'Reports',         to: '/reports',         color: '#b45309',            bg: 'var(--warning-50)', border: '#fde68a' },
 ]
 
+function TeacherDashboard({ today }) {
+  const authUser = getAuthUser()
+  const [classes, setClasses] = useState([])
+  const [loadingClasses, setLoadingClasses] = useState(true)
+
+  const classTeacherClassIds = authUser?.classTeacherClassIds || []
+  const subjectAssignments = authUser?.subjectAssignments || []
+  const assignedClassIds = authUser?.assignedClassIds || []
+
+  useEffect(() => {
+    setupAPI.getClasses()
+      .then(r => setClasses(r.data || []))
+      .catch(() => setClasses([]))
+      .finally(() => setLoadingClasses(false))
+  }, [])
+
+  const classLabel = (id) => {
+    const cls = classes.find(c => c.id === id)
+    if (!cls) return `Class ${id}`
+    return `Class ${cls.name}${cls.division ? ` - ${cls.division}` : ''}`
+  }
+
+  const uniqueSubjectClasses = [...new Set(subjectAssignments.map(a => a.class_id))]
+  const canMarkAttendance = classTeacherClassIds.length > 0
+  const canEnterMarks = subjectAssignments.length > 0
+  const quickActions = [
+    ...(canMarkAttendance ? [{ label: 'Mark Attendance', to: '/attendance', color: 'var(--brand-600)', bg: 'var(--brand-50)', border: 'var(--brand-200)' }] : []),
+    ...(canEnterMarks ? [{ label: 'Enter Marks', to: '/marks', color: '#0891b2', bg: '#ecfeff', border: '#cffafe' }] : []),
+    { label: 'View Students', to: '/students', color: '#475569', bg: '#f8fafc', border: '#e2e8f0' },
+    { label: 'Reports', to: '/reports', color: '#7c2d12', bg: '#fff7ed', border: '#fed7aa' },
+  ]
+
+  return (
+    <div>
+      <div style={{ marginBottom: '20px' }}>
+        <h1 className="page-title">Teacher Dashboard</h1>
+        <p className="page-subtitle">{today}</p>
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: '12px',
+        marginBottom: '16px',
+      }}>
+        <StatCard
+          label="Assigned Classes"
+          value={loadingClasses ? null : assignedClassIds.length}
+          sub="Classes you can view"
+          color="var(--brand-600)"
+          icon={STAT_ICONS.students}
+          loading={loadingClasses}
+        />
+        <StatCard
+          label="Class Teacher"
+          value={loadingClasses ? null : classTeacherClassIds.length}
+          sub="Attendance control"
+          color="#0f766e"
+          icon={STAT_ICONS.outstanding}
+          loading={loadingClasses}
+        />
+        <StatCard
+          label="Subject Assignments"
+          value={loadingClasses ? null : subjectAssignments.length}
+          sub={`${uniqueSubjectClasses.length} class${uniqueSubjectClasses.length === 1 ? '' : 'es'}`}
+          color="#0891b2"
+          icon={STAT_ICONS.fees}
+          loading={loadingClasses}
+        />
+      </div>
+
+      <div className="card" style={{ marginBottom: '16px' }}>
+        <div className="card-header">
+          <div>
+            <div className="card-title">Your Work</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+              Shortcuts based on your current assignments
+            </div>
+          </div>
+        </div>
+        <div style={{
+          padding: '14px 16px',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+          gap: '8px',
+        }}>
+          {quickActions.map(a => (
+            <Link
+              key={a.label}
+              to={a.to}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: '40px',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                border: `1px solid ${a.border}`,
+                background: a.bg,
+                color: a.color,
+                fontSize: '13px',
+                fontWeight: 700,
+                textDecoration: 'none',
+                textAlign: 'center',
+              }}
+            >
+              {a.label}
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+        gap: '14px',
+      }}>
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title">Attendance Classes</div>
+          </div>
+          {loadingClasses ? (
+            <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {[1, 2, 3].map(i => <Skeleton key={i} height="13px" width={`${70 + i * 6}%`} />)}
+            </div>
+          ) : classTeacherClassIds.length === 0 ? (
+            <EmptyState
+              icon={STAT_ICONS.outstanding}
+              title="No class teacher assignment"
+              description="Attendance marking appears here after admin assigns you as class teacher"
+            />
+          ) : (
+            <div style={{ padding: '8px 0' }}>
+              {classTeacherClassIds.map((id, i) => (
+                <div key={id} style={{
+                  padding: '10px 16px',
+                  borderBottom: i < classTeacherClassIds.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  alignItems: 'center',
+                }}>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>{classLabel(id)}</span>
+                  <Link to="/attendance" style={{ fontSize: '12px', fontWeight: 700, color: 'var(--brand-600)', textDecoration: 'none' }}>
+                    Open
+                  </Link>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title">Marks Assignments</div>
+          </div>
+          {loadingClasses ? (
+            <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {[1, 2, 3].map(i => <Skeleton key={i} height="13px" width={`${68 + i * 7}%`} />)}
+            </div>
+          ) : subjectAssignments.length === 0 ? (
+            <EmptyState
+              icon={STAT_ICONS.fees}
+              title="No subject assignments"
+              description="Marks entry appears here after admin assigns subjects to you"
+            />
+          ) : (
+            <div style={{ padding: '8px 0' }}>
+              {uniqueSubjectClasses.map((id, i) => {
+                const count = subjectAssignments.filter(a => a.class_id === id).length
+                return (
+                  <div key={id} style={{
+                    padding: '10px 16px',
+                    borderBottom: i < uniqueSubjectClasses.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    alignItems: 'center',
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>{classLabel(id)}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '1px' }}>
+                        {count} subject{count === 1 ? '' : 's'}
+                      </div>
+                    </div>
+                    <Link to="/marks" style={{ fontSize: '12px', fontWeight: 700, color: '#0891b2', textDecoration: 'none' }}>
+                      Open
+                    </Link>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard() {
+  const authUser = getAuthUser()
+  const isTeacher = authUser?.role === 'teacher'
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    if (isTeacher) {
+      setLoading(false)
+      return
+    }
     attendanceAPI.getDashboardStats()
       .then(r => { setStats(r.data); setLoading(false) })
       .catch(() => { setError(true); setLoading(false) })
-  }, [])
+  }, [isTeacher])
 
   const today = new Date().toLocaleDateString('en-IN', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   })
+
+  if (isTeacher) return <TeacherDashboard today={today} />
 
   if (error) return (
     <div>
@@ -68,7 +276,6 @@ export default function Dashboard() {
         padding: '40px 24px',
         textAlign: 'center',
       }}>
-        <div style={{ fontSize: '32px', marginBottom: '12px' }}>⚠️</div>
         <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '6px' }}>
           Could not load dashboard data
         </div>

@@ -19,19 +19,13 @@ from pydantic import BaseModel, field_validator, validator
 from typing import Optional
 from datetime import date
 from enum import Enum
+from app.models.base_models import StudentStatusEnum
 
 
 class GenderEnum(str, Enum):
     M     = "M"
     F     = "F"
     Other = "Other"
-
-
-class StudentStatusEnum(str, Enum):
-    Active     = "Active"
-    TC_Issued  = "TC Issued"
-    Left       = "Left"
-    Passed_Out = "Passed Out"
 
 
 class StudentCreate(BaseModel):

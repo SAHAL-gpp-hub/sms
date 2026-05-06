@@ -45,6 +45,7 @@ def create_access_token(
     role: str = "admin",
     expires_delta: timedelta = None,
     jti: str = None,
+    extra_claims: dict[str, Any] | None = None,
 ) -> str:
     """
     Create a signed JWT access token.
@@ -70,6 +71,8 @@ def create_access_token(
         "iat": now,
         "jti": jti or str(uuid.uuid4()),
     }
+    if extra_claims:
+        payload.update(extra_claims)
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 

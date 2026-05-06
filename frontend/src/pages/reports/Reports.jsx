@@ -1,6 +1,6 @@
 // Reports.jsx — Refined professional UI
 import { useState, useEffect } from 'react'
-import { setupAPI } from '../../services/api'
+import { setupAPI, openSignedPdf } from '../../services/api'
 import { PageHeader, Select } from '../../components/UI'
 
 /* ---------- Inline SVG icon set (replaces emojis) ---------- */
@@ -123,7 +123,7 @@ function ReportCard({ icon, title, description, children, accentColor = 'var(--b
 }
 
 /* ---------- DownloadButton ---------- */
-function DownloadButton({ href, label, disabled }) {
+function DownloadButton({ href, label, disabled, onClick }) {
   const baseStyle = {
     width: '100%',
     justifyContent: 'center',
@@ -148,7 +148,7 @@ function DownloadButton({ href, label, disabled }) {
     )
   }
   return (
-    <a href={href} target="_blank" rel="noreferrer" className="btn btn-primary" style={baseStyle}>
+    <a href={href} onClick={onClick} target="_blank" rel="noreferrer" className="btn btn-primary" style={baseStyle}>
       {Icons.Download}
       {label}
     </a>
@@ -269,7 +269,11 @@ export default function Reports() {
               placeholder="All years"
             />
             <DownloadButton
-              href={`/api/v1/pdf/report/defaulters${defYear ? `?academic_year_id=${defYear}` : ''}`}
+              href="#"
+              onClick={e => {
+                e.preventDefault()
+                openSignedPdf('/pdf/token/report/defaulters', '/pdf/report/defaulters', defYear ? { academic_year_id: defYear } : {})
+              }}
               label="Download Report"
             />
           </div>
@@ -311,7 +315,11 @@ export default function Reports() {
               />
             </div>
             <DownloadButton
-              href={`/api/v1/pdf/report/attendance?class_id=${attClass}&year=${attYear}&month=${attMonth}`}
+              href="#"
+              onClick={e => {
+                e.preventDefault()
+                openSignedPdf('/pdf/token/report/attendance', '/pdf/report/attendance', { class_id: attClass, year: attYear, month: attMonth })
+              }}
               label="Download Report"
               disabled={!attClass}
             />
@@ -345,7 +353,11 @@ export default function Reports() {
               placeholder={resultClass ? 'Select exam' : 'Select class first'}
             />
             <DownloadButton
-              href={`/api/v1/pdf/report/results?exam_id=${resultExam}&class_id=${resultClass}`}
+              href="#"
+              onClick={e => {
+                e.preventDefault()
+                openSignedPdf('/pdf/token/report/results', '/pdf/report/results', { exam_id: resultExam, class_id: resultClass })
+              }}
               label="Download Report"
               disabled={!resultClass || !resultExam}
             />
@@ -381,7 +393,11 @@ export default function Reports() {
               placeholder={msClass ? 'Select exam' : 'Select class first'}
             />
             <DownloadButton
-              href={`/api/v1/pdf/marksheet/class/${msClass}?exam_id=${msExam}`}
+              href="#"
+              onClick={e => {
+                e.preventDefault()
+                openSignedPdf(`/pdf/token/marksheet/class/${msClass}`, `/pdf/marksheet/class/${msClass}`, { exam_id: msExam })
+              }}
               label="Download Marksheets"
               disabled={!msClass || !msExam}
             />

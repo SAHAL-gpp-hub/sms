@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { feeAPI, setupAPI, formatINR, extractError } from '../../services/api'
+import { feeAPI, setupAPI, formatINR, extractError, openSignedPdf } from '../../services/api'
 import { PageHeader, FilterRow, Select, EmptyState, TableSkeleton } from '../../components/UI'
 
 function DefaulterCard({ d, index, resolveClassName }) {
@@ -112,14 +112,13 @@ export default function Defaulters() {
         subtitle="Students with outstanding fee balance"
         actions={
           defaulters.length > 0 && (
-            <a
-              href={`/api/v1/pdf/report/defaulters${yearFilter ? `?academic_year_id=${yearFilter}` : ''}`}
-              target="_blank" rel="noreferrer"
+            <button
+              onClick={() => openSignedPdf('/pdf/token/report/defaulters', '/pdf/report/defaulters', yearFilter ? { academic_year_id: yearFilter } : {})}
               className="btn btn-secondary"
               style={{ textDecoration: 'none', fontSize: '13px' }}
             >
               📄 PDF Report
-            </a>
+            </button>
           )
         }
       />

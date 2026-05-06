@@ -2,10 +2,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { studentAPI, setupAPI, extractError } from '../../services/api'
+import { studentAPI, setupAPI, extractError, openSignedPdf } from '../../services/api'
 import { PageHeader, SearchInput, Select, TableSkeleton, EmptyState, ConfirmModal, StatusBadge, FilterRow } from '../../components/UI'
 
-function StudentCard({ student, cls, onDelete }) {
+function StudentCard({ student, cls, onDelete, onDownloadTC }) {
   return (
     <div style={{
       background: 'var(--surface-0)',
@@ -94,7 +94,7 @@ function StudentCard({ student, cls, onDelete }) {
           Fees
         </Link>
         <button
-          onClick={() => window.open(`/api/v1/yearend/tc-pdf/${student.id}`, '_blank')}
+          onClick={() => onDownloadTC(student.id)}
           style={{
             flex: 1,
             padding: '8px',
@@ -171,6 +171,10 @@ export default function StudentList() {
   }, [])
 
   useEffect(() => { fetchStudents() }, [fetchStudents])
+
+  const handleDownloadTC = (studentId) => {
+    openSignedPdf(`/yearend/tc-pdf-token/${studentId}`, `/yearend/tc-pdf/${studentId}`)
+  }
 
   const handleSeed = async () => {
     setSeeding(true)
@@ -288,9 +292,10 @@ export default function StudentList() {
                 <StudentCard
                   key={s.id}
                   student={s}
-                  cls={classes.find(c => c.id === s.class_id)}
-                  onDelete={setDeleteTarget}
-                />
+	                  cls={classes.find(c => c.id === s.class_id)}
+	                  onDelete={setDeleteTarget}
+	                  onDownloadTC={handleDownloadTC}
+	                />
               ))}
               {students.length > 0 && (
                 <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center', padding: '8px 0' }}>
@@ -359,7 +364,7 @@ export default function StudentList() {
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <Link to={`/students/${s.id}/edit`} style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--brand-600)', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', textDecoration: 'none' }}>Edit</Link>
                             <Link to={`/fees/student/${s.id}`} style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--success-700)', background: 'var(--success-50)', border: '1px solid var(--success-100)', textDecoration: 'none' }}>Fees</Link>
-                            <button onClick={() => window.open(`/api/v1/yearend/tc-pdf/${s.id}`, '_blank')} style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', background: 'var(--gray-100)', border: '1px solid var(--border-default)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>TC</button>
+                            <button onClick={() => handleDownloadTC(s.id)} style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', background: 'var(--gray-100)', border: '1px solid var(--border-default)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>TC</button>
                             <button onClick={() => setDeleteTarget({ id: s.id, name: s.name_en })} style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--danger-600)', background: 'var(--danger-50)', border: '1px solid var(--danger-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>Remove</button>
                           </div>
                         </td>

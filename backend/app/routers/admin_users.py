@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_password_hash
-from app.models.base_models import Student, TeacherClassAssignment, User
+from app.models.base_models import AcademicYear, Class, Student, Subject, TeacherClassAssignment, User
 from app.routers.auth import CurrentUser, require_role
 
 
@@ -206,6 +206,37 @@ def assign_teacher_class(
     teacher = db.query(User).filter_by(id=teacher_id, role="teacher").first()
     if not teacher:
         raise HTTPException(status_code=404, detail="Teacher user not found")
+    cls = db.query(Class).filter_by(id=data.class_id).first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+    year = db.query(AcademicYear).filter_by(id=data.academic_year_id).first()
+    if not year:
+        raise HTTPException(status_code=404, detail="Academic year not found")
+    if cls.academic_year_id and cls.academic_year_id != data.academic_year_id:
+        raise HTTPException(
+            status_code=422,
+            detail="Assignment academic year must match the selected class",
+        )
+    if data.subject_id is not None:
+        subject = db.query(Subject).filter_by(id=data.subject_id).first()
+        if not subject:
+            raise HTTPException(status_code=404, detail="Subject not found")
+        if subject.class_id != data.class_id:
+            raise HTTPException(
+                status_code=422,
+                detail="Subject must belong to the selected class",
+            )
+    duplicate_query = db.query(TeacherClassAssignment).filter_by(
+        teacher_id=teacher_id,
+        class_id=data.class_id,
+        academic_year_id=data.academic_year_id,
+    )
+    if data.subject_id is None:
+        duplicate_query = duplicate_query.filter(TeacherClassAssignment.subject_id.is_(None))
+    else:
+        duplicate_query = duplicate_query.filter(TeacherClassAssignment.subject_id == data.subject_id)
+    if duplicate_query.first():
+        raise HTTPException(status_code=409, detail="Teacher assignment already exists")
     assignment = TeacherClassAssignment(
         teacher_id=teacher_id,
         class_id=data.class_id,
@@ -234,7 +265,9 @@ def remove_teacher_assignment(
         teacher_id=teacher_id,
         class_id=class_id,
     )
-    if subject_id is not None:
+    if subject_id is None:
+        query = query.filter(TeacherClassAssignment.subject_id.is_(None))
+    else:
         query = query.filter(TeacherClassAssignment.subject_id == subject_id)
     deleted = query.delete(synchronize_session=False)
     db.commit()
