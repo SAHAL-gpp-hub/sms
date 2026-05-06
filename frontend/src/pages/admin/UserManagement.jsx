@@ -702,8 +702,10 @@ function PortalLinkingTab() {
                 padding: '10px 14px', borderRadius: '8px',
                 background: 'var(--success-50)', border: '1px solid var(--success-200)',
                 fontSize: '13px', color: 'var(--success-700)', fontWeight: 600,
+                display: 'flex', alignItems: 'center', gap: '8px',
               }}>
-                ✅ All active students have both student and parent portal accounts linked.
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                All active students have both student and parent portal accounts linked.
               </div>
             )}
 
@@ -759,8 +761,11 @@ function PortalLinkingTab() {
                               background: s.has_student_account ? 'var(--success-100)' : 'var(--warning-50)',
                               color: s.has_student_account ? 'var(--success-700)' : 'var(--warning-700)',
                               border: `1px solid ${s.has_student_account ? 'var(--success-200)' : '#fde68a'}`,
+                              display: 'inline-flex', alignItems: 'center', gap: '3px',
                             }}>
-                              {s.has_student_account ? '✓ Linked' : '✗ Missing'}
+                              {s.has_student_account
+                                ? <><svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg> Linked</>
+                                : <><svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg> Missing</>}
                             </span>
                           </td>
                           <td>
@@ -769,8 +774,11 @@ function PortalLinkingTab() {
                               background: s.has_parent_account ? 'var(--success-100)' : 'var(--warning-50)',
                               color: s.has_parent_account ? 'var(--success-700)' : 'var(--warning-700)',
                               border: `1px solid ${s.has_parent_account ? 'var(--success-200)' : '#fde68a'}`,
+                              display: 'inline-flex', alignItems: 'center', gap: '3px',
                             }}>
-                              {s.has_parent_account ? '✓ Linked' : '✗ Missing'}
+                              {s.has_parent_account
+                                ? <><svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg> Linked</>
+                                : <><svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg> Missing</>}
                             </span>
                           </td>
                           <td style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
@@ -860,7 +868,9 @@ function PortalLinkingTab() {
           </div>
         </div>
         <button className="btn btn-primary" onClick={handleLink} disabled={linking} style={{ width: '100%' }}>
-          {linking ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Linking…</> : '🔗 Link Account to Student'}
+          {linking
+            ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Linking…</>
+            : <><svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" style={{ flexShrink: 0 }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg> Link Account to Student</>}
         </button>
       </div>
 
@@ -916,13 +926,31 @@ function PortalLinkingTab() {
 // ══════════════════════════════════════════════════════════════════════════════
 // Main UserManagement — tabs wrapper
 // ══════════════════════════════════════════════════════════════════════════════
+const TAB_ICONS = {
+  users: (
+    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  ),
+  assignments: (
+    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01" />
+    </svg>
+  ),
+  portal: (
+    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+    </svg>
+  ),
+}
+
 export default function UserManagement() {
   const [tab, setTab] = useState('users')
 
   const tabs = [
-    { value: 'users',       label: 'Users',              icon: '👥' },
-    { value: 'assignments', label: 'Teacher Assignments', icon: '🏫' },
-    { value: 'portal',      label: 'Portal Linking',      icon: '🔗' },
+    { value: 'users',       label: 'Users',              icon: TAB_ICONS.users },
+    { value: 'assignments', label: 'Teacher Assignments', icon: TAB_ICONS.assignments },
+    { value: 'portal',      label: 'Portal Linking',      icon: TAB_ICONS.portal },
   ]
 
   return (

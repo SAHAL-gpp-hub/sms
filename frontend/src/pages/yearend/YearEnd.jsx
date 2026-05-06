@@ -133,7 +133,73 @@ if (typeof document !== 'undefined' && !document.getElementById('ye-css')) {
   document.head.appendChild(s)
 }
 
-const ACTIONS = ['promoted', 'retained', 'graduated', 'transferred', 'dropped', 'on_hold']
+// ─────────────────────────────────────────────────────────────────────────────
+// SVG icon set for YearEnd module
+// ─────────────────────────────────────────────────────────────────────────────
+const YE_ICONS = {
+  calendar: (
+    <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
+  ),
+  list: (
+    <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+    </svg>
+  ),
+  wrench: (
+    <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><circle cx="12" cy="12" r="3" strokeWidth={2} />
+    </svg>
+  ),
+  graduation: (
+    <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+    </svg>
+  ),
+  users: (
+    <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  ),
+  lock: (
+    <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+    </svg>
+  ),
+  clipboard: (
+    <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+    </svg>
+  ),
+  document: (
+    <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+    </svg>
+  ),
+  plus: (
+    <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+    </svg>
+  ),
+  events: (
+    <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
+  ),
+  auditLog: (
+    <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+  ),
+  operations: (
+    <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+    </svg>
+  ),
+}
+
+
 const ACTION_LABELS = {
   promoted: 'Promote', retained: 'Retain', graduated: 'Graduate',
   transferred: 'Transfer', dropped: 'Drop', on_hold: 'Hold',
@@ -264,7 +330,7 @@ function YearLifecycleTab({ years, onRefresh }) {
 
   return (
     <div>
-      <YeCard icon="📅" title="Create Academic Year" sub="New years start as Draft — configure classes, fees, subjects, then activate">
+      <YeCard icon={YE_ICONS.calendar} title="Create Academic Year" sub="New years start as Draft — configure classes, fees, subjects, then activate">
         <div className="ye-form-row" style={{ marginBottom: 14 }}>
           <div>
             <label className="label">Year Label *</label>
@@ -284,7 +350,7 @@ function YearLifecycleTab({ years, onRefresh }) {
         </button>
       </YeCard>
 
-      <YeCard icon="🗂" title="All Academic Years" sub="Draft → Active → Closed lifecycle">
+      <YeCard icon={YE_ICONS.list} title="All Academic Years" sub="Draft → Active → Closed lifecycle">
         {years.length === 0 ? (
           <EmptyState
             icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>}
@@ -309,7 +375,7 @@ function YearLifecycleTab({ years, onRefresh }) {
                       disabled={activating === y.id}
                       onClick={() => handleActivate(y.id, y.label)}
                     >
-                      {activating === y.id ? <Spinner /> : '✓ Activate'}
+                      {activating === y.id ? <Spinner /> : 'Activate'}
                     </button>
                     <button
                       className="btn btn-secondary btn-sm"
@@ -327,7 +393,7 @@ function YearLifecycleTab({ years, onRefresh }) {
         )}
       </YeCard>
 
-      <YeCard icon="🔧" title="Backfill Enrollments" sub="One-time migration — run once after deploying the new schema">
+      <YeCard icon={YE_ICONS.wrench} title="Backfill Enrollments" sub="One-time migration — run once after deploying the new schema">
         <InlineBanner type="info" message="Creates Enrollment records for all existing students. Safe to run multiple times (idempotent)." />
         <button
           className="btn btn-secondary"
@@ -640,7 +706,7 @@ function PromotionTab({ years, onRefresh }) {
     <div>
       {/* Step 1 — Source year + class + target year */}
       <YeCard
-        icon="🎓"
+        icon={YE_ICONS.graduation}
         title="Bulk Promotion"
         sub={promotionMode === 'all'
           ? 'Promote students across all standards and divisions in one operation'
@@ -709,7 +775,7 @@ function PromotionTab({ years, onRefresh }) {
           {selectedSourceYear && (
             <div style={{ marginTop: 5, fontSize: 11.5, color: 'var(--text-tertiary)' }}>
               {loadingClasses
-                ? '⏳ Loading classes…'
+                ? 'Loading classes…'
                 : `${sourceClasses.length} class${sourceClasses.length !== 1 ? 'es' : ''} found for ${sourceYearLabel}`}
             </div>
           )}
@@ -817,7 +883,7 @@ function PromotionTab({ years, onRefresh }) {
 
       {promotionMode === 'all' && selectedSourceYear && selectedNewYear && (
         <YeCard
-          icon="📋"
+          icon={YE_ICONS.clipboard}
           title={`Class preview — ${allClassRows.length} classes · ${allClassTotals.students} students`}
           sub={`${selectedAllRows.length} classes checked · ${allClassRows.length - selectedAllRows.length} excluded`}
           right={
@@ -833,7 +899,7 @@ function PromotionTab({ years, onRefresh }) {
             </div>
           ) : allClassRows.length === 0 ? (
             <EmptyState
-              icon="🎓"
+              icon={<svg width="26" height="26" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" /></svg>}
               title="No classes found"
               description="Choose a source year with configured classes to build the bulk promotion preview."
             />
@@ -1018,7 +1084,7 @@ function PromotionTab({ years, onRefresh }) {
       {/* Step 2 — Candidate list */}
       {promotionMode === 'single' && phase !== 'setup' && candidates && (
         <YeCard
-          icon="👥"
+          icon={YE_ICONS.users}
           title={`Candidate List — ${candidates.length} students`}
           sub="Review and override suggested actions before running"
           right={
@@ -1145,8 +1211,9 @@ function PromotionTab({ years, onRefresh }) {
         }}>
           {result.type === 'success' ? (
             <>
-              <div style={{ fontWeight: 800, color: 'var(--success-700)', marginBottom: 8 }}>
-                ✅ Promotion complete
+              <div style={{ fontWeight: 800, color: 'var(--success-700)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                Promotion complete
               </div>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
                 {Object.entries(result.data).filter(([k, v]) => typeof v === 'number' && v > 0 && !['total_processed'].includes(k)).map(([k, v]) => (
@@ -1166,11 +1233,14 @@ function PromotionTab({ years, onRefresh }) {
                 disabled={undoing}
                 onClick={handleUndo}
               >
-                {undoing ? <><Spinner size={12} /> Undoing…</> : '↩ Undo This Promotion'}
+                {undoing ? <><Spinner size={12} /> Undoing…</> : '← Undo This Promotion'}
               </button>
             </>
           ) : (
-            <div style={{ fontWeight: 700, color: 'var(--danger-700)' }}>❌ {result.message}</div>
+            <div style={{ fontWeight: 700, color: 'var(--danger-700)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+              {result.message}
+            </div>
           )}
         </div>
       )}
@@ -1269,7 +1339,7 @@ function OperationsTab({ years }) {
 
   return (
     <div className="ye-grid-2">
-      <YeCard icon="🔒" title="Lock Exam Marks" sub="Prevents editing after year closes. Idempotent — safe to run twice.">
+      <YeCard icon={YE_ICONS.lock} title="Lock Exam Marks" sub="Prevents editing after year closes. Idempotent — safe to run twice.">
         <InlineBanner type="warning" message="Run this before promotion. Marks cannot be edited after locking without admin override." />
         <div style={{ marginTop: 14, display: 'grid', gap: 14 }}>
           <div>
@@ -1279,7 +1349,7 @@ function OperationsTab({ years }) {
             {yearOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
           <button className="btn btn-danger" style={{ width: '100%' }} onClick={() => setConfirmOp('lock')} disabled={locking || !lockYear}>
-            {locking ? <><Spinner /> Locking…</> : '🔒 Lock All Marks'}
+            {locking ? <><Spinner /> Locking…</> : <><svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" style={{flexShrink:0}}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg> Lock All Marks</>}
           </button>
           </div>
           <div style={{ paddingTop: 14, borderTop: '1px solid var(--border-subtle)' }}>
@@ -1295,7 +1365,7 @@ function OperationsTab({ years }) {
         </div>
       </YeCard>
 
-      <YeCard icon="📋" title="Clone Fees & Subjects" sub="Copy structure from one year to the next. Use at year start.">
+      <YeCard icon={YE_ICONS.clipboard} title="Clone Fees & Subjects" sub="Copy structure from one year to the next. Use at year start.">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div>
             <label className="label">From Year</label>
@@ -1323,7 +1393,7 @@ function OperationsTab({ years }) {
         </div>
       </YeCard>
 
-      <YeCard icon="📄" title="Transfer Certificates" sub="Generate TC PDFs for leaving students">
+      <YeCard icon={YE_ICONS.document} title="Transfer Certificates" sub="Generate TC PDFs for leaving students">
         <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
           Go to <strong>Students</strong>, find the student, click <strong>TC</strong>. The PDF opens for printing.
           The TC now includes attendance percentage (using the calendar-aware working day count).
@@ -1437,7 +1507,7 @@ function CalendarTab({ years }) {
           </select>
           {selectedYear && (
             <button className="btn btn-secondary" onClick={handleSeedHolidays} disabled={seeding}>
-              {seeding ? <Spinner /> : '🇮🇳 Seed Gujarat Holidays'}
+              {seeding ? <Spinner /> : 'Seed Gujarat Holidays'}
             </button>
           )}
         </div>
@@ -1445,7 +1515,7 @@ function CalendarTab({ years }) {
 
       {selectedYear && (
         <>
-          <YeCard icon="➕" title="Add Calendar Event" sub="Holidays and exam periods affect attendance working-day count">
+          <YeCard icon={YE_ICONS.plus} title="Add Calendar Event" sub="Holidays and exam periods affect attendance working-day count">
             <div className="ye-form-row" style={{ marginBottom: 10 }}>
               <div>
                 <label className="label">Type</label>
@@ -1477,11 +1547,15 @@ function CalendarTab({ years }) {
             </button>
           </YeCard>
 
-          <YeCard icon="📆" title={`Events (${events.length})`}>
+          <YeCard icon={YE_ICONS.events} title={`Events (${events.length})`}>
             {loading ? (
               <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-tertiary)' }}><Spinner /> Loading…</div>
             ) : events.length === 0 ? (
-              <EmptyState icon="📅" title="No events yet" description="Seed standard holidays or add manually" />
+              <EmptyState
+                icon={<svg width="26" height="26" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>}
+                title="No events yet"
+                description="Seed standard holidays or add manually"
+              />
             ) : (
               <div>
                 {events.map(ev => {
@@ -1581,7 +1655,11 @@ function AuditLogTab({ years }) {
           {loading ? (
             <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-tertiary)' }}><Spinner /> Loading…</div>
           ) : logs.length === 0 ? (
-            <EmptyState icon="📋" title="No audit entries" description="Operations will appear here once run" />
+            <EmptyState
+              icon={<svg width="26" height="26" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>}
+              title="No audit entries"
+              description="Operations will appear here once run"
+            />
           ) : (
             logs.map(log => (
               <div key={log.id} className="ye-audit-row">
@@ -1663,11 +1741,11 @@ export default function YearEnd() {
   }, [loadData])
 
   const tabs = [
-    { value: 'lifecycle',  label: 'Year Lifecycle', icon: '📅' },
-    { value: 'promotion',  label: 'Promotion',       icon: '🎓' },
-    { value: 'operations', label: 'Operations',      icon: '⚙️'  },
-    { value: 'calendar',   label: 'Calendar',        icon: '📆' },
-    { value: 'audit',      label: 'Audit Log',       icon: '📋' },
+    { value: 'lifecycle',  label: 'Year Lifecycle', icon: YE_ICONS.calendar },
+    { value: 'promotion',  label: 'Promotion',       icon: YE_ICONS.graduation },
+    { value: 'operations', label: 'Operations',      icon: YE_ICONS.operations },
+    { value: 'calendar',   label: 'Calendar',        icon: YE_ICONS.events },
+    { value: 'audit',      label: 'Audit Log',       icon: YE_ICONS.auditLog },
   ]
 
   return (

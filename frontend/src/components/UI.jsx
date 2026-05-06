@@ -375,12 +375,36 @@ export function SearchInput({ value, onChange, placeholder = 'Search...', style 
 }
 
 // ── Inline Banner ─────────────────────────────────────────────────────────
+const BANNER_ICONS = {
+  info: (
+    <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" strokeWidth={2} />
+      <path strokeLinecap="round" strokeWidth={2} d="M12 8v4m0 4h.01" />
+    </svg>
+  ),
+  warning: (
+    <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+    </svg>
+  ),
+  success: (
+    <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+    </svg>
+  ),
+  danger: (
+    <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+    </svg>
+  ),
+}
+
 export function InlineBanner({ type = 'info', title, message, onDismiss }) {
   const styles = {
-    info:    { bg: 'var(--brand-50)',   border: 'var(--brand-200)',  color: 'var(--brand-700)',   icon: 'ℹ️' },
-    warning: { bg: 'var(--warning-50)', border: '#fde68a',           color: '#92400e',            icon: '⚠️' },
-    success: { bg: 'var(--success-50)', border: '#bbf7d0',           color: 'var(--success-700)', icon: '✓' },
-    danger:  { bg: 'var(--danger-50)',  border: 'var(--danger-100)', color: 'var(--danger-700)',  icon: '⚠' },
+    info:    { bg: 'var(--brand-50)',   border: 'var(--brand-200)',  color: 'var(--brand-700)' },
+    warning: { bg: 'var(--warning-50)', border: '#fde68a',           color: '#92400e' },
+    success: { bg: 'var(--success-50)', border: '#bbf7d0',           color: 'var(--success-700)' },
+    danger:  { bg: 'var(--danger-50)',  border: 'var(--danger-100)', color: 'var(--danger-700)' },
   }
   const s = styles[type]
   return (
@@ -394,7 +418,7 @@ export function InlineBanner({ type = 'info', title, message, onDismiss }) {
       gap: '10px',
       marginBottom: '14px',
     }}>
-      <span style={{ fontSize: '14px', flexShrink: 0, lineHeight: 1.4 }}>{s.icon}</span>
+      <span style={{ flexShrink: 0, lineHeight: 1, marginTop: '1px', color: s.color }}>{BANNER_ICONS[type]}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         {title && <div style={{ fontSize: '13px', fontWeight: 700, color: s.color, marginBottom: '2px' }}>{title}</div>}
         <div style={{ fontSize: '12.5px', color: s.color, lineHeight: 1.5 }}>{message}</div>

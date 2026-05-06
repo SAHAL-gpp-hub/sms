@@ -117,7 +117,7 @@ export default function Defaulters() {
               className="btn btn-secondary"
               style={{ textDecoration: 'none', fontSize: '13px' }}
             >
-              📄 PDF Report
+              PDF Report
             </button>
           )
         }

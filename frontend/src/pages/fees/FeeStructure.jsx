@@ -150,7 +150,7 @@ export default function FeeStructure() {
       {feeHeads.length === 0 && (
         <div style={{ marginBottom: '14px' }}>
           <button className="btn btn-secondary" onClick={handleSeedHeads} disabled={seeding}>
-            {seeding ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Loading...</> : '📋 Load GSEB Fee Heads'}
+            {seeding ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Loading...</> : <><svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" style={{flexShrink:0}}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg> Load GSEB Fee Heads</>}
           </button>
         </div>
       )}
@@ -175,7 +175,7 @@ export default function FeeStructure() {
           <button className="btn btn-success" onClick={handleAssign} disabled={assigning} style={{ whiteSpace: 'nowrap' }}>
             {assigning
               ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Assigning…</>
-              : <>✓ Assign to Students</>}
+              : <><svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" style={{flexShrink:0}}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg> Assign to Students</>}
           </button>
         )}
       </FilterRow>

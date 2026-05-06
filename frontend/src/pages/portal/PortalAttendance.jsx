@@ -214,7 +214,7 @@ export default function PortalAttendance() {
       {/* Parent — no child selected */}
       {isParent && !selectedChildId && (
         <div style={{ textAlign: 'center', padding: '40px 20px', background: 'white', borderRadius: 16 }}>
-          <div style={{ fontSize: 36, marginBottom: 10 }}>👆</div>
+          <div style={{ marginBottom: 10, display: "flex", justifyContent: "center" }}><svg width="40" height="40" fill="none" stroke="#94a3b8" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
           <div style={{ fontWeight: 700, color: '#0f172a' }}>Select a student</div>
           <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 4 }}>
             Tap the switch button in the header to choose a student
@@ -262,7 +262,7 @@ export default function PortalAttendance() {
                 </div>
                 {parseFloat(allPct) < 75 && (
                   <div style={{ fontSize: 11, fontWeight: 800, color: '#b91c1c', marginTop: 4 }}>
-                    ⚠️ Below 75% minimum
+                    <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" style={{display:"inline",marginRight:"3px",verticalAlign:"middle"}}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>Below 75% minimum
                   </div>
                 )}
               </div>
@@ -344,7 +344,7 @@ export default function PortalAttendance() {
               padding: '12px 14px', marginBottom: 12,
               display: 'flex', alignItems: 'flex-start', gap: 10,
             }}>
-              <span style={{ fontSize: 18, flexShrink: 0 }}>⚠️</span>
+              <svg width="18" height="18" fill="none" stroke="#b91c1c" viewBox="0 0 24 24" style={{flexShrink:0}} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 800, color: '#b91c1c' }}>
                   Low attendance — {pct}%
