@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react'
 import { usePortalContext } from '../../layouts/PortalLayout'
 import { portalAPI } from '../../services/api'
-import api from '../../services/api'
 
 const GRADE_COLORS = {
   A1:'#15803d', A2:'#065f46', B1:'#1d4ed8', B2:'#4338ca',
@@ -30,11 +29,7 @@ function Shimmer() {
 // receive the response as a blob, then trigger a programmatic download.
 async function downloadMarksheet(examId, studentId, examName) {
   try {
-    const params = studentId ? { student_id: studentId } : {}
-    const res = await api.get(`/portal/me/marksheet/${examId}`, {
-      params,
-      responseType: 'blob',
-    })
+    const res = await portalAPI.getMarksheet(examId, studentId)
     const blobUrl = window.URL.createObjectURL(
       new Blob([res.data], { type: 'application/pdf' })
     )

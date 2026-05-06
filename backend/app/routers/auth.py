@@ -342,6 +342,14 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
     return user
 
 
+@router.get("/register-status", summary="Registration UI status")
+def register_status(db: Session = Depends(get_db)):
+    return {
+        "enabled": settings.REGISTRATION_ENABLED,
+        "has_users": db.query(User.id).first() is not None,
+    }
+
+
 @router.post("/logout", summary="Revoke the current access token")
 def logout(
     token: str = Depends(oauth2_scheme),

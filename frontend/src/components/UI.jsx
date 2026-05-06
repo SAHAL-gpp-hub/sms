@@ -221,10 +221,16 @@ export function Field({ label, required, error, hint, children }) {
 // ── Status Badge ──────────────────────────────────────────────────────────
 export function StatusBadge({ status }) {
   const map = {
-    'Active':     { cls: 'badge-success', dot: '#22c55e', label: 'Active' },
-    'TC Issued':  { cls: 'badge-warning', dot: '#f59e0b', label: 'TC Issued' },
-    'Left':       { cls: 'badge-neutral', dot: '#94a3b8', label: 'Left' },
-    'Passed Out': { cls: 'badge-info',    dot: '#3b82f6', label: 'Passed Out' },
+    'Active':      { cls: 'badge-success', dot: '#22c55e', label: 'Active' },
+    'TC_Issued':   { cls: 'badge-warning', dot: '#f59e0b', label: 'TC Issued' },
+    'TC Issued':   { cls: 'badge-warning', dot: '#f59e0b', label: 'TC Issued' },
+    'Left':        { cls: 'badge-neutral', dot: '#94a3b8', label: 'Left' },
+    'Passed_Out':  { cls: 'badge-info',    dot: '#3b82f6', label: 'Passed Out' },
+    'Passed Out':  { cls: 'badge-info',    dot: '#3b82f6', label: 'Passed Out' },
+    'Alumni':      { cls: 'badge-info',    dot: '#0ea5e9', label: 'Alumni' },
+    'On_Hold':     { cls: 'badge-warning', dot: '#d97706', label: 'On Hold' },
+    'Detained':    { cls: 'badge-danger',  dot: '#dc2626', label: 'Detained' },
+    'Provisional': { cls: 'badge-neutral', dot: '#8b5cf6', label: 'Provisional' },
   }
   const s = map[status] || { cls: 'badge-neutral', dot: '#94a3b8', label: status }
   return (

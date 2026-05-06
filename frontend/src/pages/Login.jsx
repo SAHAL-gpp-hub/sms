@@ -2,9 +2,9 @@
 // Concept: School in Gujarat → geometric tile motifs, warm saffron-teal palette,
 // bold editorial typography, asymmetric split layout.
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { authAPI, extractError } from '../services/api'
-import { setAuthUser, setToken } from '../services/auth'
+import { normalizeAuthUser, setAuthUser, setToken } from '../services/auth'
 
 // Animated SVG tile pattern — Islamic geometric / Gujarat craft inspiration
 function GeometricPattern() {
@@ -85,16 +85,7 @@ export default function Login() {
     try {
       const r = await authAPI.login(email, password)
       setToken(r.data.access_token)
-      setAuthUser({
-        id: r.data.user_id,
-        name: r.data.user_name,
-        role: r.data.role,
-        assignedClassIds: r.data.assigned_class_ids || [],
-        classTeacherClassIds: r.data.class_teacher_class_ids || [],
-        subjectAssignments: r.data.subject_assignments || [],
-        linkedStudentId: r.data.linked_student_id || null,
-        linkedStudentIds: r.data.linked_student_ids || [],
-      })
+      setAuthUser(normalizeAuthUser(r.data))
       // S10: route student/parent to portal, admin/teacher to dashboard
       const role = r.data.role
       if (role === 'student' || role === 'parent') {
@@ -737,7 +728,11 @@ export default function Login() {
               </button>
             </form>
 
-
+            <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '13px' }}>
+              <Link to="/register" style={{ color: '#c84b11', fontWeight: 700, textDecoration: 'none' }}>
+                First-time setup
+              </Link>
+            </div>
           </div>
         </div>
       </div>

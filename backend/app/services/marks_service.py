@@ -330,6 +330,29 @@ def bulk_save_marks(db: Session, entries: list[MarkEntry]):
     return {"saved": len(entries)}
 
 
+def unlock_marks_for_year(db: Session, academic_year_id: int):
+    """
+    Admin override used when locked year-end marks need correction.
+    Clears locked_at for all marks attached to exams in the selected year.
+    """
+    exam_ids = [
+        row[0]
+        for row in db.query(Exam.id)
+        .filter(Exam.academic_year_id == academic_year_id)
+        .all()
+    ]
+    if not exam_ids:
+        return {"unlocked": 0}
+
+    unlocked = (
+        db.query(Mark)
+        .filter(Mark.exam_id.in_(exam_ids), Mark.locked_at.isnot(None))
+        .update({Mark.locked_at: None}, synchronize_session=False)
+    )
+    db.commit()
+    return {"unlocked": unlocked}
+
+
 def get_marks(db: Session, exam_id: int, class_id: int, subject_ids: Optional[list[int]] = None):
     exam = db.query(Exam).filter_by(id=exam_id).first()
     student_ids = []

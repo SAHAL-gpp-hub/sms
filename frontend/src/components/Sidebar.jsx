@@ -2,10 +2,9 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { clearToken, getRole } from '../services/auth'
-import { yearendAPI } from '../services/api'
+import { authAPI, yearendAPI } from '../services/api'
 import { getAuthUser } from '../services/auth'
 
-const user = getAuthUser()
 const navGroups = [
   {
   label: 'Admin',
@@ -51,6 +50,17 @@ const navGroups = [
           <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        ),
+      },
+      {
+        to: '/enrollments',
+        label: 'Enrollments',
+        roles: ['admin', 'teacher'],
+        icon: (
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h.01M9 12h6m-6 4h6" />
           </svg>
         ),
       },
@@ -142,6 +152,7 @@ const navGroups = [
 export default function Sidebar({ open, onClose }) {
   const navigate = useNavigate()
   const [yearLabel, setYearLabel] = useState(null)
+  const user = getAuthUser()
   const role = getRole() || 'admin'
 
   useEffect(() => {
@@ -150,9 +161,15 @@ export default function Sidebar({ open, onClose }) {
       .catch(() => {})
   }, [])
 
-  const handleLogout = () => {
-    clearToken()
-    navigate('/login')
+  const handleLogout = async () => {
+    try {
+      await authAPI.logout()
+    } catch {
+      // Local sign-out should still complete if the token already expired.
+    } finally {
+      clearToken()
+      navigate('/login')
+    }
   }
 
   return (

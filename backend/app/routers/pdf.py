@@ -14,6 +14,7 @@ from app.pdf.report_pdf import (
     render_attendance_report,
     render_result_report
 )
+from app.services import report_card_service
 
 router = APIRouter(prefix="/api/v1/pdf", tags=["PDF"])
 
@@ -103,6 +104,13 @@ def generate_student_marksheet(
     pdf = render_marksheet_pdf(db, exam_id, class_id, student_id)
     if not pdf:
         raise HTTPException(status_code=404, detail="No marks found for this student")
+    report_card_service.upsert_report_card(
+        db,
+        student_id=student_id,
+        exam_id=exam_id,
+        pdf_path=f"/api/v1/pdf/marksheet/student/{student_id}?exam_id={exam_id}&class_id={class_id}",
+    )
+    db.commit()
     return Response(
         content=pdf,
         media_type="application/pdf",
@@ -121,6 +129,8 @@ def generate_class_marksheet(
     pdf = render_marksheet_pdf(db, exam_id, class_id)
     if not pdf:
         raise HTTPException(status_code=404, detail="No marks found for this class")
+    report_card_service.upsert_class_report_cards(db, class_id=class_id, exam_id=exam_id)
+    db.commit()
     return Response(
         content=pdf,
         media_type="application/pdf",

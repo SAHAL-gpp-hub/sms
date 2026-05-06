@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { studentAPI, setupAPI, extractError, openSignedPdf } from '../../services/api'
+import { studentAPI, setupAPI, extractError } from '../../services/api'
 import { PageHeader, SearchInput, Select, TableSkeleton, EmptyState, ConfirmModal, StatusBadge, FilterRow } from '../../components/UI'
 
 function StudentCard({ student, cls, onDelete, onDownloadTC }) {
@@ -142,6 +142,8 @@ export default function StudentList() {
   const [loading, setLoading] = useState(true)
   const [seeding, setSeeding] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [tcTarget, setTcTarget] = useState(null)
+  const [tcForm, setTcForm] = useState({ reason: "Parent's Request", conduct: 'Good' })
   const [deleting, setDeleting] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 640)
 
@@ -154,7 +156,7 @@ export default function StudentList() {
   const fetchStudents = useCallback(async () => {
     setLoading(true)
     try {
-      const params = {}
+      const params = { limit: 200 }
       if (search) params.search = search
       if (classFilter) params.class_id = classFilter
       const res = await studentAPI.list(params)
@@ -173,7 +175,17 @@ export default function StudentList() {
   useEffect(() => { fetchStudents() }, [fetchStudents])
 
   const handleDownloadTC = (studentId) => {
-    openSignedPdf(`/yearend/tc-pdf-token/${studentId}`, `/yearend/tc-pdf/${studentId}`)
+    setTcTarget(studentId)
+    setTcForm({ reason: "Parent's Request", conduct: 'Good' })
+  }
+
+  const handleTcConfirm = () => {
+    if (!tcTarget) return
+    studentAPI.getTc(tcTarget, {
+      reason: tcForm.reason || "Parent's Request",
+      conduct: tcForm.conduct || 'Good',
+    }).catch(err => toast.error(extractError(err)))
+    setTcTarget(null)
   }
 
   const handleSeed = async () => {
@@ -300,7 +312,7 @@ export default function StudentList() {
               {students.length > 0 && (
                 <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center', padding: '8px 0' }}>
                   Showing {students.length} student{students.length !== 1 ? 's' : ''}
-                  {students.length >= 50 && ' — refine search to see more'}
+                  {students.length >= 200 && ' — refine search to see more'}
                 </div>
               )}
             </div>
@@ -378,7 +390,7 @@ export default function StudentList() {
           {!loading && students.length > 0 && (
             <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border-subtle)', fontSize: '12px', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span>Showing {students.length} student{students.length !== 1 ? 's' : ''}</span>
-              {students.length >= 50 && <span style={{ color: 'var(--warning-600)', fontWeight: 600 }}>Showing first 50 — refine search to see more</span>}
+              {students.length >= 200 && <span style={{ color: 'var(--warning-600)', fontWeight: 600 }}>Showing first 200 — refine search to see more</span>}
             </div>
           )}
         </div>
@@ -395,9 +407,50 @@ export default function StudentList() {
         loading={deleting}
       />
 
+      {tcTarget && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)' }} onClick={() => setTcTarget(null)} />
+          <div className="tc-modal-inner" style={{
+            position: 'relative',
+            background: 'var(--surface-0)',
+            borderRadius: '16px 16px 0 0',
+            padding: '24px 20px 28px',
+            width: '100%',
+            maxWidth: '480px',
+            boxShadow: 'var(--shadow-xl)',
+            border: '1px solid var(--border-default)',
+            borderBottom: 'none',
+          }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '16px' }}>
+              Transfer Certificate
+            </h3>
+            <div style={{ display: 'grid', gap: '14px' }}>
+              <div>
+                <label className="label">Reason</label>
+                <input className="input" value={tcForm.reason} onChange={e => setTcForm(f => ({ ...f, reason: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">Conduct</label>
+                <input className="input" value={tcForm.conduct} onChange={e => setTcForm(f => ({ ...f, conduct: e.target.value }))} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '22px' }}>
+              <button className="btn btn-secondary" onClick={() => setTcTarget(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleTcConfirm}>Open PDF</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         @media (max-width: 480px) {
           .btn-add-label { display: none; }
+        }
+        @media (min-width: 640px) {
+          .tc-modal-inner {
+            border-radius: 16px !important;
+            border-bottom: 1px solid var(--border-default) !important;
+          }
         }
       `}</style>
     </div>

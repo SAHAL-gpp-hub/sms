@@ -29,6 +29,7 @@ from app.routers import (
     marks,
     pdf,
     portal,
+    report_cards,
     setup,
     students,
     yearend,
@@ -95,6 +96,7 @@ app.include_router(attendance.router,   dependencies=_auth)
 app.include_router(admin_users.router,  dependencies=_auth)
 app.include_router(portal.router,       dependencies=_auth)
 app.include_router(enrollments.router,  dependencies=_auth)   # NEW
+app.include_router(report_cards.router, dependencies=_auth)
 
 
 @app.get("/")

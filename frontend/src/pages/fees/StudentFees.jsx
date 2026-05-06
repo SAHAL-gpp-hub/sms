@@ -7,12 +7,20 @@ import { PageHeader, EmptyState, LoadingPage } from '../../components/UI'
 
 const PAYMENT_MODES = ['Cash', 'Cheque', 'DD', 'UPI']
 
+const buildPaymentForm = (feeItem) => ({
+  amount_paid: feeItem?.balance ? Number(feeItem.balance).toFixed(2) : '',
+  mode: 'Cash',
+  payment_date: new Date().toISOString().split('T')[0],
+  collected_by: '',
+})
+
 function LedgerItem({ item, onPay }) {
   const balance = parseFloat(item.balance || 0)
   const paid    = parseFloat(item.paid_amount || 0)
   const total   = parseFloat(item.net_amount || 0)
   const paidPct = total > 0 ? Math.min((paid / total) * 100, 100) : 0
   const isPaid  = balance <= 0
+  const isArrear = item.invoice_type === 'arrear'
 
   return (
     <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
@@ -20,6 +28,11 @@ function LedgerItem({ item, onPay }) {
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-primary)' }}>{item.fee_head_name}</span>
+            {isArrear && (
+              <span style={{ fontSize: '10.5px', fontWeight: 800, padding: '1px 7px', borderRadius: '20px', background: 'var(--warning-100)', color: 'var(--warning-700)' }}>
+                Arrear
+              </span>
+            )}
             <span style={{ fontSize: '10.5px', fontWeight: 700, padding: '1px 7px', borderRadius: '20px', background: isPaid ? 'var(--success-100)' : 'var(--danger-100)', color: isPaid ? 'var(--success-700)' : 'var(--danger-700)' }}>
               {isPaid ? 'Paid' : 'Due'}
             </span>
@@ -28,6 +41,7 @@ function LedgerItem({ item, onPay }) {
             <span>Billed: <strong style={{ color: 'var(--text-secondary)' }}>{formatINR(total)}</strong></span>
             <span>Paid: <strong style={{ color: 'var(--success-700)' }}>{formatINR(paid)}</strong></span>
             <span>Balance: <strong style={{ color: balance > 0 ? 'var(--danger-600)' : 'var(--success-700)' }}>{formatINR(balance)}</strong></span>
+            {item.source_invoice_id && <span>Source invoice: <strong style={{ color: 'var(--text-secondary)' }}>#{item.source_invoice_id}</strong></span>}
           </div>
         </div>
         {!isPaid && (
@@ -47,21 +61,7 @@ function LedgerItem({ item, onPay }) {
 }
 
 function PaymentModal({ item, onClose, onSuccess }) {
- const [form, setForm] = useState({
-
-    amount_paid: item?.balance
-
-      ? Number(item.balance).toFixed(2)
-
-      : '',
-
-    mode: 'Cash',
-
-    payment_date: new Date().toISOString().split('T')[0],
-
-    collected_by: '',
-
-  })
+  const [form, setForm] = useState(() => buildPaymentForm(item))
 
   const [saving, setSaving] = useState(false)
 
@@ -70,22 +70,7 @@ function PaymentModal({ item, onClose, onSuccess }) {
   useEffect(() => {
 
     if (item) {
-
-      setForm({
-
-        amount_paid: item?.balance
-
-          ? Number(item.balance).toFixed(2)
-
-          : '',
-
-        mode: 'Cash',
-
-        payment_date: new Date().toISOString().split('T')[0],
-
-        collected_by: '',
-
-      })
+      setForm(buildPaymentForm(item))
 
     }
 

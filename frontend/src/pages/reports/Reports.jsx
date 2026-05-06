@@ -1,6 +1,8 @@
 // Reports.jsx — Refined professional UI
 import { useState, useEffect } from 'react'
-import { setupAPI, openSignedPdf } from '../../services/api'
+import toast from 'react-hot-toast'
+import { extractError, marksAPI, openSignedPdf, reportCardsAPI, setupAPI } from '../../services/api'
+import { getAuthUser } from '../../services/auth'
 import { PageHeader, Select } from '../../components/UI'
 
 /* ---------- Inline SVG icon set (replaces emojis) ---------- */
@@ -188,9 +190,15 @@ const MONTHS = [
 ]
 
 export default function Reports() {
+  const authUser = getAuthUser()
+  const isAdmin = authUser?.role === 'admin'
   const [classes, setClasses] = useState([])
   const [years, setYears] = useState([])
-  const [exams, setExams] = useState([])
+  const [resultExams, setResultExams] = useState([])
+  const [marksheetExams, setMarksheetExams] = useState([])
+  const [reportCards, setReportCards] = useState([])
+  const [reportCardsLoading, setReportCardsLoading] = useState(false)
+  const [savingLockId, setSavingLockId] = useState(null)
 
   const [attClass, setAttClass] = useState('')
   const [attYear, setAttYear] = useState(new Date().getFullYear())
@@ -212,19 +220,31 @@ export default function Reports() {
 
   useEffect(() => {
     if (resultClass) {
-      import('../../services/api').then(({ marksAPI }) => {
-        marksAPI.getExams({ class_id: resultClass }).then(r => setExams(r.data))
-      })
+      marksAPI.getExams({ class_id: resultClass }).then(r => setResultExams(r.data))
+    } else {
+      setResultExams([])
     }
   }, [resultClass])
 
   useEffect(() => {
     if (msClass) {
-      import('../../services/api').then(({ marksAPI }) => {
-        marksAPI.getExams({ class_id: msClass }).then(r => setExams(r.data))
-      })
+      marksAPI.getExams({ class_id: msClass }).then(r => setMarksheetExams(r.data))
+    } else {
+      setMarksheetExams([])
     }
   }, [msClass])
+
+  useEffect(() => {
+    if (!msClass || !msExam) {
+      setReportCards([])
+      return
+    }
+    setReportCardsLoading(true)
+    reportCardsAPI.list({ class_id: msClass, exam_id: msExam, limit: 200 })
+      .then(r => setReportCards(r.data || []))
+      .catch(() => setReportCards([]))
+      .finally(() => setReportCardsLoading(false))
+  }, [msClass, msExam])
 
   const classOptions = classes.map(c => ({
     value: String(c.id),
@@ -234,9 +254,31 @@ export default function Reports() {
     value: String(y.id),
     label: y.label + (y.is_current ? ' (Current)' : ''),
   }))
-  const examOptions = exams.map(e => ({ value: String(e.id), label: e.name }))
+  const resultExamOptions = resultExams.map(e => ({ value: String(e.id), label: e.name }))
+  const marksheetExamOptions = marksheetExams.map(e => ({ value: String(e.id), label: e.name }))
   const calYears = [2023, 2024, 2025, 2026].map(y => ({ value: y, label: String(y) }))
   const monthOptions = MONTHS.map((m, i) => ({ value: i + 1, label: m }))
+
+  const refreshReportCards = () => {
+    if (!msClass || !msExam) return
+    setReportCardsLoading(true)
+    reportCardsAPI.list({ class_id: msClass, exam_id: msExam, limit: 200 })
+      .then(r => setReportCards(r.data || []))
+      .catch(err => toast.error(extractError(err)))
+      .finally(() => setReportCardsLoading(false))
+  }
+
+  const toggleLock = async (id, next) => {
+    setSavingLockId(id)
+    try {
+      await reportCardsAPI.setLocked(id, next)
+      refreshReportCards()
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setSavingLockId(null)
+    }
+  }
 
   return (
     <div style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
@@ -349,7 +391,7 @@ export default function Reports() {
               label="Exam"
               value={resultExam}
               onChange={e => setResultExam(e.target.value)}
-              options={examOptions}
+              options={resultExamOptions}
               placeholder={resultClass ? 'Select exam' : 'Select class first'}
             />
             <DownloadButton
@@ -389,14 +431,15 @@ export default function Reports() {
               label="Exam"
               value={msExam}
               onChange={e => setMsExam(e.target.value)}
-              options={examOptions}
+              options={marksheetExamOptions}
               placeholder={msClass ? 'Select exam' : 'Select class first'}
             />
             <DownloadButton
               href="#"
-              onClick={e => {
+              onClick={async e => {
                 e.preventDefault()
-                openSignedPdf(`/pdf/token/marksheet/class/${msClass}`, `/pdf/marksheet/class/${msClass}`, { exam_id: msExam })
+                await openSignedPdf(`/pdf/token/marksheet/class/${msClass}`, `/pdf/marksheet/class/${msClass}`, { exam_id: msExam })
+                setTimeout(refreshReportCards, 1200)
               }}
               label="Download Marksheets"
               disabled={!msClass || !msExam}
@@ -405,6 +448,69 @@ export default function Reports() {
               <HelperText>Select class and exam to continue</HelperText>
             )}
           </div>
+        </ReportCard>
+
+        <ReportCard
+          icon={Icons.Document}
+          title="Report Card Registry"
+          description="Saved report-card records generated from marksheet PDFs."
+          accentColor="#0d7377"
+        >
+          {!msClass || !msExam ? (
+            <HelperText>Select class and exam above to load generated report cards</HelperText>
+          ) : reportCardsLoading ? (
+            <div style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>Loading generated report cards...</div>
+          ) : reportCards.length === 0 ? (
+            <HelperText>No report-card records yet. Generate class marksheets to create them.</HelperText>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table" style={{ minWidth: '640px' }}>
+                <thead>
+                  <tr>
+                    <th>Student</th>
+                    <th>Class</th>
+                    <th>Generated</th>
+                    <th>Status</th>
+                    <th>Open</th>
+                    {isAdmin && <th>Lock</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {reportCards.map(card => (
+                    <tr key={card.id}>
+                      <td style={{ fontWeight: 700 }}>{card.student_name}</td>
+                      <td>{card.class_name} — {card.division}</td>
+                      <td>{card.generated_at ? card.generated_at.replace('T', ' ').slice(0, 16) : '—'}</td>
+                      <td>{card.is_locked ? 'Locked' : 'Draft'}</td>
+                      <td>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => openSignedPdf(
+                            `/pdf/token/marksheet/student/${card.student_id}`,
+                            `/pdf/marksheet/student/${card.student_id}`,
+                            { exam_id: card.exam_id, class_id: card.class_id },
+                          )}
+                        >
+                          Open
+                        </button>
+                      </td>
+                      {isAdmin && (
+                        <td>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            disabled={savingLockId === card.id}
+                            onClick={() => toggleLock(card.id, !card.is_locked)}
+                          >
+                            {savingLockId === card.id ? 'Saving...' : card.is_locked ? 'Unlock' : 'Lock'}
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </ReportCard>
       </div>
 

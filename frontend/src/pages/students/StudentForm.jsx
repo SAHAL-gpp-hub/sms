@@ -12,10 +12,14 @@ const GENDERS = [
   { value: 'Other', label: 'Other' },
 ]
 const STATUSES = [
-  { value: 'Active',     label: 'Active' },
-  { value: 'TC Issued',  label: 'TC Issued' },
-  { value: 'Left',       label: 'Left' },
-  { value: 'Passed Out', label: 'Passed Out' },
+  { value: 'Active',      label: 'Active' },
+  { value: 'TC_Issued',   label: 'TC Issued' },
+  { value: 'Left',        label: 'Left' },
+  { value: 'Passed_Out',  label: 'Passed Out' },
+  { value: 'Alumni',      label: 'Alumni' },
+  { value: 'On_Hold',     label: 'On Hold' },
+  { value: 'Detained',    label: 'Detained' },
+  { value: 'Provisional', label: 'Provisional' },
 ]
 
 function SectionCard({ title, subtitle, children }) {
@@ -43,6 +47,7 @@ const EMPTY_FORM = {
   address: '', category: 'GEN', aadhar_last4: '',
   admission_date: new Date().toISOString().split('T')[0],
   academic_year_id: '', status: 'Active',
+  previous_school: '', reason_for_leaving: '',
 }
 
 export default function StudentForm() {
@@ -84,6 +89,8 @@ export default function StudentForm() {
           admission_date: s.admission_date || '',
           academic_year_id: String(s.academic_year_id) || '',
           status: s.status || 'Active',
+          previous_school: s.previous_school || '',
+          reason_for_leaving: s.reason_for_leaving || '',
         })
         setInitialLoading(false)
       }).catch(() => {
@@ -126,6 +133,8 @@ export default function StudentForm() {
         academic_year_id: parseInt(form.academic_year_id),
         roll_number: form.roll_number ? parseInt(form.roll_number) : null,
         aadhar_last4: form.aadhar_last4 || null,
+        previous_school: form.previous_school || null,
+        reason_for_leaving: form.reason_for_leaving || null,
       }
       delete payload.aadhar
       if (isEdit) {
@@ -222,6 +231,9 @@ export default function StudentForm() {
         <Field label="Admission Date" required error={errors.admission_date}>
           <input type="date" className={`input${errors.admission_date ? ' error' : ''}`} value={form.admission_date} onChange={setField('admission_date')} />
         </Field>
+        <Field label="Previous School">
+          <input className="input" value={form.previous_school} onChange={setField('previous_school')} placeholder="Previous school name (optional)" />
+        </Field>
         {isEdit && (
           <Field label="Status">
             <select className="input" value={form.status} onChange={setField('status')}>
@@ -262,6 +274,18 @@ export default function StudentForm() {
               rows={3}
               className="input"
               style={{ resize: 'vertical', minHeight: '72px' }}
+            />
+          </Field>
+        </div>
+        <div style={{ gridColumn: '1 / -1' }}>
+          <Field label="Reason for Leaving">
+            <textarea
+              value={form.reason_for_leaving}
+              onChange={setField('reason_for_leaving')}
+              placeholder="Used for leaving/TC records when applicable"
+              rows={2}
+              className="input"
+              style={{ resize: 'vertical', minHeight: '60px' }}
             />
           </Field>
         </div>

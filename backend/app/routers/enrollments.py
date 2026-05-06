@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.base_models import Enrollment
+from app.models.base_models import AcademicYear, Class, Enrollment, Student
 from app.routers.auth import CurrentUser, require_role
 from app.services.enrollment_service import (
     get_enrollment,
@@ -47,7 +47,7 @@ def list_enrollments_endpoint(
     _: CurrentUser = Depends(require_role("admin", "teacher")),
 ):
     enrollments = list_enrollments(db, academic_year_id, class_id, status, student_id)
-    return [_serialize(e) for e in enrollments]
+    return [_serialize(db, e) for e in enrollments]
 
 
 @router.get("/student/{student_id}")
@@ -68,7 +68,7 @@ def get_student_enrollment_history(
             raise HTTPException(status_code=403, detail="Access denied")
 
     enrollments = list_enrollments(db, student_id=student_id)
-    return [_serialize(e) for e in enrollments]
+    return [_serialize(db, e) for e in enrollments]
 
 
 @router.get("/{enrollment_id}")
@@ -80,7 +80,7 @@ def get_single_enrollment(
     e = get_enrollment(db, enrollment_id)
     if not e:
         raise HTTPException(status_code=404, detail="Enrollment not found")
-    return _serialize(e)
+    return _serialize(db, e)
 
 
 @router.get("/class/{class_id}/roll-list")
@@ -113,12 +113,20 @@ def reassign_rolls(
     return result
 
 
-def _serialize(e: Enrollment) -> dict:
+def _serialize(db: Session, e: Enrollment) -> dict:
+    student = db.query(Student).filter_by(id=e.student_id).first()
+    class_obj = db.query(Class).filter_by(id=e.class_id).first()
+    year = db.query(AcademicYear).filter_by(id=e.academic_year_id).first()
     return {
         "id":               e.id,
         "student_id":       e.student_id,
+        "student_name":     student.name_en if student else None,
+        "student_code":     student.student_id if student else None,
         "academic_year_id": e.academic_year_id,
+        "academic_year_label": year.label if year else None,
         "class_id":         e.class_id,
+        "class_name":       class_obj.name if class_obj else None,
+        "division":         class_obj.division if class_obj else None,
         "roll_number":      e.roll_number,
         "status":           e.status.value if hasattr(e.status, "value") else e.status,
         "promotion_action": e.promotion_action,

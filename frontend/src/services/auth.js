@@ -23,6 +23,17 @@ export const setAuthUser = (user) => {
   } catch { /* */ }
 };
 
+export const normalizeAuthUser = (data) => ({
+  id: data?.user_id ?? data?.id ?? null,
+  name: data?.user_name ?? data?.name ?? data?.username ?? '',
+  role: data?.role ?? null,
+  assignedClassIds: data?.assigned_class_ids ?? data?.assignedClassIds ?? [],
+  classTeacherClassIds: data?.class_teacher_class_ids ?? data?.classTeacherClassIds ?? [],
+  subjectAssignments: data?.subject_assignments ?? data?.subjectAssignments ?? [],
+  linkedStudentId: data?.linked_student_id ?? data?.linkedStudentId ?? null,
+  linkedStudentIds: data?.linked_student_ids ?? data?.linkedStudentIds ?? [],
+});
+
 export const getAuthUser = () => {
   try {
     const raw = sessionStorage.getItem(USER_KEY);

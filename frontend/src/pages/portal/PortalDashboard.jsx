@@ -48,9 +48,9 @@ export default function PortalDashboard() {
     }
 
     Promise.allSettled([
-      isParent ? portalAPI.getChildResults(sid)        : portalAPI.getResults(),
-      isParent ? portalAPI.getChildAttendance(sid)     : portalAPI.getAttendanceSummary(),
-      isParent ? portalAPI.getChildFees(sid)           : portalAPI.getFees(),
+      isParent ? portalAPI.getChildResults(sid)   : portalAPI.getResults(),
+      isParent ? portalAPI.getAttendanceSummary(sid) : portalAPI.getAttendanceSummary(),
+      isParent ? portalAPI.getChildFees(sid)      : portalAPI.getFees(),
     ]).then(([resR, attR, feeR]) => {
       if (resR.status === 'fulfilled') setResults(resR.value.data)
       if (attR.status === 'fulfilled') setAttendance(attR.value.data)
@@ -63,17 +63,9 @@ export default function PortalDashboard() {
   const latestPct   = latestExam ? `${Number(latestExam.percentage || 0).toFixed(1)}%` : '—'
   const latestGrade = latestExam?.grade || '—'
 
-  // For parent: attendance is a daily array; for student: it's a summary array
+  // Dashboard uses the calendar-aware monthly summary for both students and parents.
   const attPct = (() => {
     if (!attendance) return '—'
-    if (isParent) {
-      // daily records — compute % from last 30 days
-      const records = Array.isArray(attendance) ? attendance.slice(0, 30) : []
-      if (!records.length) return '—'
-      const present = records.filter(r => r.status === 'P').length
-      return `${((present / records.length) * 100).toFixed(0)}%`
-    }
-    // summary array from /attendance/summary
     const first = Array.isArray(attendance) ? attendance[0] : null
     return first?.percentage != null ? `${first.percentage.toFixed(1)}%` : '—'
   })()

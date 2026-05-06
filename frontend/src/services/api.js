@@ -6,14 +6,100 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+function createPdfLoadingWindow(title = 'Preparing PDF') {
+  const popup = window.open('', '_blank')
+  if (!popup) return null
+  popup.document.write(`
+    <!doctype html>
+    <html>
+      <head>
+        <title>${title}</title>
+        <style>
+          body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            font-family: system-ui, sans-serif;
+            background: #f8fafc;
+            color: #0f172a;
+          }
+          .wrap {
+            text-align: center;
+            padding: 24px;
+          }
+          .spinner {
+            width: 40px;
+            height: 40px;
+            margin: 0 auto 16px;
+            border: 3px solid #cbd5e1;
+            border-top-color: #2563eb;
+            border-radius: 999px;
+            animation: spin 0.9s linear infinite;
+          }
+          .sub {
+            margin-top: 8px;
+            color: #64748b;
+            font-size: 14px;
+          }
+          @keyframes spin { to { transform: rotate(360deg); } }
+        </style>
+      </head>
+      <body>
+        <div class="wrap">
+          <div class="spinner"></div>
+          <div>${title}</div>
+          <div class="sub">This may take a few seconds for larger files.</div>
+        </div>
+      </body>
+    </html>
+  `)
+  popup.document.close()
+  return popup
+}
+
 export async function openSignedPdf(tokenPath, pdfPath, params = {}) {
-  const { data } = await api.get(tokenPath, { params })
-  const query = new URLSearchParams()
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') query.set(key, value)
-  })
-  query.set('token', data.token)
-  window.open(`/api/v1${pdfPath}?${query.toString()}`, '_blank', 'noopener,noreferrer')
+  const popup = createPdfLoadingWindow()
+  try {
+    const { data } = await api.get(tokenPath, { params })
+    const query = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.set(key, value)
+    })
+    query.set('token', data.token)
+    const url = `/api/v1${pdfPath}?${query.toString()}`
+    if (popup) {
+      popup.location.replace(url)
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
+  } catch (err) {
+    if (popup && !popup.closed) popup.close()
+    throw err
+  }
+}
+
+export async function openProtectedPdf(path, params = {}, fallbackFileName = 'document.pdf') {
+  const popup = createPdfLoadingWindow()
+  try {
+    const res = await api.get(path, { params, responseType: 'blob' })
+    const blobUrl = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
+    if (popup) {
+      popup.location.replace(blobUrl)
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000)
+    } else {
+      const link = document.createElement('a')
+      link.href = blobUrl
+      link.download = fallbackFileName
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(blobUrl)
+    }
+  } catch (err) {
+    if (popup && !popup.closed) popup.close()
+    throw err
+  }
 }
 
 api.interceptors.request.use(config => {
@@ -74,6 +160,7 @@ export const authAPI = {
     })
   },
   register: (data) => api.post('/auth/register', data),
+  registerStatus: () => api.get('/auth/register-status'),
   me:       ()     => api.get('/auth/me'),
   logout:   ()     => api.post('/auth/logout'),
 }
@@ -85,6 +172,7 @@ export const studentAPI = {
   create: (data)       => api.post('/students/', data),
   update: (id, data)   => api.put(`/students/${id}`, data),
   delete: (id)         => api.delete(`/students/${id}`),
+  getTc: (id, params)  => openProtectedPdf(`/students/${id}/tc`, params, `TC_${id}.pdf`),
 }
 
 // ── Fees ──────────────────────────────────────────────────────────────────────
@@ -97,7 +185,11 @@ export const feeAPI = {
   createFeeStructure: (data)   => api.post('/fees/structure', data),
   deleteFeeStructure: (id)     => api.delete(`/fees/structure/${id}`),
   assignFees: (classId, academicYearId) =>
-    api.post(`/fees/assign/${classId}?academic_year_id=${academicYearId}`),
+    api.post(`/fees/assign/${classId}`, null, {
+      params: academicYearId != null && academicYearId !== ''
+        ? { academic_year_id: academicYearId }
+        : {},
+    }),
   getLedger:     (studentId) => api.get(`/fees/ledger/${studentId}`),
   recordPayment: (data)      => api.post('/fees/payment', data),
   getPayments:   (studentId) => api.get(`/fees/payments/${studentId}`),
@@ -108,7 +200,7 @@ export const feeAPI = {
 export const marksAPI = {
   getSubjects: (classId, includeInactive = false) =>
     api.get('/marks/subjects', {
-      params: { class_id: classId, include_inactive: includeInactive ? 'true' : 'false' },
+      params: { class_id: classId, include_inactive: Boolean(includeInactive) },
     }),
   createSubject:  (data) => api.post('/marks/subjects', {
     ...data,
@@ -133,10 +225,12 @@ export const marksAPI = {
   clearExamConfigs: (examId)          => api.delete(`/marks/exams/${examId}/configs`),
 
   getMarksEntry: (examId, classId) =>
-    api.get('/marks/entry', { params: { exam_id: examId, class_id: classId } }),
+    api.get('/marks/entry', { params: { exam_id: parseInt(examId), class_id: parseInt(classId) } }),
   bulkSaveMarks: (entries) => api.post('/marks/bulk', entries),
+  unlockMarks: (academicYearId) =>
+    api.post('/marks/unlock', { academic_year_id: parseInt(academicYearId) }),
   getResults: (examId, classId) =>
-    api.get('/marks/results', { params: { exam_id: examId, class_id: classId } }),
+    api.get('/marks/results', { params: { exam_id: parseInt(examId), class_id: parseInt(classId) } }),
 }
 
 // ── Attendance ────────────────────────────────────────────────────────────────
@@ -211,6 +305,12 @@ export const enrollmentsAPI = {
     }),
 }
 
+// ── Report Cards ─────────────────────────────────────────────────────────────
+export const reportCardsAPI = {
+  list: (params) => api.get('/report-cards', { params }),
+  setLocked: (id, isLocked) => api.patch(`/report-cards/${id}`, { is_locked: isLocked }),
+}
+
 // ── Admin / Users ─────────────────────────────────────────────────────────────
 export const adminAPI = {
   listUsers:     (params) => api.get('/admin/users', { params }),
@@ -240,7 +340,10 @@ export const portalAPI = {
   getAttendanceSummary: (studentId) => api.get('/portal/me/attendance/summary', { params: studentId ? { student_id: studentId } : {} }),
   getFees:              (studentId) => api.get('/portal/me/fees',               { params: studentId ? { student_id: studentId } : {} }),
   getMarksheet: (examId, studentId) =>
-    `/api/v1/portal/me/marksheet/${examId}${studentId ? `?student_id=${studentId}` : ''}`,
+    api.get(`/portal/me/marksheet/${examId}`, {
+      params: studentId ? { student_id: studentId } : {},
+      responseType: 'blob',
+    }),
 
   getChildren:        ()    => api.get('/portal/me/children'),
   getChildProfile:    (sid) => api.get(`/portal/me/children/${sid}/profile`),

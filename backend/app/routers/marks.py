@@ -41,6 +41,10 @@ class SeedRequest(BaseModel):
     class_id: Optional[int] = None
 
 
+class UnlockMarksRequest(BaseModel):
+    academic_year_id: int
+
+
 # ---------------------------------------------------------------------------
 # Subjects
 # ---------------------------------------------------------------------------
@@ -339,6 +343,15 @@ def bulk_save_marks(
         return marks_service.bulk_save_marks(db, entries)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/unlock")
+def unlock_marks(
+    data: UnlockMarksRequest,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
+    return marks_service.unlock_marks_for_year(db, data.academic_year_id)
 
 
 # ---------------------------------------------------------------------------

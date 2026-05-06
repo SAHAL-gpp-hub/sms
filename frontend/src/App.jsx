@@ -1,11 +1,15 @@
 // frontend/src/App.jsx — Updated with S10 Portal routes
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
-import { getRole, getToken } from './services/auth'
+import { getRole, getToken, normalizeAuthUser, setAuthUser } from './services/auth'
+import { authAPI } from './services/api'
 import Layout from './components/Layout'
 import PortalLayout from './layouts/PortalLayout'
 import Login from './pages/Login'
+import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
+import EnrollmentManager from './pages/enrollments/EnrollmentManager'
 import StudentList from './pages/students/StudentList'
 import StudentForm from './pages/students/StudentForm'
 import FeeStructure from './pages/fees/FeeStructure'
@@ -47,11 +51,23 @@ function SmartRoot() {
   return <Navigate to="/" replace />
 }
 
+function AuthHydrator() {
+  useEffect(() => {
+    if (!getToken()) return
+    authAPI.me()
+      .then(r => setAuthUser(normalizeAuthUser(r.data)))
+      .catch(() => {})
+  }, [])
+  return null
+}
+
 export default function App() {
   return (
     <BrowserRouter>
+      <AuthHydrator />
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
         <Route path="/unauthorized" element={<Unauthorized />} />
 
         {/* ── Admin / Teacher panel ── */}
@@ -66,6 +82,7 @@ export default function App() {
           <Route path="students" element={<StudentList />} />
           <Route path="students/new" element={<RoleRoute roles={['admin']}><StudentForm /></RoleRoute>} />
           <Route path="students/:id/edit" element={<RoleRoute roles={['admin']}><StudentForm /></RoleRoute>} />
+          <Route path="enrollments" element={<RoleRoute roles={['admin', 'teacher']}><EnrollmentManager /></RoleRoute>} />
 
           {/* Fees */}
           <Route path="fees" element={<RoleRoute roles={['admin']}><FeeStructure /></RoleRoute>} />

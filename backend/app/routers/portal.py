@@ -15,7 +15,7 @@ from typing import Optional
 from app.core.database import get_db
 from app.models.base_models import Student, Class, AcademicYear, Attendance, Exam
 from app.routers.auth import CurrentUser, require_role
-from app.services import fee_service, attendance_service, marks_service
+from app.services import fee_service, attendance_service, marks_service, report_card_service
 from app.services.calendar_service import count_working_days_for_month
 from app.core.config import settings
 from app.pdf.marksheet_pdf import render_marksheet_pdf
@@ -241,6 +241,13 @@ def get_my_marksheet(
     pdf = render_marksheet_pdf(db, exam_id, student.class_id, sid)
     if not pdf:
         raise HTTPException(404, "No marks found for this exam")
+    report_card_service.upsert_report_card(
+        db,
+        student_id=sid,
+        exam_id=exam_id,
+        pdf_path=f"/api/v1/portal/me/marksheet/{exam_id}?student_id={sid}",
+    )
+    db.commit()
 
     return Response(
         content=pdf,

@@ -19,7 +19,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import toast from 'react-hot-toast'
-import { setupAPI, yearendAPI, extractError } from '../../services/api'
+import { clearYearCache, marksAPI, setupAPI, yearendAPI, extractError } from '../../services/api'
 import {
   PageHeader, TabBar, EmptyState, InlineBanner,
   ConfirmModal, Select,
@@ -137,7 +137,9 @@ const ACTIONS = ['promoted', 'retained', 'graduated', 'transferred', 'dropped', 
 const ACTION_LABELS = {
   promoted: 'Promote', retained: 'Retain', graduated: 'Graduate',
   transferred: 'Transfer', dropped: 'Drop', on_hold: 'Hold',
+  suggested: 'Use Suggestions',
 }
+const ALL_CLASS_ACTIONS = ['suggested', ...ACTIONS]
 const formatClassOptionLabel = (cls) => {
   const name = String(cls?.name || '').trim()
   const division = cls?.division ? ` — Div ${cls.division}` : ''
@@ -231,6 +233,7 @@ function YearLifecycleTab({ years, onRefresh }) {
     setActivating(yearId)
     try {
       await yearendAPI.activateYear(yearId, false)
+      clearYearCache()
       toast.success(`${label} is now Active`)
       onRefresh()
     } catch (err) {
@@ -249,6 +252,7 @@ function YearLifecycleTab({ years, onRefresh }) {
     setActivating(yearId)
     try {
       await yearendAPI.activateYear(yearId, true)
+      clearYearCache()
       toast.success(`${label} force-activated`)
       onRefresh()
     } catch (err) {
@@ -367,6 +371,7 @@ function PromotionTab({ years, onRefresh }) {
   // ── Promotion selectors ─────────────────────────────────────────────────────
   const [selectedClass, setSelectedClass]     = useState('')
   const [selectedNewYear, setSelectedNewYear] = useState('')
+  const [previewData, setPreviewData]         = useState(null)
   const [validation, setValidation]           = useState(null)
   const [candidates, setCandidates]           = useState(null)
   const [studentActions, setStudentActions]   = useState({})
@@ -393,6 +398,7 @@ function PromotionTab({ years, onRefresh }) {
     setPhase('setup')
     setResult(null)
     setCandidates(null)
+    setPreviewData(null)
     setValidation(null)
     setupAPI.getClasses(parseInt(selectedSourceYear))
       .then(r => setSourceClasses(r.data || []))
@@ -426,7 +432,7 @@ function PromotionTab({ years, onRefresh }) {
             name,
             included: true,
             expanded: false,
-            action: 'promoted',
+            action: 'suggested',
             status: 'pending',
             error: '',
             results: [],
@@ -471,11 +477,12 @@ function PromotionTab({ years, onRefresh }) {
     return () => { cancelled = true }
   }, [promotionMode, selectedSourceYear, selectedNewYear, sourceClasses])
 
-  const fetchValidation = useCallback(async () => {
+  const fetchPreview = useCallback(async () => {
     if (!selectedClass || !selectedNewYear) return
     try {
-      const r = await yearendAPI.validatePromotion(selectedClass, selectedNewYear)
-      setValidation(r.data)
+      const r = await yearendAPI.previewPromotion(selectedClass, selectedNewYear)
+      setPreviewData(r.data)
+      setValidation(r.data.validation)
     } catch (err) {
       toast.error(extractError(err))
     }
@@ -496,7 +503,7 @@ function PromotionTab({ years, onRefresh }) {
   }, [selectedClass])
 
   const handleReview = async () => {
-    await fetchValidation()
+    await fetchPreview()
     await fetchCandidates()
     setPhase('review')
     setResult(null)
@@ -574,7 +581,11 @@ function PromotionTab({ years, onRefresh }) {
       for (const div of row.divisions) {
         try {
           const studentActionsForClass = {}
-          div.candidates.forEach(c => { studentActionsForClass[c.student_id] = row.action })
+          div.candidates.forEach(c => {
+            studentActionsForClass[c.student_id] = row.action === 'suggested'
+              ? c.suggested_action
+              : row.action
+          })
           const r = await yearendAPI.promoteClass(div.classId, {
             new_academic_year_id: parseInt(selectedNewYear),
             student_actions: studentActionsForClass,
@@ -723,6 +734,7 @@ function PromotionTab({ years, onRefresh }) {
                   setPhase('setup')
                   setResult(null)
                   setCandidates(null)
+                  setPreviewData(null)
                   setValidation(null)
                 }}
               >
@@ -754,6 +766,8 @@ function PromotionTab({ years, onRefresh }) {
                 setSelectedNewYear(e.target.value)
                 setPhase('setup')
                 setResult(null)
+                setPreviewData(null)
+                setValidation(null)
               }}
             >
               <option value="">Select target year…</option>
@@ -888,7 +902,7 @@ function PromotionTab({ years, onRefresh }) {
                                 onChange={e => updateAllClassRow(row.key, current => ({ ...current, action: e.target.value }))}
                                 style={{ maxWidth: 140, padding: '5px 8px', fontSize: 12, margin: '0 auto' }}
                               >
-                                {ACTIONS.map(a => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}
+                                {ALL_CLASS_ACTIONS.map(a => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}
                               </select>
                             </td>
                             <td style={{ textAlign: 'center' }}>
@@ -1022,6 +1036,21 @@ function PromotionTab({ years, onRefresh }) {
             </div>
           }
         >
+          {previewData && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+              {[
+                ['Total', previewData.total_candidates || 0],
+                ['Promote', previewData.candidate_summary?.promoted || 0],
+                ['Retain', previewData.candidate_summary?.retained || 0],
+                ['Graduate', previewData.candidate_summary?.graduated || 0],
+                ['Hold', previewData.candidate_summary?.on_hold || 0],
+              ].map(([label, value]) => (
+                <span key={label} className="ye-action-btn ye-action-promoted" style={{ cursor: 'default' }}>
+                  {label}: {value}
+                </span>
+              ))}
+            </div>
+          )}
           <div className="ye-table-wrap">
             <table className="data-table" style={{ minWidth: 700 }}>
               <thead>
@@ -1169,6 +1198,8 @@ function PromotionTab({ years, onRefresh }) {
 function OperationsTab({ years }) {
   const [lockYear, setLockYear]       = useState('')
   const [locking, setLocking]         = useState(false)
+  const [unlockYear, setUnlockYear]   = useState('')
+  const [unlocking, setUnlocking]     = useState(false)
   const [cloneFrom, setCloneFrom]     = useState('')
   const [cloneTo, setCloneTo]         = useState('')
   const [cloningFees, setCloningFees] = useState(false)
@@ -1190,6 +1221,20 @@ function OperationsTab({ years }) {
       toast.error(extractError(err))
     } finally {
       setLocking(false)
+      setConfirmOp(null)
+    }
+  }
+
+  const handleUnlockMarks = async () => {
+    if (!unlockYear) { toast.error('Select a year'); return }
+    setUnlocking(true)
+    try {
+      const r = await marksAPI.unlockMarks(unlockYear)
+      toast.success(`${r.data.unlocked} mark records unlocked`)
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setUnlocking(false)
       setConfirmOp(null)
     }
   }
@@ -1226,7 +1271,8 @@ function OperationsTab({ years }) {
     <div className="ye-grid-2">
       <YeCard icon="🔒" title="Lock Exam Marks" sub="Prevents editing after year closes. Idempotent — safe to run twice.">
         <InlineBanner type="warning" message="Run this before promotion. Marks cannot be edited after locking without admin override." />
-        <div style={{ marginTop: 14 }}>
+        <div style={{ marginTop: 14, display: 'grid', gap: 14 }}>
+          <div>
           <label className="label">Academic Year</label>
           <select className="input" style={{ marginBottom: 12 }} value={lockYear} onChange={e => setLockYear(e.target.value)}>
             <option value="">Select year…</option>
@@ -1235,6 +1281,17 @@ function OperationsTab({ years }) {
           <button className="btn btn-danger" style={{ width: '100%' }} onClick={() => setConfirmOp('lock')} disabled={locking || !lockYear}>
             {locking ? <><Spinner /> Locking…</> : '🔒 Lock All Marks'}
           </button>
+          </div>
+          <div style={{ paddingTop: 14, borderTop: '1px solid var(--border-subtle)' }}>
+            <label className="label">Admin Unlock Override</label>
+            <select className="input" style={{ marginBottom: 12 }} value={unlockYear} onChange={e => setUnlockYear(e.target.value)}>
+              <option value="">Select year…</option>
+              {yearOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <button className="btn btn-secondary" style={{ width: '100%' }} onClick={() => setConfirmOp('unlock')} disabled={unlocking || !unlockYear}>
+              {unlocking ? <><Spinner /> Unlocking…</> : 'Unlock Marks'}
+            </button>
+          </div>
         </div>
       </YeCard>
 
@@ -1277,16 +1334,18 @@ function OperationsTab({ years }) {
       </YeCard>
       <ConfirmModal
         open={!!confirmOp}
-        title={confirmOp === 'lock' ? 'Lock Marks' : confirmOp === 'fees' ? 'Clone Fee Structure' : 'Clone Subjects'}
+        title={confirmOp === 'lock' ? 'Lock Marks' : confirmOp === 'unlock' ? 'Unlock Marks' : confirmOp === 'fees' ? 'Clone Fee Structure' : 'Clone Subjects'}
         message={
           confirmOp === 'lock'
             ? 'This locks all currently entered marks for the selected year and prevents normal mark edits afterward.'
+            : confirmOp === 'unlock'
+            ? 'This admin override unlocks all marks for the selected year so they can be edited again.'
             : 'This copies setup data into the target year and skips records that already exist.'
         }
-        confirmLabel={confirmOp === 'lock' ? 'Lock Marks' : 'Continue'}
-        confirmVariant={confirmOp === 'lock' ? 'danger' : 'primary'}
-        loading={locking || cloningFees || cloningSubs}
-        onConfirm={confirmOp === 'lock' ? handleLockMarks : confirmOp === 'fees' ? handleCloneFees : handleCloneSubjects}
+        confirmLabel={confirmOp === 'lock' ? 'Lock Marks' : confirmOp === 'unlock' ? 'Unlock Marks' : 'Continue'}
+        confirmVariant={confirmOp === 'lock' ? 'danger' : confirmOp === 'unlock' ? 'secondary' : 'primary'}
+        loading={locking || unlocking || cloningFees || cloningSubs}
+        onConfirm={confirmOp === 'lock' ? handleLockMarks : confirmOp === 'unlock' ? handleUnlockMarks : confirmOp === 'fees' ? handleCloneFees : handleCloneSubjects}
         onCancel={() => setConfirmOp(null)}
       />
     </div>
@@ -1487,6 +1546,15 @@ function AuditLogTab({ years }) {
 
   const OPS = ['bulk_promote', 'lock_marks', 'clone_fees', 'clone_subjects', 'undo_promotion', 'activate_year']
   const yearOptions = years.map(y => ({ value: String(y.id), label: y.label }))
+  const formatPayload = (payload) => {
+    if (!payload) return ''
+    if (typeof payload === 'string') return payload
+    try {
+      return JSON.stringify(payload, null, 2)
+    } catch {
+      return String(payload)
+    }
+  }
 
   return (
     <div>
@@ -1528,6 +1596,25 @@ function AuditLogTab({ years }) {
                     {log.error_detail && <span style={{ color: 'var(--danger-600)', marginLeft: 8 }}>{log.error_detail}</span>}
                   </div>
                   <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>{log.created_at?.split('T')[0]} {log.created_at?.split('T')[1]?.slice(0, 8)}</div>
+                  {log.payload && (
+                    <details style={{ marginTop: 6 }}>
+                      <summary style={{ cursor: 'pointer', fontSize: 11.5, fontWeight: 800, color: 'var(--brand-600)' }}>
+                        Payload
+                      </summary>
+                      <pre style={{
+                        marginTop: 6,
+                        padding: 10,
+                        maxHeight: 220,
+                        overflow: 'auto',
+                        borderRadius: 8,
+                        background: 'var(--gray-50)',
+                        border: '1px solid var(--border-subtle)',
+                        fontSize: 11,
+                        color: 'var(--text-secondary)',
+                        whiteSpace: 'pre-wrap',
+                      }}>{formatPayload(log.payload)}</pre>
+                    </details>
+                  )}
                 </div>
                 <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 20, whiteSpace: 'nowrap',
                   background: log.result === 'success' ? '#dcfce7' : log.result === 'failed' ? '#fee2e2' : '#fef3c7',
