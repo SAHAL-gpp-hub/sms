@@ -322,6 +322,16 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
             ),
         )
 
+    # Enforce truly first-run: reject if any user account already exists.
+    if db.query(User.id).first() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "An admin account already exists. "
+                "Use the admin panel to manage users."
+            ),
+        )
+
     existing = db.query(User).filter_by(email=data.email).first()
     if existing:
         raise HTTPException(
@@ -333,7 +343,7 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
         name=data.name,
         email=data.email,
         password_hash=get_password_hash(data.password),
-        role=data.role,
+        role="admin",  # always admin — this endpoint is for first-run setup only
         is_active=True,
     )
     db.add(user)

@@ -68,10 +68,16 @@ export default function Login() {
   const [error, setError]               = useState(null)
   const [mounted, setMounted]           = useState(false)
   const [focusedField, setFocusedField] = useState(null)
+  const [showSetupLink, setShowSetupLink] = useState(false)
 
   useEffect(() => {
     // Staggered mount animation
     const t = setTimeout(() => setMounted(true), 50)
+    // Show first-run setup link only when backend registration is enabled AND
+    // no users exist yet — i.e. genuine first-run, not a live production system.
+    authAPI.registerStatus()
+      .then(r => setShowSetupLink(r.data.enabled === true && r.data.has_users === false))
+      .catch(() => setShowSetupLink(false))
     return () => clearTimeout(t)
   }, [])
 
@@ -728,11 +734,13 @@ export default function Login() {
               </button>
             </form>
 
-            <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '13px' }}>
-              <Link to="/register" style={{ color: '#c84b11', fontWeight: 700, textDecoration: 'none' }}>
-                First-time setup
-              </Link>
-            </div>
+            {showSetupLink && (
+              <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '13px' }}>
+                <Link to="/register" style={{ color: '#c84b11', fontWeight: 700, textDecoration: 'none' }}>
+                  First-time setup
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -479,15 +479,15 @@ class TestRegistrationGuard:
         })
         assert res.status_code == 403
 
-    def test_register_duplicate_email_rejected(self, client, monkeypatch):
-        """Even with registration enabled, duplicate emails return 409."""
+    def test_register_rejected_when_users_exist(self, client, monkeypatch):
+        """Even with registration enabled, 403 if any users already exist (not first-run)."""
         from app.core import config as cfg_module
         monkeypatch.setattr(cfg_module.settings, "REGISTRATION_ENABLED", True)
         res = client.post("/api/v1/auth/register", json={
             "name": "Dup Admin", "email": "admin@test.com",
             "password": "admin1234", "role": "admin",
         })
-        assert res.status_code == 409
+        assert res.status_code == 403
 
 
 # ══════════════════════════════════════════════════════════════════════════════
