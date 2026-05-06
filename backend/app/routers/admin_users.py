@@ -5,9 +5,10 @@ from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_password_hash
-from app.models.base_models import AcademicYear, Class, Student, Subject, TeacherClassAssignment, User
+from app.models.base_models import AcademicYear, Class, Student, StudentStatusEnum, Subject, TeacherClassAssignment, User
 from app.routers.auth import CurrentUser, require_role
 
 
@@ -324,3 +325,319 @@ def list_portal_accounts(
         .order_by(User.name)
         .all()
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Portal account auto-generation helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+class UnlinkedStudentItem(BaseModel):
+    id: int
+    student_id: str
+    name_en: str
+    class_id: Optional[int]
+    has_student_account: bool
+    has_parent_account: bool
+
+    model_config = {"from_attributes": True}
+
+
+class LinkStatusResponse(BaseModel):
+    total_active_students: int
+    students_with_portal_account: int
+    students_without_portal_account: int
+    students_with_parent_account: int
+    students_without_parent_account: int
+    unlinked_students: list[UnlinkedStudentItem]
+
+
+class BulkGenerateRequest(BaseModel):
+    academic_year_id: Optional[int] = None
+    include_students: bool = True
+    include_parents: bool = True
+
+
+class BulkGenerateResult(BaseModel):
+    student_accounts_created: int
+    parent_accounts_created: int
+    already_linked_students: int
+    already_linked_parents: int
+    errors: list[str]
+    default_password_note: str
+
+
+class SingleGenerateResult(BaseModel):
+    student_account_created: bool
+    parent_account_created: bool
+    student_email: Optional[str]
+    parent_email: Optional[str]
+    default_password_note: str
+    message: str
+
+
+def _make_portal_email(prefix: str, student_id: str, domain: str) -> str:
+    """
+    Build a synthetic portal email that is unique per student.
+    Example: student.sms.2026.001@portal.sms.local
+    """
+    normalized = student_id.lower().replace("-", ".")
+    return f"{prefix}.{normalized}@{domain}"
+
+
+def _unique_email(db: Session, base_email: str) -> str:
+    """
+    Return base_email if it is available, otherwise append an incrementing
+    suffix until a free slot is found.  Stops at 99 to avoid infinite loops.
+    """
+    if not db.query(User).filter_by(email=base_email).first():
+        return base_email
+    local, domain = base_email.rsplit("@", 1)
+    for i in range(2, 100):
+        candidate = f"{local}.{i}@{domain}"
+        if not db.query(User).filter_by(email=candidate).first():
+            return candidate
+    raise HTTPException(
+        status_code=409,
+        detail=f"Could not find a unique email starting from {base_email}",
+    )
+
+
+def _default_password(student: Student) -> str:
+    """Return student DOB as DDMMYYYY — communicated to users by the school."""
+    return student.dob.strftime("%d%m%Y")
+
+
+def _create_and_link_student_account(db: Session, student: Student) -> Optional[str]:
+    """
+    Create a User account with role='student' and link it to the student.
+    Returns the created email, or None if the student is already linked.
+    """
+    if student.student_user_id is not None:
+        return None
+    domain = settings.PORTAL_EMAIL_DOMAIN
+    email = _unique_email(db, _make_portal_email("student", student.student_id, domain))
+    user = User(
+        name=student.name_en,
+        email=email,
+        password_hash=get_password_hash(_default_password(student)),
+        role="student",
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()  # get user.id without committing
+    student.student_user_id = user.id
+    return email
+
+
+def _create_and_link_parent_account(db: Session, student: Student) -> Optional[str]:
+    """
+    Create a User account with role='parent' and link it to the student.
+    Returns the created email, or None if already linked.
+
+    Parent name defaults to father_name; falls back to student name with
+    "Parent of" prefix so the admin can identify it in the user list.
+    """
+    if student.parent_user_id is not None:
+        return None
+    domain = settings.PORTAL_EMAIL_DOMAIN
+    email = _unique_email(db, _make_portal_email("parent", student.student_id, domain))
+    parent_name = student.father_name or f"Parent of {student.name_en}"
+    user = User(
+        name=parent_name,
+        email=email,
+        password_hash=get_password_hash(_default_password(student)),
+        role="parent",
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+    student.parent_user_id = user.id
+    return email
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# New endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get(
+    "/portal/link-status",
+    response_model=LinkStatusResponse,
+    summary="Get portal account linking statistics",
+)
+def get_link_status(
+    academic_year_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
+    """
+    Returns counts of active students with/without portal accounts, plus a
+    list of unlinked students so the admin can act on them.
+    """
+    query = db.query(Student).filter(Student.status == StudentStatusEnum.Active)
+    if academic_year_id:
+        query = query.filter(Student.academic_year_id == academic_year_id)
+    students = query.order_by(Student.name_en).all()
+
+    total = len(students)
+    with_student = sum(1 for s in students if s.student_user_id is not None)
+    with_parent  = sum(1 for s in students if s.parent_user_id  is not None)
+
+    unlinked = [
+        UnlinkedStudentItem(
+            id=s.id,
+            student_id=s.student_id,
+            name_en=s.name_en,
+            class_id=s.class_id,
+            has_student_account=s.student_user_id is not None,
+            has_parent_account=s.parent_user_id  is not None,
+        )
+        for s in students
+        if s.student_user_id is None or s.parent_user_id is None
+    ]
+
+    return LinkStatusResponse(
+        total_active_students=total,
+        students_with_portal_account=with_student,
+        students_without_portal_account=total - with_student,
+        students_with_parent_account=with_parent,
+        students_without_parent_account=total - with_parent,
+        unlinked_students=unlinked,
+    )
+
+
+@router.post(
+    "/portal/bulk-generate",
+    response_model=BulkGenerateResult,
+    summary="Bulk-generate missing portal accounts for all active students",
+)
+def bulk_generate_portal_accounts(
+    data: BulkGenerateRequest,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
+    """
+    Finds every active student that is missing a student and/or parent portal
+    account, creates those User accounts, and auto-links them.
+
+    - Email format: ``student.sms.2026.001@<PORTAL_EMAIL_DOMAIN>``
+    - Default password: student's DOB in DDMMYYYY format
+    - Idempotent: already-linked students are skipped, not duplicated
+    - Optionally filter by academic_year_id
+    """
+    query = db.query(Student).filter(Student.status == StudentStatusEnum.Active)
+    if data.academic_year_id:
+        query = query.filter(Student.academic_year_id == data.academic_year_id)
+    students = query.order_by(Student.id).all()
+
+    result = BulkGenerateResult(
+        student_accounts_created=0,
+        parent_accounts_created=0,
+        already_linked_students=0,
+        already_linked_parents=0,
+        errors=[],
+        default_password_note=(
+            "Default password is the student's date of birth in DDMMYYYY format "
+            "(e.g. 15082010 for 15 Aug 2010). Admins should communicate this to users."
+        ),
+    )
+
+    for student in students:
+        try:
+            if data.include_students:
+                email = _create_and_link_student_account(db, student)
+                if email:
+                    result.student_accounts_created += 1
+                else:
+                    result.already_linked_students += 1
+
+            if data.include_parents:
+                email = _create_and_link_parent_account(db, student)
+                if email:
+                    result.parent_accounts_created += 1
+                else:
+                    result.already_linked_parents += 1
+
+            db.commit()
+
+        except HTTPException as exc:
+            db.rollback()
+            result.errors.append(
+                f"Student {student.student_id} ({student.name_en}): {exc.detail}"
+            )
+        except IntegrityError as exc:
+            db.rollback()
+            result.errors.append(
+                f"Student {student.student_id} ({student.name_en}): DB error — {exc.orig}"
+            )
+
+    return result
+
+
+@router.post(
+    "/portal/generate/{student_id}",
+    response_model=SingleGenerateResult,
+    summary="Generate missing portal accounts for one student",
+)
+def generate_portal_accounts_for_student(
+    student_id: int,
+    include_students: bool = Query(True),
+    include_parents: bool = Query(True),
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
+    """
+    Creates missing student and/or parent portal accounts for a single
+    student record and auto-links them.  Same email and password rules as
+    bulk-generate.
+    """
+    student = db.query(Student).filter_by(id=student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    student_email: Optional[str] = None
+    parent_email:  Optional[str] = None
+    student_created = False
+    parent_created  = False
+
+    try:
+        if include_students:
+            student_email = _create_and_link_student_account(db, student)
+            student_created = student_email is not None
+
+        if include_parents:
+            parent_email = _create_and_link_parent_account(db, student)
+            parent_created = parent_email is not None
+
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc.orig)) from exc
+
+    parts = []
+    if student_created:
+        parts.append(f"student account created ({student_email})")
+    if parent_created:
+        parts.append(f"parent account created ({parent_email})")
+    if not student_created and not parent_created:
+        parts.append("all requested accounts already exist")
+
+    return SingleGenerateResult(
+        student_account_created=student_created,
+        parent_account_created=parent_created,
+        student_email=student_email or (
+            db.query(User).filter_by(id=student.student_user_id).first().email
+            if student.student_user_id
+            else None
+        ),
+        parent_email=parent_email or (
+            db.query(User).filter_by(id=student.parent_user_id).first().email
+            if student.parent_user_id
+            else None
+        ),
+        default_password_note=(
+            "Default password is the student's date of birth in DDMMYYYY format "
+            "(e.g. 15082010 for 15 Aug 2010)."
+        ),
+        message="; ".join(parts).capitalize() + ".",
+    )
+

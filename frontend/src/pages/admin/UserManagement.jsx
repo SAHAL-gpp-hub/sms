@@ -503,16 +503,45 @@ function PortalLinkingTab() {
   const [linking, setLinking]         = useState(false)
   const [search, setSearch]           = useState('')
 
-  useEffect(() => {
-    Promise.all([
-      adminAPI.listPortalAccounts(),
-      studentAPI.list({ limit: 200 }),
-    ]).then(([portalRes, studRes]) => {
+  // Auto-generation state
+  const [linkStatus, setLinkStatus]     = useState(null)
+  const [statusLoading, setStatusLoading] = useState(false)
+  const [bulkGenerating, setBulkGenerating] = useState(false)
+  const [bulkResult, setBulkResult]     = useState(null)
+  const [generatingFor, setGeneratingFor] = useState(null) // student id being generated
+
+  const fetchAll = async () => {
+    setLoading(true)
+    try {
+      const [portalRes, studRes] = await Promise.all([
+        adminAPI.listPortalAccounts(),
+        studentAPI.list({ limit: 200 }),
+      ])
       setPortalUsers(portalRes.data || [])
       setStudents(studRes.data || [])
-    }).catch(() => toast.error('Failed to load data'))
-      .finally(() => setLoading(false))
-  }, [])
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchLinkStatus = async () => {
+    setStatusLoading(true)
+    try {
+      const res = await adminAPI.getLinkStatus()
+      setLinkStatus(res.data)
+    } catch (err) {
+      toast.error('Failed to load link status')
+    } finally {
+      setStatusLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchAll()
+    fetchLinkStatus()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLink = async () => {
     if (!form.user_id)    { toast.error('Select a portal account'); return }
@@ -526,10 +555,49 @@ function PortalLinkingTab() {
       })
       toast.success('Portal account linked to student')
       setForm(f => ({ ...f, user_id: '', student_id: '' }))
+      fetchLinkStatus()
     } catch (err) {
       toast.error(extractError(err))
     } finally {
       setLinking(false)
+    }
+  }
+
+  const handleBulkGenerate = async () => {
+    setBulkGenerating(true)
+    setBulkResult(null)
+    try {
+      const res = await adminAPI.bulkGenerate({
+        include_students: true,
+        include_parents: true,
+      })
+      setBulkResult(res.data)
+      toast.success(
+        `Done — ${res.data.student_accounts_created} student + ${res.data.parent_accounts_created} parent accounts created`
+      )
+      fetchAll()
+      fetchLinkStatus()
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setBulkGenerating(false)
+    }
+  }
+
+  const handleGenerateOne = async (studentId) => {
+    setGeneratingFor(studentId)
+    try {
+      const res = await adminAPI.generateForStudent(studentId, {
+        include_students: true,
+        include_parents: true,
+      })
+      toast.success(res.data.message)
+      fetchAll()
+      fetchLinkStatus()
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setGeneratingFor(null)
     }
   }
 
@@ -550,17 +618,188 @@ function PortalLinkingTab() {
     )
   }
 
+  const unlinkedCount = linkStatus
+    ? linkStatus.students_without_portal_account + linkStatus.students_without_parent_account
+    : 0
+
   return (
     <div>
+      {/* ── Link Status Summary ──────────────────────────────────────────── */}
+      <div className="card" style={{ marginBottom: '16px' }}>
+        <div className="card-header">
+          <div className="card-title">Account Linking Status</div>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={fetchLinkStatus}
+            disabled={statusLoading}
+            style={{ fontSize: '12px' }}
+          >
+            {statusLoading ? <><span className="spinner" style={{ width: '11px', height: '11px' }} /> Refreshing…</> : '↻ Refresh'}
+          </button>
+        </div>
+        {statusLoading && !linkStatus ? (
+          <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '13px' }}>
+            Loading status…
+          </div>
+        ) : linkStatus ? (
+          <div style={{ padding: '16px 18px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginBottom: '16px' }}>
+              {[
+                { label: 'Total Students', value: linkStatus.total_active_students, color: 'var(--brand-600)' },
+                { label: 'Student Accounts', value: `${linkStatus.students_with_portal_account} / ${linkStatus.total_active_students}`,
+                  color: linkStatus.students_without_portal_account === 0 ? 'var(--success-600)' : 'var(--warning-600)' },
+                { label: 'Parent Accounts', value: `${linkStatus.students_with_parent_account} / ${linkStatus.total_active_students}`,
+                  color: linkStatus.students_without_parent_account === 0 ? 'var(--success-600)' : 'var(--warning-600)' },
+              ].map(stat => (
+                <div key={stat.label} style={{
+                  padding: '12px 14px', borderRadius: '10px',
+                  background: 'var(--gray-50)', border: '1px solid var(--border-subtle)',
+                  textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: '22px', fontWeight: 800, color: stat.color, lineHeight: 1 }}>{stat.value}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px', fontWeight: 600 }}>{stat.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Bulk generate */}
+            {unlinkedCount > 0 && (
+              <div style={{ marginBottom: '14px' }}>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleBulkGenerate}
+                  disabled={bulkGenerating}
+                  style={{ width: '100%' }}
+                >
+                  {bulkGenerating
+                    ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Generating accounts…</>
+                    : `⚡ Auto-Generate All Missing Portal Accounts (${linkStatus.unlinked_students.length} students affected)`
+                  }
+                </button>
+                <div style={{ fontSize: '11.5px', color: 'var(--text-tertiary)', marginTop: '6px', lineHeight: 1.5 }}>
+                  Creates student + parent portal accounts for all unlinked students.
+                  Default password = student's DOB in DDMMYYYY format.
+                </div>
+              </div>
+            )}
+
+            {unlinkedCount === 0 && (
+              <div style={{
+                padding: '10px 14px', borderRadius: '8px',
+                background: 'var(--success-50)', border: '1px solid var(--success-200)',
+                fontSize: '13px', color: 'var(--success-700)', fontWeight: 600,
+              }}>
+                ✅ All active students have both student and parent portal accounts linked.
+              </div>
+            )}
+
+            {/* Bulk generate result */}
+            {bulkResult && (
+              <div style={{
+                marginTop: '12px', padding: '12px 14px', borderRadius: '8px',
+                background: 'var(--brand-50)', border: '1px solid var(--brand-200)',
+                fontSize: '13px', lineHeight: 1.6,
+              }}>
+                <div style={{ fontWeight: 700, color: 'var(--brand-700)', marginBottom: '4px' }}>
+                  Generation complete
+                </div>
+                <div style={{ color: 'var(--text-secondary)' }}>
+                  Student accounts created: <strong>{bulkResult.student_accounts_created}</strong>
+                  {' · '}Parent accounts created: <strong>{bulkResult.parent_accounts_created}</strong>
+                  {' · '}Already linked: <strong>{bulkResult.already_linked_students + bulkResult.already_linked_parents}</strong>
+                </div>
+                {bulkResult.errors.length > 0 && (
+                  <div style={{ marginTop: '6px', color: 'var(--danger-600)', fontSize: '12px' }}>
+                    {bulkResult.errors.length} error{bulkResult.errors.length !== 1 ? 's' : ''}:
+                    {bulkResult.errors.map((e, i) => <div key={i} style={{ marginLeft: '8px' }}>• {e}</div>)}
+                  </div>
+                )}
+                <div style={{ marginTop: '6px', fontSize: '11.5px', color: 'var(--text-tertiary)' }}>
+                  {bulkResult.default_password_note}
+                </div>
+              </div>
+            )}
+
+            {/* Per-student unlinked list */}
+            {linkStatus.unlinked_students.length > 0 && (
+              <div style={{ marginTop: '16px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', marginBottom: '8px' }}>
+                  Unlinked Students ({linkStatus.unlinked_students.length})
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="data-table" style={{ minWidth: '480px' }}>
+                    <thead>
+                      <tr>
+                        <th>Student</th>
+                        <th>Student Account</th>
+                        <th>Parent Account</th>
+                        <th style={{ textAlign: 'right' }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {linkStatus.unlinked_students.map(s => (
+                        <tr key={s.id}>
+                          <td>
+                            <div style={{ fontWeight: 600, fontSize: '13px' }}>{s.name_en}</div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{s.student_id}</div>
+                          </td>
+                          <td>
+                            <span style={{
+                              fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
+                              background: s.has_student_account ? 'var(--success-100)' : 'var(--warning-50)',
+                              color: s.has_student_account ? 'var(--success-700)' : 'var(--warning-700)',
+                              border: `1px solid ${s.has_student_account ? 'var(--success-200)' : '#fde68a'}`,
+                            }}>
+                              {s.has_student_account ? '✓ Linked' : '✗ Missing'}
+                            </span>
+                          </td>
+                          <td>
+                            <span style={{
+                              fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
+                              background: s.has_parent_account ? 'var(--success-100)' : 'var(--warning-50)',
+                              color: s.has_parent_account ? 'var(--success-700)' : 'var(--warning-700)',
+                              border: `1px solid ${s.has_parent_account ? 'var(--success-200)' : '#fde68a'}`,
+                            }}>
+                              {s.has_parent_account ? '✓ Linked' : '✗ Missing'}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button
+                              onClick={() => handleGenerateOne(s.id)}
+                              disabled={generatingFor === s.id}
+                              style={{
+                                padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600,
+                                color: 'var(--brand-600)', background: 'var(--brand-50)',
+                                border: '1px solid var(--brand-100)', cursor: 'pointer',
+                                fontFamily: 'var(--font-sans)',
+                              }}
+                            >
+                              {generatingFor === s.id
+                                ? <span className="spinner" style={{ width: '11px', height: '11px' }} />
+                                : 'Generate'
+                              }
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
+      </div>
+
       {/* Explainer */}
       <div style={{ padding: '14px 16px', background: 'var(--brand-50)', border: '1px solid var(--brand-200)', borderRadius: '10px', marginBottom: '16px', fontSize: '13.5px', color: 'var(--brand-700)', lineHeight: 1.6 }}>
-        <strong>How portal linking works:</strong> A student or parent user account must be linked to an actual student record before they can log in and see data. Create the user account first (Users tab), then link it here.
+        <strong>How portal linking works:</strong> A student or parent user account must be linked to an actual student record before they can log in and see data. Use "Auto-Generate" above for new deployments, or link individual accounts manually below.
       </div>
 
       {/* Link form */}
       <div style={{ background: 'var(--brand-50)', border: '1px solid var(--brand-200)', borderRadius: '12px', padding: '16px 20px', marginBottom: '16px' }}>
         <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--brand-700)', marginBottom: '12px' }}>
-          Link Portal Account to Student
+          Link Portal Account to Student (Manual)
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginBottom: '12px' }}>
           {/* Role toggle */}
@@ -614,9 +853,9 @@ function PortalLinkingTab() {
         </div>
         {filteredPortal.length === 0 ? (
           <EmptyState
-            icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>}
+            icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>}
             title="No portal accounts yet"
-            description="Create student or parent accounts in the Users tab first"
+            description="Use Auto-Generate above, or create student/parent accounts in the Users tab"
           />
         ) : (
           <div style={{ overflowX: 'auto' }}>
