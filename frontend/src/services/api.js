@@ -347,6 +347,9 @@ export const adminAPI = {
     api.post(`/admin/portal/generate/${studentId}`, null, { params }),
   resendActivation: (studentId, accountType) =>
     api.post(`/admin/portal/resend-activation/${studentId}`, { account_type: accountType }),
+
+  getOtpFailures: (params = {}) =>
+    api.get('/admin/notifications/otp-failures', { params }),
 }
 
 // ── Portal ────────────────────────────────────────────────────────────────────

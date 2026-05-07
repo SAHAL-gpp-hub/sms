@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
 from jose import JWTError
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -84,18 +84,23 @@ def _audit(
 
 def _find_student(db: Session, identifier: str, email: str, account_type: str) -> Student | None:
     normalized_identifier = identifier.strip()
+    identifier_candidates = {
+        normalized_identifier,
+        normalized_identifier.upper(),
+        normalized_identifier.lower(),
+    }
     normalized_email = normalize_email(email)
     query = db.query(Student).filter(
         Student.status == StudentStatusEnum.Active,
         or_(
-            Student.student_id == normalized_identifier,
-            Student.gr_number == normalized_identifier,
+            Student.student_id.in_(identifier_candidates),
+            Student.gr_number.in_(identifier_candidates),
         ),
     )
     if account_type == "student":
-        query = query.filter(Student.student_email == normalized_email)
+        query = query.filter(func.lower(Student.student_email) == normalized_email)
     else:
-        query = query.filter(Student.guardian_email == normalized_email)
+        query = query.filter(func.lower(Student.guardian_email) == normalized_email)
     return query.first()
 
 

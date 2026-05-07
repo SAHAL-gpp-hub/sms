@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_password_hash
-from app.models.base_models import AcademicYear, Class, Student, StudentActivationRequest, StudentStatusEnum, Subject, TeacherClassAssignment, User
+from app.models.base_models import AcademicYear, Class, NotificationOutbox, Student, StudentActivationRequest, StudentStatusEnum, Subject, TeacherClassAssignment, User
 from app.routers.auth import CurrentUser, require_role
 from app.services import student_activation_service
 
@@ -620,3 +620,87 @@ def resend_activation_for_student(
         None,
         "admin-resend",
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OTP / Notification outbox debug
+# ─────────────────────────────────────────────────────────────────────────────
+
+class OtpOutboxItem(BaseModel):
+    id: int
+    provider: str
+    destination: str
+    status: str
+    attempts: int
+    max_attempts: int
+    last_error: Optional[str]
+    payload: Optional[dict]
+    created_at: Optional[str]
+    next_attempt_at: Optional[str]
+    sent_at: Optional[str]
+
+    model_config = {"from_attributes": True}
+
+
+class OtpOutboxResponse(BaseModel):
+    total: int
+    items: list[OtpOutboxItem]
+
+
+@router.get(
+    "/notifications/otp-failures",
+    response_model=OtpOutboxResponse,
+    summary="List recent OTP notification failures for SMTP debugging",
+)
+def list_otp_failures(
+    status_filter: Optional[str] = Query(
+        None,
+        alias="status",
+        description="Filter by outbox status: failed, retry, pending, sent. Defaults to failed and retry.",
+    ),
+    limit: int = Query(50, ge=1, le=200, description="Max number of records to return"),
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
+    """
+    Returns recent OTP notification outbox entries for diagnosing delivery
+    failures.  By default returns items with status ``failed`` or ``retry``;
+    pass ``?status=sent`` to verify successful deliveries, or ``?status=pending``
+    to see items still queued.
+    """
+    if status_filter:
+        valid_statuses = {"failed", "retry", "pending", "sent", "sending"}
+        if status_filter not in valid_statuses:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"status must be one of: {', '.join(sorted(valid_statuses))}",
+            )
+        statuses = [status_filter]
+    else:
+        statuses = ["failed", "retry"]
+
+    rows = (
+        db.query(NotificationOutbox)
+        .filter(NotificationOutbox.status.in_(statuses))
+        .order_by(NotificationOutbox.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    items = [
+        OtpOutboxItem(
+            id=row.id,
+            provider=row.provider,
+            destination=row.destination,
+            status=row.status,
+            attempts=row.attempts,
+            max_attempts=row.max_attempts,
+            last_error=row.last_error,
+            payload=row.payload,
+            created_at=row.created_at.isoformat() if row.created_at else None,
+            next_attempt_at=row.next_attempt_at.isoformat() if row.next_attempt_at else None,
+            sent_at=row.sent_at.isoformat() if row.sent_at else None,
+        )
+        for row in rows
+    ]
+    return OtpOutboxResponse(total=len(items), items=items)
+
