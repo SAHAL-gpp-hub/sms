@@ -98,19 +98,9 @@ def _find_student(db: Session, identifier: str, email: str, account_type: str) -
         ),
     )
     if account_type == "student":
-        query = query.filter(
-            or_(
-                Student.student_email == normalized_email,
-                func.lower(Student.student_email) == normalized_email,
-            )
-        )
+        query = query.filter(func.lower(Student.student_email) == normalized_email)
     else:
-        query = query.filter(
-            or_(
-                Student.guardian_email == normalized_email,
-                func.lower(Student.guardian_email) == normalized_email,
-            )
-        )
+        query = query.filter(func.lower(Student.guardian_email) == normalized_email)
     return query.first()
 
 
