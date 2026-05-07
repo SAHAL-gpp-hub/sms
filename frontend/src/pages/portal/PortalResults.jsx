@@ -216,14 +216,14 @@ export default function PortalResults() {
 
       {error && (
         <div style={{ textAlign:'center', padding:'40px 20px', background:'white', borderRadius:'16px' }}>
-          <div style={{ fontSize:'36px', marginBottom:'10px' }}>⚠️</div>
+          <div style={{ marginBottom:'10px', display:'flex', justifyContent:'center' }}><svg width='40' height='40' fill='none' stroke='#b45309' viewBox='0 0 24 24' aria-hidden='true'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth='1.5' d='M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z'/></svg></div>
           <div style={{ fontWeight:700, color:'#0f172a' }}>Couldn't load results</div>
         </div>
       )}
 
       {!loading && !error && results.length === 0 && (
         <div style={{ textAlign:'center', padding:'40px 20px', background:'white', borderRadius:'16px' }}>
-          <div style={{ fontSize:'36px', marginBottom:'10px' }}>📊</div>
+          <div style={{ marginBottom:'10px', display:'flex', justifyContent:'center' }}><svg width='40' height='40' fill='none' stroke='#0d7377' viewBox='0 0 24 24' aria-hidden='true'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth='1.5' d='M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'/></svg></div>
           <div style={{ fontWeight:700, fontSize:'15px', color:'#0f172a' }}>No results yet</div>
           <div style={{ fontSize:'13px', color:'#64748b', marginTop:'4px' }}>Results appear once marks are entered</div>
         </div>

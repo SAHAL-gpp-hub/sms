@@ -24,7 +24,7 @@ function FeeItem({ item }) {
         </div>
         <div style={{ textAlign:'right', flexShrink:0 }}>
           {isPaid ? (
-            <span style={{ fontSize:'12px', fontWeight:800, padding:'3px 10px', borderRadius:'20px', background:'#dcfce7', color:'#15803d' }}>✓ Cleared</span>
+            <span style={{ fontSize:'12px', fontWeight:800, padding:'3px 10px', borderRadius:'20px', background:'#dcfce7', color:'#15803d', display:'inline-flex', alignItems:'center', gap:'3px' }}><svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg> Cleared</span>
           ) : (
             <div>
               <div style={{ fontSize:'15px', fontWeight:900, color:'#dc2626', letterSpacing:'-0.02em' }}>{fmt(balance)}</div>
@@ -77,7 +77,7 @@ export default function PortalFees() {
 
   if (error || !ledger) return (
     <div style={{ textAlign:'center', padding:'40px 20px', background:'white', borderRadius:'16px' }}>
-      <div style={{ fontSize:'36px', marginBottom:'10px' }}>⚠️</div>
+      <div style={{ marginBottom:'10px', display:'flex', justifyContent:'center' }}><svg width="40" height="40" fill="none" stroke="#b45309" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg></div>
       <div style={{ fontWeight:700, color:'#0f172a' }}>Couldn't load fee data</div>
       <div style={{ fontSize:'12.5px', color:'#64748b', marginTop:'4px' }}>
         {isParent && !selectedChildId ? 'Select a student first' : 'Please try again later'}
@@ -111,7 +111,7 @@ export default function PortalFees() {
         <div style={{ position:'absolute', right:-20, top:-20, width:100, height:100, borderRadius:'50%', background:'rgba(255,255,255,0.08)' }} />
         <div style={{ position:'relative', zIndex:1 }}>
           <div style={{ fontSize:'11px', fontWeight:700, opacity:0.8, textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:'6px' }}>
-            {hasBalance ? 'Outstanding Balance' : 'All Fees Cleared ✓'}
+            {hasBalance ? 'Outstanding Balance' : 'All Fees Cleared'}
           </div>
           <div style={{ fontSize:'32px', fontWeight:900, letterSpacing:'-0.04em', lineHeight:1 }}>
             {fmt(totalBalance)}
@@ -152,7 +152,7 @@ export default function PortalFees() {
       {/* Online payment placeholder */}
       {hasBalance && (
         <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'14px', padding:'13px 15px', display:'flex', alignItems:'flex-start', gap:'10px' }}>
-          <span style={{ fontSize:'18px', flexShrink:0 }}>💡</span>
+          <svg width="18" height="18" fill="none" stroke="#b45309" viewBox="0 0 24 24" style={{flexShrink:0}} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
           <div>
             <div style={{ fontSize:'13px', fontWeight:700, color:'#92400e' }}>Online Payment — Coming Soon</div>
             <div style={{ fontSize:'12px', color:'#b45309', marginTop:'3px', lineHeight:1.5 }}>

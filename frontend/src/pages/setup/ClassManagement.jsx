@@ -226,7 +226,7 @@ export default function ClassManagement() {
               onClick={() => setShowBulk(true)}
               title="Create all GSEB standards at once"
             >
-              ⚡ Bulk Create
+              Bulk Create
             </button>
           </div>
         )}
@@ -401,7 +401,7 @@ export default function ClassManagement() {
                 description={`Add classes above or use Bulk Create to set up all GSEB standards for ${selectedYearLabel}`}
                 action={
                   <button className="btn btn-primary btn-sm" onClick={() => setShowBulk(true)}>
-                    ⚡ Bulk Create All Standards
+                    Bulk Create All Standards
                   </button>
                 }
               />
@@ -533,7 +533,7 @@ export default function ClassManagement() {
             </div>
 
             <h3 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>
-              ⚡ Bulk Create Standards
+              Bulk Create Standards
             </h3>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '18px', lineHeight: 1.5 }}>
               Create all selected standards for <strong>{selectedYearLabel}</strong>. Existing ones are skipped.
@@ -626,9 +626,15 @@ export default function ClassManagement() {
                       {name}
                       {alreadyExists && (
                         <span style={{
-                          marginLeft: '4px', fontSize: '9px', fontWeight: 800,
+                          marginLeft: '4px',
                           color: 'var(--success-600)',
-                        }}>✓</span>
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                        }}>
+                          <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </span>
                       )}
                     </button>
                   )
@@ -637,7 +643,7 @@ export default function ClassManagement() {
               <div style={{ marginTop: '8px', fontSize: '11.5px', color: 'var(--text-tertiary)' }}>
                 {bulkSelected.size} standard{bulkSelected.size !== 1 ? 's' : ''} selected ·
                 <span style={{ color: 'var(--success-600)', marginLeft: '4px' }}>
-                  ✓ = already exists, will be skipped
+                  check icon = already exists, will be skipped
                 </span>
               </div>
             </div>

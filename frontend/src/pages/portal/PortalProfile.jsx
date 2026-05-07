@@ -179,7 +179,7 @@ export default function PortalProfile() {
 
       {/* Login info footer */}
       <div style={{ marginTop:'4px', padding:'11px 14px', background:'#f0f7f7', borderRadius:'12px', fontSize:'12px', color:'#64748b', fontWeight:600, display:'flex', alignItems:'center', gap:'8px' }}>
-        <span>🔒</span>
+        <svg width='14' height='14' fill='none' stroke='currentColor' viewBox='0 0 24 24' aria-hidden='true'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z'/></svg>
         <span>
           Logged in as <strong style={{ color:'#0f172a' }}>{authUser?.name}</strong>
           &nbsp;·&nbsp;
