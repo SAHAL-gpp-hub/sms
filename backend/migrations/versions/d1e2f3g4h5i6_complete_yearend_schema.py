@@ -285,6 +285,7 @@ def upgrade() -> None:
                 "bulk_promote", "undo_promote", "new_year", "activate_year", "close_year",
                 "lock_marks", "issue_tc", "clone_subjects", "clone_fees",
                 name="auditoperationenum",
+                create_type=False,
             ), nullable=False),
                                       # bulk_promote / new_year / issue_tc / lock_marks / undo_promote
             sa.Column("performed_by", sa.Integer(), sa.ForeignKey("users.id"), nullable=True),
