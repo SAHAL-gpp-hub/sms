@@ -200,6 +200,7 @@ const YE_ICONS = {
 }
 
 
+const ACTIONS = ['promoted', 'retained', 'graduated', 'transferred', 'dropped', 'on_hold']
 const ACTION_LABELS = {
   promoted: 'Promote', retained: 'Retain', graduated: 'Graduate',
   transferred: 'Transfer', dropped: 'Drop', on_hold: 'Hold',

@@ -626,9 +626,15 @@ export default function ClassManagement() {
                       {name}
                       {alreadyExists && (
                         <span style={{
-                          marginLeft: '4px', fontSize: '9px', fontWeight: 800,
+                          marginLeft: '4px',
                           color: 'var(--success-600)',
-                        }}>✓</span>
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                        }}>
+                          <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </span>
                       )}
                     </button>
                   )
