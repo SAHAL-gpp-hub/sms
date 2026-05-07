@@ -84,18 +84,33 @@ def _audit(
 
 def _find_student(db: Session, identifier: str, email: str, account_type: str) -> Student | None:
     normalized_identifier = identifier.strip()
+    identifier_candidates = {
+        normalized_identifier,
+        normalized_identifier.upper(),
+        normalized_identifier.lower(),
+    }
     normalized_email = normalize_email(email)
     query = db.query(Student).filter(
         Student.status == StudentStatusEnum.Active,
         or_(
-            func.lower(Student.student_id) == normalized_identifier.lower(),
-            func.lower(Student.gr_number) == normalized_identifier.lower(),
+            Student.student_id.in_(identifier_candidates),
+            Student.gr_number.in_(identifier_candidates),
         ),
     )
     if account_type == "student":
-        query = query.filter(func.lower(func.trim(Student.student_email)) == normalized_email)
+        query = query.filter(
+            or_(
+                Student.student_email == normalized_email,
+                func.lower(Student.student_email) == normalized_email,
+            )
+        )
     else:
-        query = query.filter(func.lower(func.trim(Student.guardian_email)) == normalized_email)
+        query = query.filter(
+            or_(
+                Student.guardian_email == normalized_email,
+                func.lower(Student.guardian_email) == normalized_email,
+            )
+        )
     return query.first()
 
 
