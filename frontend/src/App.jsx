@@ -20,6 +20,7 @@ import MarksEntry from './pages/marks/MarksEntry'
 import Attendance from './pages/attendance/Attendance'
 import Reports from './pages/reports/Reports'
 import YearEnd from './pages/yearend/YearEnd'
+import Notifications from './pages/notifications/Notifications'
 import ComingSoon from './pages/ComingSoon'
 import UserManagement from './pages/admin/UserManagement'
 import UserForm from './pages/admin/UserForm'
@@ -113,6 +114,7 @@ export default function App() {
 
           {/* Year-end */}
           <Route path="yearend" element={<RoleRoute roles={['admin']}><YearEnd /></RoleRoute>} />
+          <Route path="notifications" element={<RoleRoute roles={['admin']}><Notifications /></RoleRoute>} />
 
           {/* Admin — User Management */}
           <Route path="admin/users" element={<RoleRoute roles={['admin']}><UserManagement /></RoleRoute>} />

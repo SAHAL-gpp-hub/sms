@@ -45,12 +45,12 @@ def override_get_db():
         db.close()
 
 
-app.dependency_overrides[get_db] = override_get_db
-
-
 @pytest.fixture(scope="module", autouse=True)
 def setup_database():
     """Create all tables once, seed test data, tear down at end."""
+    previous_get_db_override = app.dependency_overrides.get(get_db)
+    app.dependency_overrides[get_db] = override_get_db
+    Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
 
@@ -121,6 +121,10 @@ def setup_database():
     yield  # run tests
 
     Base.metadata.drop_all(bind=engine)
+    if previous_get_db_override is None:
+        app.dependency_overrides.pop(get_db, None)
+    else:
+        app.dependency_overrides[get_db] = previous_get_db_override
 
 
 @pytest.fixture(scope="module")
@@ -625,11 +629,11 @@ class TestPublicEndpoints:
         res = client.get("/")
         assert res.status_code == 200
 
-    def test_tc_pdf_is_public(self, client):
-        """TC PDF downloads must work without a token (browser direct navigation)."""
+    def test_tc_pdf_requires_signed_download_token_without_bearer_auth(self, client):
+        """TC PDF route is public, but the download itself needs a short-lived signed token."""
         res = client.get("/api/v1/yearend/tc-pdf/9999")
-        assert res.status_code in (200, 404)  # 404 = student not found, still no 401
-        assert res.status_code != 401
+        assert res.status_code == 401
+        assert "token" in res.json()["detail"].lower()
 
     def test_current_year_is_public(self, client):
         res = client.get("/api/v1/yearend/current-year")

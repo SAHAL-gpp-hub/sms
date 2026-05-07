@@ -71,6 +71,8 @@ class PaymentOut(BaseModel):
     mode: str
     receipt_number: str
     collected_by: Optional[str]
+    online_order_id: Optional[int] = None
+    notes: Optional[str] = None
     model_config = {"from_attributes": True}
 
 class StudentLedgerItem(BaseModel):

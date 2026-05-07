@@ -69,6 +69,28 @@ class Settings(BaseSettings):
     NOTIFICATION_WORKER_ENABLED: bool = True
     NOTIFICATION_WORKER_INTERVAL_SECONDS: int = 10
 
+    # ── Razorpay online fee payments ─────────────────────────────────────
+    RAZORPAY_KEY_ID: str | None = None
+    RAZORPAY_KEY_SECRET: str | None = None
+    RAZORPAY_WEBHOOK_SECRET: str | None = None
+
+    # ── Parent notifications: WhatsApp primary, SMS fallback ─────────────
+    WHATSAPP_TOKEN: str | None = None
+    WHATSAPP_PHONE_NUMBER_ID: str | None = None
+    WHATSAPP_BUSINESS_ACCOUNT_ID: str | None = None
+    WHATSAPP_API_VERSION: str = "v18.0"
+
+    SMS_PROVIDER: str = "msg91"
+    MSG91_AUTH_KEY: str | None = None
+    MSG91_SENDER_ID: str | None = None
+    MSG91_TEMPLATE_ID: str | None = None
+
+    AUTO_SEND_PAYMENT_CONFIRMATION: bool = True
+    AUTO_SEND_FEE_REMINDERS: bool = True
+    AUTO_SEND_LOW_ATTENDANCE_ALERTS: bool = True
+    LOW_ATTENDANCE_THRESHOLD_PERCENT: float = 75.0
+    PORTAL_PUBLIC_URL: str = "https://iqraschool.in/portal"
+
     class Config:
         env_file = ".env"
         # Allow extra env vars (e.g. POSTGRES_DB set by docker) without failing

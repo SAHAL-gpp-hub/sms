@@ -28,7 +28,9 @@ from app.routers import (
     enrollments,   # NEW
     fees,
     marks,
+    notifications,
     pdf,
+    payments,
     portal,
     report_cards,
     setup,
@@ -101,6 +103,7 @@ app.include_router(auth.router)
 app.include_router(student_auth.router)
 app.include_router(pdf.router)
 app.include_router(yearend.router)   # TC PDF download is public inside this router
+app.include_router(payments.public_router)
 
 # ── Protected routes (JWT Bearer token required) ──────────────────────────────
 _auth = [Depends(get_current_user)]
@@ -112,6 +115,8 @@ app.include_router(marks.router,        dependencies=_auth)
 app.include_router(attendance.router,   dependencies=_auth)
 app.include_router(admin_users.router,  dependencies=_auth)
 app.include_router(portal.router,       dependencies=_auth)
+app.include_router(payments.router,     dependencies=_auth)
+app.include_router(notifications.router, dependencies=_auth)
 app.include_router(enrollments.router,  dependencies=_auth)   # NEW
 app.include_router(report_cards.router, dependencies=_auth)
 

@@ -62,14 +62,18 @@ def override_get_db():
         db.close()
 
 
-app.dependency_overrides[get_db] = override_get_db
-
-
 @pytest.fixture(scope="module", autouse=True)
 def setup_db():
+    previous_get_db_override = app.dependency_overrides.get(get_db)
+    app.dependency_overrides[get_db] = override_get_db
+    Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
+    if previous_get_db_override is None:
+        app.dependency_overrides.pop(get_db, None)
+    else:
+        app.dependency_overrides[get_db] = previous_get_db_override
 
 
 @pytest.fixture(scope="module")
@@ -397,6 +401,7 @@ class TestPrePromotionValidation:
     def test_validation_accepts_prefixed_class_name(self, db):
         year = _make_year(db, "VAL-PREFIX-2024", "active")
         cls  = _make_class(db, "Grade 1", year.id)
+        _make_student(db, "Prefix Student", cls.id, year.id)
         year2 = _make_year(db, "VAL-PREFIX-2025", "draft", is_current=False)
         db.commit()
 

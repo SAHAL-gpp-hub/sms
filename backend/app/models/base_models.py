@@ -381,6 +381,30 @@ class FeePayment(Base):
     mode           = Column(String(20), nullable=False)
     receipt_number = Column(String(30), unique=True)
     collected_by   = Column(String(100), nullable=True)
+    online_order_id = Column(Integer, ForeignKey("online_payment_orders.id"), nullable=True)
+    notes          = Column(Text, nullable=True)
+
+
+class OnlinePaymentOrder(Base):
+    __tablename__ = "online_payment_orders"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('created', 'paid', 'failed', 'expired')",
+            name="online_payment_status_check",
+        ),
+    )
+
+    id                  = Column(Integer, primary_key=True)
+    student_fee_id      = Column(Integer, ForeignKey("student_fees.id"), nullable=False)
+    razorpay_order_id   = Column(Text, unique=True, nullable=False)
+    razorpay_payment_id = Column(Text, nullable=True)
+    razorpay_signature  = Column(Text, nullable=True)
+    amount              = Column(Numeric(10, 2), nullable=False)
+    currency            = Column(String(3), nullable=False, default="INR")
+    status              = Column(String(20), nullable=False, default="created")
+    created_at          = Column(DateTime(timezone=True), server_default=func.now())
+    paid_at             = Column(DateTime(timezone=True), nullable=True)
+    failure_reason      = Column(Text, nullable=True)
 
 
 class TransferCertificate(Base):
@@ -537,11 +561,32 @@ class NotificationOutbox(Base):
     updated_at      = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
+class NotificationLog(Base):
+    __tablename__ = "notification_log"
+
+    id                = Column(Integer, primary_key=True)
+    student_id        = Column(Integer, ForeignKey("students.id"), nullable=True)
+    notification_type = Column(String(40), nullable=False, index=True)
+    channel           = Column(String(20), nullable=False, index=True)
+    recipient_phone   = Column(String(20), nullable=False)
+    template_name     = Column(String(100), nullable=True)
+    message_preview   = Column(Text, nullable=True)
+    status            = Column(String(20), nullable=False, default="queued", index=True)
+    error_message     = Column(Text, nullable=True)
+    idempotency_key   = Column(String(160), unique=True, nullable=True, index=True)
+    outbox_id         = Column(Integer, ForeignKey("notification_outbox.id"), nullable=True)
+    sent_at           = Column(DateTime(timezone=True), nullable=True)
+    created_at        = Column(DateTime(timezone=True), server_default=func.now())
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Relationships (post-class to avoid forward-ref issues)
 # ─────────────────────────────────────────────────────────────────────────────
 
 FeeStructure.fee_head = relationship("FeeHead", foreign_keys=[FeeStructure.fee_head_id])
+StudentFee.student = relationship("Student", foreign_keys=[StudentFee.student_id])
 StudentFee.fee_structure = relationship("FeeStructure", foreign_keys=[StudentFee.fee_structure_id])
 StudentFee.payments = relationship("FeePayment", foreign_keys=[FeePayment.student_fee_id])
 StudentFee.source_invoice = relationship("StudentFee", foreign_keys=[StudentFee.source_invoice_id], remote_side=[StudentFee.id])
+OnlinePaymentOrder.student_fee = relationship("StudentFee", foreign_keys=[OnlinePaymentOrder.student_fee_id])
+OnlinePaymentOrder.payment = relationship("FeePayment", foreign_keys=[FeePayment.online_order_id], uselist=False)

@@ -1,12 +1,37 @@
 // frontend/src/pages/portal/PortalFees.jsx
 import { useState, useEffect } from 'react'
+import toast from 'react-hot-toast'
 import { usePortalContext } from '../../layouts/PortalLayout'
-import { portalAPI } from '../../services/api'
+import { extractError, paymentAPI, portalAPI } from '../../services/api'
 
 const fmt = (n) =>
   new Intl.NumberFormat('en-IN', { style:'currency', currency:'INR', minimumFractionDigits:0 }).format(Number(n) || 0)
 
-function FeeItem({ item }) {
+let razorpayScriptPromise = null
+
+const loadRazorpay = () => {
+  if (window.Razorpay) return Promise.resolve(true)
+  if (razorpayScriptPromise) return razorpayScriptPromise
+
+  razorpayScriptPromise = new Promise((resolve, reject) => {
+    document.querySelector('script[data-razorpay-checkout]')?.remove()
+    const script = document.createElement('script')
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    script.async = true
+    script.dataset.razorpayCheckout = 'true'
+    script.onload = () => resolve(true)
+    script.onerror = () => {
+      script.remove()
+      razorpayScriptPromise = null
+      reject(new Error('Failed to load Razorpay checkout'))
+    }
+    document.body.appendChild(script)
+  })
+
+  return razorpayScriptPromise
+}
+
+function FeeItem({ item, canPay, payingId, onPay }) {
   const balance = parseFloat(item.balance || 0)
   const paid    = parseFloat(item.paid_amount || 0)
   const total   = parseFloat(item.net_amount || 0)
@@ -41,6 +66,21 @@ function FeeItem({ item }) {
           {fmt(paid)} paid
         </span>
       </div>
+      {!isPaid && canPay && (
+        <button
+          type="button"
+          onClick={() => onPay(item.student_fee_id, balance)}
+          disabled={payingId === item.student_fee_id}
+          style={{
+            marginTop:'10px', width:'100%', border:0, borderRadius:'12px',
+            padding:'10px 12px', background:'#0d7377', color:'white',
+            fontSize:'13px', fontWeight:900, cursor: payingId === item.student_fee_id ? 'wait' : 'pointer',
+            opacity: payingId === item.student_fee_id ? 0.7 : 1,
+          }}
+        >
+          {payingId === item.student_fee_id ? 'Opening checkout…' : `Pay ${fmt(balance)} Online`}
+        </button>
+      )}
     </div>
   )
 }
@@ -52,8 +92,9 @@ export default function PortalFees() {
   const [ledger,  setLedger]  = useState(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(false)
+  const [payingId, setPayingId] = useState(null)
 
-  useEffect(() => {
+  const reloadLedger = () => {
     setLoading(true); setError(false); setLedger(null)
     const req = isParent && selectedChildId
       ? portalAPI.getChildFees(selectedChildId)
@@ -64,7 +105,65 @@ export default function PortalFees() {
     if (!req) { setLoading(false); return }
     req.then(r => { setLedger(r.data); setLoading(false) })
        .catch(() => { setError(true); setLoading(false) })
+  }
+
+  useEffect(() => {
+    reloadLedger()
   }, [isParent, selectedChildId])
+
+  const handlePayNow = async (studentFeeId, amount) => {
+    try {
+      setPayingId(studentFeeId)
+      await loadRazorpay()
+      const { data: order } = await paymentAPI.createOrder({
+        student_fee_id: studentFeeId,
+        amount,
+      })
+
+      const options = {
+        key: order.key_id,
+        amount: order.amount,
+        currency: order.currency,
+        name: 'Iqra English Medium School',
+        description: 'School fee payment',
+        order_id: order.order_id,
+        prefill: {
+          name: order.student_name,
+          contact: order.contact || '',
+          email: order.email || '',
+        },
+        theme: { color: '#0d7377' },
+        handler: async (response) => {
+          try {
+            const { data } = await paymentAPI.verify({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            })
+            toast.success(`Payment received · ${data.receipt_number}`)
+            reloadLedger()
+          } catch (err) {
+            toast.error(extractError(err))
+          } finally {
+            setPayingId(null)
+          }
+        },
+        modal: {
+          ondismiss: () => setPayingId(null),
+        },
+      }
+
+      const checkout = new window.Razorpay(options)
+      checkout.on('payment.failed', (response) => {
+        toast.error(response.error?.description || 'Payment failed')
+        setPayingId(null)
+      })
+      checkout.open()
+    } catch (err) {
+      toast.error(extractError(err))
+      setPayingId(null)
+    }
+  }
 
   if (loading) return (
     <div>
@@ -90,6 +189,7 @@ export default function PortalFees() {
   const totalBalance = parseFloat(ledger.total_balance || 0)
   const collPct      = totalDue > 0 ? Math.min((totalPaid / totalDue) * 100, 100) : 0
   const hasBalance   = totalBalance > 0
+  const canPayOnline = isParent && Boolean(selectedChildId) && hasBalance
 
   return (
     <>
@@ -145,18 +245,25 @@ export default function PortalFees() {
         {(ledger.items || []).length === 0 ? (
           <div style={{ textAlign:'center', padding:'20px 0', color:'#94a3b8', fontSize:'13px' }}>No fees assigned yet</div>
         ) : (
-          (ledger.items || []).map((item, i) => <FeeItem key={i} item={item} />)
+          (ledger.items || []).map((item, i) => (
+            <FeeItem
+              key={i}
+              item={item}
+              canPay={canPayOnline}
+              payingId={payingId}
+              onPay={handlePayNow}
+            />
+          ))
         )}
       </div>
 
-      {/* Online payment placeholder */}
-      {hasBalance && (
-        <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'14px', padding:'13px 15px', display:'flex', alignItems:'flex-start', gap:'10px' }}>
-          <svg width="18" height="18" fill="none" stroke="#b45309" viewBox="0 0 24 24" style={{flexShrink:0}} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+      {hasBalance && !canPayOnline && (
+        <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'14px', padding:'13px 15px', display:'flex', alignItems:'flex-start', gap:'10px' }}>
+          <svg width="18" height="18" fill="none" stroke="#64748b" viewBox="0 0 24 24" style={{flexShrink:0}} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
           <div>
-            <div style={{ fontSize:'13px', fontWeight:700, color:'#92400e' }}>Online Payment — Coming Soon</div>
-            <div style={{ fontSize:'12px', color:'#b45309', marginTop:'3px', lineHeight:1.5 }}>
-              Pay via UPI, card or net banking. Available in the next update. Visit the school office for now.
+            <div style={{ fontSize:'13px', fontWeight:700, color:'#334155' }}>Online payment available for parent accounts</div>
+            <div style={{ fontSize:'12px', color:'#64748b', marginTop:'3px', lineHeight:1.5 }}>
+              Parents can pay outstanding fee items by UPI, card or net banking from this screen.
             </div>
           </div>
         </div>

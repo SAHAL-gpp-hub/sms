@@ -372,6 +372,24 @@ export const portalAPI = {
   getChildAttendance: (sid) => api.get(`/portal/me/children/${sid}/attendance`),
 }
 
+// ── Online Payments ──────────────────────────────────────────────────────────
+export const paymentAPI = {
+  createOrder: (data) => api.post('/payments/create-order', data),
+  verify:      (data) => api.post('/payments/verify', data),
+  history:     (studentId) => api.get(`/payments/history/${studentId}`),
+}
+
+// ── Notifications ────────────────────────────────────────────────────────────
+export const notificationAPI = {
+  list: (params = {}) => api.get('/notifications', { params }),
+  triggerFeeReminders: (academicYearId) =>
+    api.post('/notifications/trigger/fee-reminders', null, {
+      params: academicYearId ? { academic_year_id: academicYearId } : {},
+    }),
+  triggerLowAttendance: (data = {}) => api.post('/notifications/trigger/low-attendance', data),
+  sendTest: (data) => api.post('/notifications/test', data),
+}
+
 // ── Setup ─────────────────────────────────────────────────────────────────────
 export const setupAPI = {
   seed: () => api.post('/setup/seed'),

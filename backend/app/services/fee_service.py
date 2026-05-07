@@ -22,6 +22,7 @@ FIXES APPLIED:
 
 from datetime import date
 from decimal import Decimal
+import logging
 from typing import Optional
 
 from sqlalchemy import func, text
@@ -34,6 +35,8 @@ from app.schemas.fee import (
     FeeHeadCreate, FeeStructureCreate, PaymentCreate,
     StudentLedger, StudentLedgerItem,
 )
+
+logger = logging.getLogger("sms.fees")
 
 
 # Advisory lock key for receipt number generation (pg_advisory_xact_lock).
@@ -328,6 +331,13 @@ def record_payment(db: Session, data: PaymentCreate) -> FeePayment:
     db.add(payment)
     db.commit()
     db.refresh(payment)
+    try:
+        from app.services.notification_service import enqueue_payment_confirmation
+        enqueue_payment_confirmation(db, payment.id)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.warning("Could not queue payment confirmation for payment %s: %s", payment.id, exc)
     return payment
 
 
