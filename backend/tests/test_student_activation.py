@@ -154,6 +154,22 @@ def test_start_activation_is_generic_and_hashes_otp(client):
     db.close()
 
 
+def test_start_activation_matches_identifier_and_email_case_insensitively(client):
+    res = client.post(
+        "/api/v1/student-auth/start-activation",
+        json={"identifier": " sms-2026-001 ", "email": " ALICE@STUDENT.EXAMPLE ", "account_type": "student"},
+    )
+
+    assert res.status_code == 200
+    db = TestingSessionLocal()
+    activation = _latest_activation(db, "student")
+    outbox = db.query(NotificationOutbox).filter_by(provider="email").order_by(NotificationOutbox.id.desc()).first()
+    assert activation is not None
+    assert activation.destination == "alice@student.example"
+    assert outbox.destination == "alice@student.example"
+    db.close()
+
+
 def test_student_activation_completes_and_cannot_be_reused(client):
     db = TestingSessionLocal()
     activation = _latest_activation(db, "student")

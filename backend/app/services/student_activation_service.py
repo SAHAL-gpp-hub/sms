@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
 from jose import JWTError
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -88,14 +88,14 @@ def _find_student(db: Session, identifier: str, email: str, account_type: str) -
     query = db.query(Student).filter(
         Student.status == StudentStatusEnum.Active,
         or_(
-            Student.student_id == normalized_identifier,
-            Student.gr_number == normalized_identifier,
+            func.lower(Student.student_id) == normalized_identifier.lower(),
+            func.lower(Student.gr_number) == normalized_identifier.lower(),
         ),
     )
     if account_type == "student":
-        query = query.filter(Student.student_email == normalized_email)
+        query = query.filter(func.lower(func.trim(Student.student_email)) == normalized_email)
     else:
-        query = query.filter(Student.guardian_email == normalized_email)
+        query = query.filter(func.lower(func.trim(Student.guardian_email)) == normalized_email)
     return query.first()
 
 
