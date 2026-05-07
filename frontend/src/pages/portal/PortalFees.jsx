@@ -24,7 +24,7 @@ function FeeItem({ item }) {
         </div>
         <div style={{ textAlign:'right', flexShrink:0 }}>
           {isPaid ? (
-            <span style={{ fontSize:'12px', fontWeight:800, padding:'3px 10px', borderRadius:'20px', background:'#dcfce7', color:'#15803d' }} style={{ display:"inline-flex", alignItems:"center", gap:"3px" }}><svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg> Cleared</span>
+            <span style={{ fontSize:'12px', fontWeight:800, padding:'3px 10px', borderRadius:'20px', background:'#dcfce7', color:'#15803d', display:'inline-flex', alignItems:'center', gap:'3px' }}><svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg> Cleared</span>
           ) : (
             <div>
               <div style={{ fontSize:'15px', fontWeight:900, color:'#dc2626', letterSpacing:'-0.02em' }}>{fmt(balance)}</div>

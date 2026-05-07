@@ -643,7 +643,7 @@ export default function ClassManagement() {
               <div style={{ marginTop: '8px', fontSize: '11.5px', color: 'var(--text-tertiary)' }}>
                 {bulkSelected.size} standard{bulkSelected.size !== 1 ? 's' : ''} selected ·
                 <span style={{ color: 'var(--success-600)', marginLeft: '4px' }}>
-                  + = already exists, will be skipped
+                  check icon = already exists, will be skipped
                 </span>
               </div>
             </div>
