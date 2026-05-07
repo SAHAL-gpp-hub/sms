@@ -35,6 +35,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import inspect, text
+from sqlalchemy.dialects import postgresql
 
 revision: str = "d1e2f3g4h5i6"
 down_revision: Union[str, None] = "c1d2e3f4"
@@ -281,7 +282,7 @@ def upgrade() -> None:
         op.create_table(
             "audit_logs",
             sa.Column("id",           sa.Integer(), primary_key=True),
-            sa.Column("operation",    sa.Enum(
+            sa.Column("operation",    postgresql.ENUM(
                 "bulk_promote", "undo_promote", "new_year", "activate_year", "close_year",
                 "lock_marks", "issue_tc", "clone_subjects", "clone_fees",
                 name="auditoperationenum",
