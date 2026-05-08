@@ -66,7 +66,6 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading]           = useState(false)
   const [error, setError]               = useState(null)
-  const [_focusedField, setFocusedField] = useState(null)
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -638,8 +637,6 @@ export default function Login() {
                       className="field-input"
                       value={email}
                       onChange={e => setEmail(e.target.value)}
-                      onFocus={() => setFocusedField('email')}
-                      onBlur={() => setFocusedField(null)}
                       placeholder="admin@iqraschool.in"
                       required
                       autoFocus
@@ -664,8 +661,6 @@ export default function Login() {
                       className="field-input"
                       value={password}
                       onChange={e => setPassword(e.target.value)}
-                      onFocus={() => setFocusedField('password')}
-                      onBlur={() => setFocusedField(null)}
                       placeholder="••••••••"
                       required
                       autoComplete="current-password"

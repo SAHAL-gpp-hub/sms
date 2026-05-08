@@ -258,7 +258,7 @@ function ActivationShell({ children }) {
           background: transparent;
           cursor: pointer;
         }
-        .activation-secondary:disabled { opacity: 0.55; cursor: not-allowed; }
+        .activation-secondary:disabled { opacity: 0.62; cursor: not-allowed; }
         .activation-otp {
           text-align: center;
           font-size: 24px;
@@ -309,7 +309,7 @@ function ActivationShell({ children }) {
         <div className="activation-hero">
           <div className="activation-hero-eyebrow">Portal Access</div>
           <h2 className="activation-hero-title">Student & Parent Onboarding</h2>
-          <p className="activation-hero-desc">Activate your school portal account securely and continue to attendance, fees and results.</p>
+          <p className="activation-hero-desc">Activate your school portal account securely and continue to the attendance, fees, and results sections.</p>
         </div>
         <div className="activation-stats">
           <div>
