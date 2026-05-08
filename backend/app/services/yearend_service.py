@@ -38,7 +38,7 @@ from decimal import Decimal
 from typing import Any, Optional
 
 from sqlalchemy import func, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
 from app.models.base_models import (
@@ -220,6 +220,15 @@ def _get_unpaid_dues(db: Session, student_id: int, academic_year_id: int) -> lis
     return unpaid
 
 
+def _has_subject_exam_eligible_column(db: Session) -> bool:
+    try:
+        with db.begin_nested():
+            db.execute(text("SELECT is_exam_eligible FROM subjects LIMIT 1"))
+        return True
+    except (OperationalError, ProgrammingError):
+        return False
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Validation
 # ─────────────────────────────────────────────────────────────────────────────
@@ -344,13 +353,10 @@ def validate_pre_promotion(
         academic_year_id=current_class.academic_year_id,
     ).all()
     exam_ids = [e.id for e in exams_in_class]
-    subject_ids = [
-        r[0]
-        for r in db.query(Subject.id).filter(
-            Subject.class_id == class_id,
-            Subject.is_exam_eligible == True,  # noqa: E712
-        ).all()
-    ]
+    subject_query = db.query(Subject.id).filter(Subject.class_id == class_id)
+    if _has_subject_exam_eligible_column(db):
+        subject_query = subject_query.filter(Subject.is_exam_eligible == True)  # noqa: E712
+    subject_ids = [r[0] for r in subject_query.all()]
     promotable_student_ids = [
         s.id
         for s in active_students
@@ -777,6 +783,7 @@ def bulk_promote_students(
 
         except Exception as exc:
             sp.rollback()
+            db.expire(student)
             report["errors"].append({
                 "student_id": student.id,
                 "name":       student.name_en,
@@ -920,6 +927,7 @@ def undo_promotion(
             StudentFee.student_id        == enroll.student_id,
             StudentFee.academic_year_id  == new_academic_year_id,
             StudentFee.invoice_type      == "arrear",
+            StudentFee.source_invoice_id.isnot(None),
         ).all()
         for arrear in arrears:
             db.delete(arrear)
@@ -1009,11 +1017,9 @@ def clone_fee_structure(
         raise ValueError(f"Target academic year '{to_year.label}' is closed.")
 
     # Map old class IDs to new class IDs by name+division
-    old_classes = db.query(Class).filter_by(academic_year_id=from_year_id).all()
     new_classes  = db.query(Class).filter_by(academic_year_id=to_year_id).all()
 
-    old_map = {(c.name, c.division): c.id for c in old_classes}
-    new_map = {(c.name, c.division): c.id for c in new_classes}
+    new_map = {(normalize_class_name(c.name), c.division): c.id for c in new_classes}
 
     old_structures = db.query(FeeStructure).filter_by(academic_year_id=from_year_id).all()
 
@@ -1023,7 +1029,7 @@ def clone_fee_structure(
         old_cls = db.query(Class).filter_by(id=fs.class_id).first()
         if not old_cls:
             continue
-        key = (old_cls.name, old_cls.division)
+        key = (normalize_class_name(old_cls.name), old_cls.division)
         new_class_id = new_map.get(key)
         if not new_class_id:
             skipped += 1
@@ -1253,7 +1259,7 @@ def activate_academic_year(
         AcademicYear.is_current == True,  # noqa: E712
         AcademicYear.id != year_id,
     ).update(
-        {"is_current": False, "status": YearStatusEnum.closed.value},
+        {"is_current": False, "status": YearStatusEnum.closed},
         synchronize_session=False,
     )
     db.expire_all()
@@ -1284,6 +1290,19 @@ def issue_tc(db: Session, student_id: int, reason: str = "Parent's Request") -> 
     student = db.query(Student).filter_by(id=student_id).first()
     if not student:
         return None
+    cert = db.query(TransferCertificate).filter_by(student_id=student_id).first()
+    if not cert:
+        try:
+            db.execute(text(f"SELECT pg_advisory_xact_lock({TC_NUMBER_LOCK_KEY})"))
+            seq_val = db.execute(text("SELECT nextval('tc_number_seq')")).scalar()
+        except Exception:
+            seq_val = (db.query(func.max(TransferCertificate.id)).scalar() or 0) + 1
+        db.add(TransferCertificate(
+            tc_number=f"TC-{date.today().year}-{int(seq_val):04d}",
+            student_id=student_id,
+            reason=reason,
+            conduct="Good",
+        ))
     student.status = StudentStatusEnum.TC_Issued
     if reason:
         student.reason_for_leaving = reason
@@ -1302,20 +1321,7 @@ def get_tc_data(db: Session, student_id: int, reason: str, conduct: str) -> Opti
 
     cert = db.query(TransferCertificate).filter_by(student_id=student_id).first()
     if not cert:
-        try:
-            db.execute(text(f"SELECT pg_advisory_xact_lock({TC_NUMBER_LOCK_KEY})"))
-            seq_val = db.execute(text("SELECT nextval('tc_number_seq')")).scalar()
-        except Exception:
-            seq_val = (db.query(func.max(TransferCertificate.id)).scalar() or 0) + 1
-        cert = TransferCertificate(
-            tc_number=f"TC-{date.today().year}-{int(seq_val):04d}",
-            student_id=student_id,
-            reason=reason,
-            conduct=conduct,
-        )
-        db.add(cert)
-        db.commit()
-        db.refresh(cert)
+        return None
     tc_number = cert.tc_number
 
     def fmt(d):
@@ -1334,7 +1340,9 @@ def get_tc_data(db: Session, student_id: int, reason: str, conduct: str) -> Opti
         "leave_date":       fmt(date.today()),
         "reason":           reason or student.reason_for_leaving or "—",
         "conduct":          conduct,
-        "promotion_status": "Promoted",
+        "promotion_status": (
+            student.status.value if hasattr(student.status, "value") else str(student.status or "—")
+        ),
         "attendance_percentage": f"{att_pct:.1f}%" if att_pct is not None else "—",
         "dob_formatted":              fmt(student.dob),
         "admission_date_formatted":   fmt(student.admission_date),

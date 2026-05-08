@@ -65,7 +65,10 @@ CLASS_ORDER = ["Nursery", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", 
 
 
 def get_grade(percentage: Decimal):
-    pct = min(float(percentage), 100.0)
+    pct = float(percentage)
+    if pct > 100.0:
+        raise ValueError("Percentage cannot exceed 100")
+    pct = max(pct, 0.0)
     for low, high, grade, gp, remark in GSEB_GRADES:
         if low <= pct <= high:
             return grade, round(float(gp), 1), remark
@@ -281,7 +284,12 @@ def bulk_save_marks(db: Session, entries: list[MarkEntry]):
             raise ValueError(f"Subject {entry.subject_id} not found")
         if exam is None:
             raise ValueError(f"Exam {entry.exam_id} not found")
-        if student.class_id != exam.class_id:
+        enrolled_for_exam = db.query(Enrollment.id).filter_by(
+            student_id=student.id,
+            class_id=exam.class_id,
+            academic_year_id=exam.academic_year_id,
+        ).first()
+        if student.class_id != exam.class_id and not enrolled_for_exam:
             raise ValueError(f"Student {student.id} does not belong to exam class {exam.class_id}")
         if subject.class_id != exam.class_id:
             raise ValueError(f"Subject {subject.id} does not belong to exam class {exam.class_id}")
@@ -465,7 +473,7 @@ def get_class_results(db: Session, exam_id: int, class_id: int):
                 if sub_total is not None and sub_total < subject.passing_marks:
                     has_fail = True
 
-            total     += sub_total if sub_total else Decimal("0")
+            total     += sub_total if sub_total is not None else Decimal("0")
             max_total += max_sub
 
             subject_rows.append({

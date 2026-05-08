@@ -127,7 +127,7 @@ let _currentYearId = null
 let _currentYearPromise = null
 
 async function getCurrentYearId() {
-  if (_currentYearId) return _currentYearId
+  if (_currentYearId !== null && _currentYearId !== undefined) return _currentYearId
   // Deduplicate concurrent calls — only one request in flight at a time
   if (!_currentYearPromise) {
     _currentYearPromise = api.get('/yearend/current-year')
@@ -137,7 +137,6 @@ async function getCurrentYearId() {
       })
       .catch(() => {
         // If the endpoint fails (e.g. no year set up yet), fall back to unfiltered
-        _currentYearPromise = null
         return null
       })
   }
@@ -320,6 +319,12 @@ export const reportCardsAPI = {
   setLocked: (id, isLocked) => api.patch(`/report-cards/${id}`, { is_locked: isLocked }),
 }
 
+const validIdParam = (studentId) => (
+  studentId !== undefined && studentId !== null && studentId !== ''
+    ? { student_id: studentId }
+    : {}
+)
+
 // ── Admin / Users ─────────────────────────────────────────────────────────────
 export const adminAPI = {
   listUsers:     (params) => api.get('/admin/users', { params }),
@@ -354,14 +359,14 @@ export const adminAPI = {
 
 // ── Portal ────────────────────────────────────────────────────────────────────
 export const portalAPI = {
-  getProfile:           (studentId) => api.get('/portal/me/profile',           { params: studentId ? { student_id: studentId } : {} }),
-  getResults:           (studentId) => api.get('/portal/me/results',            { params: studentId ? { student_id: studentId } : {} }),
-  getAttendance:        (studentId) => api.get('/portal/me/attendance',         { params: studentId ? { student_id: studentId } : {} }),
-  getAttendanceSummary: (studentId) => api.get('/portal/me/attendance/summary', { params: studentId ? { student_id: studentId } : {} }),
-  getFees:              (studentId) => api.get('/portal/me/fees',               { params: studentId ? { student_id: studentId } : {} }),
+  getProfile:           (studentId) => api.get('/portal/me/profile',           { params: validIdParam(studentId) }),
+  getResults:           (studentId) => api.get('/portal/me/results',            { params: validIdParam(studentId) }),
+  getAttendance:        (studentId) => api.get('/portal/me/attendance',         { params: validIdParam(studentId) }),
+  getAttendanceSummary: (studentId) => api.get('/portal/me/attendance/summary', { params: validIdParam(studentId) }),
+  getFees:              (studentId) => api.get('/portal/me/fees',               { params: validIdParam(studentId) }),
   getMarksheet: (examId, studentId) =>
     api.get(`/portal/me/marksheet/${examId}`, {
-      params: studentId ? { student_id: studentId } : {},
+      params: validIdParam(studentId),
       responseType: 'blob',
     }),
 
@@ -404,7 +409,7 @@ export const setupAPI = {
    */
   getClasses: async (academicYearId) => {
     // If caller specified a year, use it directly
-    if (academicYearId) {
+    if (academicYearId !== undefined && academicYearId !== null && academicYearId !== '') {
       return api.get('/setup/classes', { params: { academic_year_id: academicYearId } })
     }
     // Otherwise scope to current year automatically
@@ -446,7 +451,7 @@ export const extractError = (err) => {
       .map(d => {
         if (!d) return null
         if (d.msg) {
-          const loc = d.loc?.length ? `${d.loc[d.loc.length - 1]}: ` : ''
+          const loc = d.loc?.length ? `${d.loc.join('.')}: ` : ''
           return `${loc}${d.msg}`
         }
         if (d.message) return d.message

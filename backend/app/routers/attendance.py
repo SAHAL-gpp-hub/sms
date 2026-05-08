@@ -4,7 +4,7 @@ from datetime import date
 from typing import Optional, Union
 from pydantic import BaseModel
 from app.core.database import get_db
-from app.models.base_models import Student
+from app.models.base_models import Class, Enrollment, Student
 from app.routers.auth import (
     CurrentUser,
     ensure_class_access,
@@ -77,7 +77,15 @@ def get_monthly_summary(
     if target_id is None or target_id not in allowed_ids:
         raise HTTPException(status_code=403, detail="You do not have access to this student")
     student = db.query(Student).filter_by(id=target_id).first()
-    if not student or student.class_id != class_id:
+    cls = db.query(Class).filter_by(id=class_id).first()
+    enrolled = (
+        db.query(Enrollment.id)
+        .filter_by(student_id=target_id, class_id=class_id, academic_year_id=cls.academic_year_id)
+        .first()
+        if cls
+        else None
+    )
+    if not student or (student.class_id != class_id and not enrolled):
         raise HTTPException(status_code=404, detail="Student not found")
     summary = attendance_service.get_monthly_summary(db, class_id, year, month)
     return [row for row in summary if row["student_id"] == target_id]

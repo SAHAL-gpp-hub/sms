@@ -5,7 +5,6 @@ from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_password_hash
 from app.models.base_models import AcademicYear, Class, NotificationOutbox, Student, StudentActivationRequest, StudentStatusEnum, Subject, TeacherClassAssignment, User
@@ -370,7 +369,6 @@ class BulkGenerateResult(BaseModel):
     already_linked_students: int
     already_linked_parents: int
     errors: list[str]
-    default_password_note: str
 
 
 class SingleGenerateResult(BaseModel):
@@ -378,7 +376,6 @@ class SingleGenerateResult(BaseModel):
     parent_account_created: bool
     student_email: Optional[str]
     parent_email: Optional[str]
-    default_password_note: str
     message: str
 
 
@@ -391,86 +388,6 @@ class AdminActivationResendRequest(BaseModel):
         if value not in {"student", "parent"}:
             raise ValueError("Account type must be student or parent")
         return value
-
-
-def _make_portal_email(prefix: str, student_id: str, domain: str) -> str:
-    """
-    Build a synthetic portal email that is unique per student.
-    Example: student.sms.2026.001@portal.sms.local
-    """
-    normalized = student_id.lower().replace("-", ".")
-    return f"{prefix}.{normalized}@{domain}"
-
-
-def _unique_email(db: Session, base_email: str) -> str:
-    """
-    Return base_email if it is available, otherwise append an incrementing
-    suffix until a free slot is found.  Stops at 99 to avoid infinite loops.
-    """
-    if not db.query(User).filter_by(email=base_email).first():
-        return base_email
-    local, domain = base_email.rsplit("@", 1)
-    for i in range(2, 100):
-        candidate = f"{local}.{i}@{domain}"
-        if not db.query(User).filter_by(email=candidate).first():
-            return candidate
-    raise HTTPException(
-        status_code=409,
-        detail=f"Could not find a unique email starting from {base_email}",
-    )
-
-
-def _default_password(student: Student) -> str:
-    """Return student DOB as DDMMYYYY — communicated to users by the school."""
-    return student.dob.strftime("%d%m%Y")
-
-
-def _create_and_link_student_account(db: Session, student: Student) -> Optional[str]:
-    """
-    Create a User account with role='student' and link it to the student.
-    Returns the created email, or None if the student is already linked.
-    """
-    if student.student_user_id is not None:
-        return None
-    domain = settings.PORTAL_EMAIL_DOMAIN
-    email = _unique_email(db, _make_portal_email("student", student.student_id, domain))
-    user = User(
-        name=student.name_en,
-        email=email,
-        password_hash=get_password_hash(_default_password(student)),
-        role="student",
-        is_active=True,
-    )
-    db.add(user)
-    db.flush()  # get user.id without committing
-    student.student_user_id = user.id
-    return email
-
-
-def _create_and_link_parent_account(db: Session, student: Student) -> Optional[str]:
-    """
-    Create a User account with role='parent' and link it to the student.
-    Returns the created email, or None if already linked.
-
-    Parent name defaults to father_name; falls back to student name with
-    "Parent of" prefix so the admin can identify it in the user list.
-    """
-    if student.parent_user_id is not None:
-        return None
-    domain = settings.PORTAL_EMAIL_DOMAIN
-    email = _unique_email(db, _make_portal_email("parent", student.student_id, domain))
-    parent_name = student.father_name or f"Parent of {student.name_en}"
-    user = User(
-        name=parent_name,
-        email=email,
-        password_hash=get_password_hash(_default_password(student)),
-        role="parent",
-        is_active=True,
-    )
-    db.add(user)
-    db.flush()
-    student.parent_user_id = user.id
-    return email
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -513,6 +430,18 @@ def get_link_status(
         latest_by_student_type.setdefault((row.student_id, row.account_type), row)
         if row.status in {"failed", "locked"}:
             failed_by_student[row.student_id] = failed_by_student.get(row.student_id, 0) + 1
+    def latest_sent_at(student_id: int) -> Optional[str]:
+        values = [
+            row.created_at
+            for row in (
+                latest_by_student_type.get((student_id, "student")),
+                latest_by_student_type.get((student_id, "parent")),
+            )
+            if row is not None and row.created_at is not None
+        ]
+        latest = max(values) if values else None
+        return latest.isoformat() if latest else None
+
     unlinked = [
         UnlinkedStudentItem(
             id=s.id,
@@ -534,19 +463,7 @@ def get_link_status(
                 else None
             ),
             failed_activation_attempts=failed_by_student.get(s.id, 0),
-            last_activation_sent_at=str(
-                max(
-                    [
-                        row.created_at
-                        for row in (
-                            latest_by_student_type.get((s.id, "student")),
-                            latest_by_student_type.get((s.id, "parent")),
-                        )
-                        if row is not None
-                    ],
-                    default="",
-                )
-            ) or None,
+            last_activation_sent_at=latest_sent_at(s.id),
         )
         for s in students
         if s.student_user_id is None or s.parent_user_id is None
@@ -703,4 +620,3 @@ def list_otp_failures(
         for row in rows
     ]
     return OtpOutboxResponse(total=len(items), items=items)
-

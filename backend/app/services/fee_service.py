@@ -288,9 +288,9 @@ def generate_receipt_number(db: Session) -> str:
     """
     year = date.today().year
     try:
-        num = db.execute(text("SELECT nextval('receipt_number_seq')")).scalar()
+        with db.begin_nested():
+            num = db.execute(text("SELECT nextval('receipt_number_seq')")).scalar()
     except Exception:
-        db.rollback()
         try:
             db.execute(text(f"SELECT pg_advisory_xact_lock({RECEIPT_NUMBER_LOCK_KEY})"))
         except Exception:

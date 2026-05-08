@@ -65,16 +65,15 @@ function PaymentModal({ item, onClose, onSuccess }) {
 
   const [saving, setSaving] = useState(false)
 
+  const itemId = item?.student_fee_id
+  const itemBalance = item?.balance
   const balance = item ? parseFloat(item.balance) : 0
 
   useEffect(() => {
-
-    if (item) {
-      setForm(buildPaymentForm(item))
-
+    if (itemId) {
+      setForm(buildPaymentForm({ balance: itemBalance }))
     }
-
-  }, [item])
+  }, [itemId, itemBalance])
 
   const handleSubmit = async () => {
 

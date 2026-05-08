@@ -145,9 +145,12 @@ export default function StudentList() {
   const [tcTarget, setTcTarget] = useState(null)
   const [tcForm, setTcForm] = useState({ reason: "Parent's Request", conduct: 'Good' })
   const [deleting, setDeleting] = useState(false)
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 640)
+  const [isMobile, setIsMobile] = useState(() => (
+    typeof window !== 'undefined' ? window.innerWidth < 640 : false
+  ))
 
   useEffect(() => {
+    if (typeof window === 'undefined') return undefined
     const handleResize = () => setIsMobile(window.innerWidth < 640)
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)

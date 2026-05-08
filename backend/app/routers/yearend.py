@@ -124,6 +124,10 @@ def download_tc(
         raise HTTPException(status_code=401, detail="Invalid or expired TC download token") from exc
     if payload.get("typ") != "pdf-download" or payload.get("resource") != f"tc:{student_id}":
         raise HTTPException(status_code=403, detail="TC download token does not match this student")
+    signed_reason = payload.get("reason")
+    signed_conduct = payload.get("conduct")
+    if signed_reason != reason or signed_conduct != conduct:
+        raise HTTPException(status_code=403, detail="TC download token does not match the requested TC details")
     pdf = render_tc_pdf(db, student_id, reason, conduct)
     if not pdf:
         raise HTTPException(status_code=404, detail="Student not found")
@@ -137,13 +141,20 @@ def download_tc(
 @router.get("/tc-pdf-token/{student_id}")
 def tc_pdf_token(
     student_id: int,
+    reason: str = Query(default="Parent's Request"),
+    conduct: str = Query(default="Good"),
     current_user: CurrentUser = Depends(require_role("admin")),
 ):
     token = create_access_token(
         subject=current_user.id,
         role=current_user.role,
         expires_delta=timedelta(seconds=60),
-        extra_claims={"typ": "pdf-download", "resource": f"tc:{student_id}"},
+        extra_claims={
+            "typ": "pdf-download",
+            "resource": f"tc:{student_id}",
+            "reason": reason,
+            "conduct": conduct,
+        },
     )
     return {"token": token, "expires_in": 60, "resource": f"tc:{student_id}"}
 

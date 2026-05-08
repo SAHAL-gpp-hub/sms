@@ -9,7 +9,7 @@
 //   6. Full monthly summary stats with progress bar
 
 import { useState, useEffect } from 'react'
-import { usePortalContext } from '../../layouts/PortalLayout'
+import { usePortalContext } from '../../layouts/portalContext'
 import { portalAPI } from '../../services/api'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -131,6 +131,7 @@ export default function PortalAttendance() {
   const [year,    setYear]    = useState(now.getFullYear())
   const [month,   setMonth]   = useState(now.getMonth() + 1)
   const [records, setRecords] = useState([])   // all records for this student
+  const [summaries, setSummaries] = useState([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(false)
 
@@ -140,21 +141,36 @@ export default function PortalAttendance() {
   // and show percentage against the total records in that month (which already
   // excludes Sundays and holidays on the backend's attendance marking side).
   useEffect(() => {
-    setLoading(true)
-    setError(false)
-    setRecords([])
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      setError(false)
+      setRecords([])
+      setSummaries([])
 
-    const req = isParent && selectedChildId
-      ? portalAPI.getChildAttendance(selectedChildId)
-      : !isParent
-        ? portalAPI.getAttendance()
-        : null
+      const targetStudentId = isParent ? selectedChildId : null
+      if (!targetStudentId && isParent) {
+        setLoading(false)
+        return
+      }
 
-    if (!req) { setLoading(false); return }
-
-    req
-      .then(r => { setRecords(r.data || []); setLoading(false) })
-      .catch(() => { setError(true); setLoading(false) })
+      try {
+        const [attendanceRes, summaryRes] = await Promise.all([
+          portalAPI.getAttendance(targetStudentId),
+          portalAPI.getAttendanceSummary(targetStudentId),
+        ])
+        if (cancelled) return
+        setRecords(attendanceRes.data || [])
+        setSummaries(summaryRes.data || [])
+        setLoading(false)
+      } catch {
+        if (cancelled) return
+        setError(true)
+        setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
   }, [isParent, selectedChildId])
 
   // ── Month navigation ───────────────────────────────────────────────────────
@@ -180,15 +196,14 @@ export default function PortalAttendance() {
   const onLeave  = monthRecs.filter(r => r.status === 'OL').length
   const total    = monthRecs.length
 
-  // Percentage: present / total-marked-days (backend already excludes holidays
-  // and Sundays when marking attendance, so total = working days marked)
-  const pct = total > 0 ? ((present / total) * 100).toFixed(1) : null
+  const monthSummary = summaries.find(s => s.year === year && s.month === month)
+  const pct = monthSummary ? Number(monthSummary.percentage).toFixed(1) : null
   const isLow = pct !== null && parseFloat(pct) < 75
 
   // ── Overall (all-time) stats ───────────────────────────────────────────────
-  const allPresent = records.filter(r => r.status === 'P').length
-  const allTotal   = records.length
-  const allPct     = allTotal > 0 ? ((allPresent / allTotal) * 100).toFixed(1) : null
+  const summaryWorkingDays = summaries.reduce((sum, s) => sum + Number(s.working_days || 0), 0)
+  const summaryPresent = summaries.reduce((sum, s) => sum + Number(s.present || 0), 0)
+  const allPct = summaryWorkingDays > 0 ? ((summaryPresent / summaryWorkingDays) * 100).toFixed(1) : null
 
   const displayName = profile?.name_en?.split(' ')[0] || (isParent ? 'Student' : 'Student')
 
@@ -258,7 +273,7 @@ export default function PortalAttendance() {
                   Overall Attendance
                 </div>
                 <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600, marginTop: 2 }}>
-                  {allPresent} present out of {allTotal} school days
+                  {summaryPresent} present out of {summaryWorkingDays} working days
                 </div>
                 {parseFloat(allPct) < 75 && (
                   <div style={{ fontSize: 11, fontWeight: 800, color: '#b91c1c', marginTop: 4 }}>
@@ -372,7 +387,7 @@ export default function PortalAttendance() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {[1, 2, 3, 4].map(i => <Shimmer key={i} h="44px" r="10px" />)}
               </div>
-            ) : total === 0 ? (
+            ) : !monthSummary && total === 0 ? (
               <div style={{ textAlign: 'center', padding: '16px 0', color: '#94a3b8', fontSize: 13, fontWeight: 600 }}>
                 No attendance records for {MONTHS[month - 1]}
               </div>
@@ -417,7 +432,7 @@ export default function PortalAttendance() {
                       display: 'flex', justifyContent: 'space-between',
                       fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 5,
                     }}>
-                      <span>{present} present of {total} school days</span>
+                      <span>{monthSummary?.present ?? present} present of {monthSummary?.working_days ?? total} working days</span>
                       <span style={{ color: isLow ? '#dc2626' : '#16a34a' }}>{pct}%</span>
                     </div>
                     <div style={{ height: 8, background: '#f1f5f9', borderRadius: 4, overflow: 'hidden' }}>

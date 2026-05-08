@@ -473,6 +473,21 @@ def enqueue_low_attendance_alerts(db: Session, year: int | None = None, month: i
 
 def process_pending_notifications(db: Session, limit: int = 20) -> int:
     now = datetime.now(timezone.utc)
+    stale_before = now - timedelta(minutes=15)
+    recovered = db.query(NotificationOutbox).filter(
+        NotificationOutbox.status == "sending",
+        NotificationOutbox.updated_at <= stale_before,
+        NotificationOutbox.attempts < NotificationOutbox.max_attempts,
+    ).update(
+        {
+            "status": "retry",
+            "next_attempt_at": now,
+            "last_error": "Recovered after being stuck in sending state.",
+        },
+        synchronize_session=False,
+    )
+    if recovered:
+        db.commit()
     items = (
         db.query(NotificationOutbox)
         .filter(
@@ -489,6 +504,7 @@ def process_pending_notifications(db: Session, limit: int = 20) -> int:
     for item in items:
         item.status = "sending"
         item.attempts += 1
+        db.commit()
         try:
             notification_service.send_outbox(item)
         except Exception as exc:
@@ -504,6 +520,7 @@ def process_pending_notifications(db: Session, limit: int = 20) -> int:
                     log.status = item.status
                     log.error_message = str(exc)
             logger.warning("Notification delivery failed for outbox %s: %s", item.id, exc)
+            db.commit()
         else:
             item.status = "sent"
             item.sent_at = now
@@ -513,7 +530,7 @@ def process_pending_notifications(db: Session, limit: int = 20) -> int:
                     log.status = "sent"
                     log.sent_at = now
             sent += 1
-    db.commit()
+            db.commit()
     return sent
 
 

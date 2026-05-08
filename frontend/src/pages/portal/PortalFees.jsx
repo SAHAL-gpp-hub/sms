@@ -1,7 +1,7 @@
 // frontend/src/pages/portal/PortalFees.jsx
 import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
-import { usePortalContext } from '../../layouts/PortalLayout'
+import { usePortalContext } from '../../layouts/portalContext'
 import { extractError, paymentAPI, portalAPI } from '../../services/api'
 
 const fmt = (n) =>

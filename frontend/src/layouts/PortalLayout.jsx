@@ -7,20 +7,11 @@
 //   • Active child strip below header for parents with >1 child
 //   • Passes context via PortalContext so every page auto-scopes API calls
 
-import { useState, useEffect, createContext, useContext } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { getAuthUser, clearToken } from '../services/auth'
 import { portalAPI } from '../services/api'
-
-// ── Shared context ─────────────────────────────────────────────────────────────
-export const PortalContext = createContext({
-  role:              'student',
-  profile:           null,
-  children:          [],
-  selectedChildId:   null,
-  setSelectedChildId: () => {},
-})
-export const usePortalContext = () => useContext(PortalContext)
+import { PortalContext } from './portalContext'
 
 // ── Nav items ──────────────────────────────────────────────────────────────────
 const NAV_ITEMS = [
@@ -73,7 +64,7 @@ const initials = (name) =>
   (name || 'S').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
 
 // ── Child Switcher Drawer ──────────────────────────────────────────────────────
-function ChildSwitcherDrawer({ open, onClose, children, selectedChildId, onSelect }) {
+function ChildSwitcherDrawer({ open, onClose, childList, selectedChildId, onSelect }) {
   if (!open) return null
   return (
     <>
@@ -116,14 +107,14 @@ function ChildSwitcherDrawer({ open, onClose, children, selectedChildId, onSelec
             <svg width="13" height="13" fill="none" stroke="#0d7377" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span style={{ color: '#0d7377', fontWeight: 700 }}>{children.length} student{children.length !== 1 ? 's' : ''}</span>
+            <span style={{ color: '#0d7377', fontWeight: 700 }}>{childList.length} student{childList.length !== 1 ? 's' : ''}</span>
             &nbsp;linked to your account
           </div>
         </div>
 
         {/* Child list */}
         <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {children.map((child, i) => {
+          {childList.map((child, i) => {
             const color    = CHILD_COLORS[i % CHILD_COLORS.length]
             const isActive = child.id === selectedChildId
             return (
@@ -261,27 +252,45 @@ export default function PortalLayout() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap');
 
-        .portal-root  { font-family:'Nunito',system-ui,sans-serif; background:#f0f7f7; min-height:100vh; display:flex; justify-content:center; }
-        .portal-shell { width:100%; max-width:480px; min-height:100vh; display:flex; flex-direction:column; background:#f0f7f7; }
+        .portal-root  {
+          font-family:var(--font-sans);
+          background:
+            radial-gradient(circle at top left, rgba(15,118,110,0.12), transparent 24rem),
+            linear-gradient(180deg, #f8fafc 0%, #eef3f8 100%);
+          min-height:100vh;
+          display:flex;
+          justify-content:center;
+        }
+        .portal-shell {
+          width:100%;
+          max-width:520px;
+          min-height:100vh;
+          display:flex;
+          flex-direction:column;
+          background:transparent;
+        }
 
         .portal-header {
-          background: linear-gradient(135deg, #0d7377 0%, #14a085 60%, #0d7377 100%);
+          background:
+            linear-gradient(135deg, rgba(15,23,42,0.98), rgba(15,118,110,0.94)),
+            radial-gradient(circle at top right, rgba(96,165,250,0.28), transparent 15rem);
           padding: 14px 16px 12px;
           display: flex; align-items: center;
           justify-content: space-between;
           position: sticky; top: 0; z-index: 20;
-          box-shadow: 0 2px 12px rgba(13,115,119,0.3);
+          box-shadow: 0 12px 32px rgba(15,23,42,0.18);
           gap: 10px;
         }
 
         .portal-logo {
-          width:36px; height:36px; background:rgba(255,255,255,0.2);
-          border-radius:10px; display:flex; align-items:center;
+          width:38px; height:38px; background:rgba(255,255,255,0.16);
+          border:1px solid rgba(255,255,255,0.18);
+          border-radius:12px; display:flex; align-items:center;
           justify-content:center; backdrop-filter:blur(8px); flex-shrink:0;
         }
         .portal-header-text { min-width:0; flex:1; }
         .portal-header-text h1 {
-          font-size:15px; font-weight:900; color:white;
+          font-size:15px; font-weight:850; color:white;
           line-height:1.2; letter-spacing:-0.02em;
           overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
         }
@@ -291,23 +300,24 @@ export default function PortalLayout() {
         }
 
         .portal-icon-btn {
-          width:34px; height:34px; display:flex; align-items:center;
+          width:36px; height:36px; display:flex; align-items:center;
           justify-content:center; background:rgba(255,255,255,0.15);
-          border:none; border-radius:9px; cursor:pointer; color:white;
+          border:1px solid rgba(255,255,255,0.12); border-radius:11px; cursor:pointer; color:white;
           transition:background 0.15s; touch-action:manipulation; flex-shrink:0;
         }
         .portal-icon-btn:hover { background:rgba(255,255,255,0.25); }
 
         .portal-main {
-          flex:1; overflow-y:auto; padding:16px 16px 100px;
+          flex:1; overflow-y:auto; padding:18px 16px 104px;
           -webkit-overflow-scrolling:touch;
         }
 
         .portal-bottom-nav {
           position:fixed; bottom:0; left:50%; transform:translateX(-50%);
-          width:100%; max-width:480px; background:white;
-          border-top:1px solid #e0eded; display:flex; z-index:30;
-          box-shadow:0 -4px 20px rgba(13,115,119,0.1);
+          width:100%; max-width:520px; background:rgba(255,255,255,0.96);
+          border-top:1px solid rgba(203,213,225,0.8); display:flex; z-index:30;
+          box-shadow:0 -12px 34px rgba(15,23,42,0.12);
+          backdrop-filter:blur(16px);
           padding-bottom:env(safe-area-inset-bottom, 0px);
         }
         .portal-nav-item {
@@ -319,20 +329,28 @@ export default function PortalLayout() {
         }
         .portal-nav-item span {
           font-size:9.5px; font-weight:700;
-          font-family:'Nunito',sans-serif; letter-spacing:0.01em;
+          font-family:var(--font-sans); letter-spacing:0.01em;
         }
-        .portal-nav-active   { color:#0d7377; }
+        .portal-nav-active   { color:#0f766e; }
         .portal-nav-inactive { color:#94a3b8; }
 
         .portal-active-strip {
-          background:white; border-bottom:1px solid #e8f4f4;
+          background:rgba(255,255,255,0.92); border-bottom:1px solid rgba(203,213,225,0.72);
           padding:8px 16px; display:flex; align-items:center;
           justify-content:space-between; cursor:pointer;
-          border:none; width:100%; font-family:'Nunito',sans-serif;
+          border:none; width:100%; font-family:var(--font-sans);
           touch-action:manipulation;
         }
 
-        @media (min-width:481px) { .portal-shell { box-shadow:0 0 40px rgba(0,0,0,0.08); } }
+        .portal-main .card,
+        .portal-main [style*="background: white"],
+        .portal-main [style*="background:#fff"],
+        .portal-main [style*="background: '#fff'"] {
+          border-radius:16px;
+          box-shadow:var(--shadow-card);
+        }
+
+        @media (min-width:521px) { .portal-shell { box-shadow:0 0 44px rgba(15,23,42,0.12); } }
       `}</style>
 
       <div className="portal-root">
@@ -461,7 +479,7 @@ export default function PortalLayout() {
       <ChildSwitcherDrawer
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        children={children}
+        childList={children}
         selectedChildId={selectedChildId}
         onSelect={(id) => setSelectedChildId(id)}
       />

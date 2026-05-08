@@ -1623,7 +1623,13 @@ function AuditLogTab({ years }) {
   const yearOptions = years.map(y => ({ value: String(y.id), label: y.label }))
   const formatPayload = (payload) => {
     if (!payload) return ''
-    if (typeof payload === 'string') return payload
+    if (typeof payload === 'string') {
+      try {
+        return JSON.stringify(JSON.parse(payload), null, 2)
+      } catch {
+        return payload
+      }
+    }
     try {
       return JSON.stringify(payload, null, 2)
     } catch {

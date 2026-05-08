@@ -300,6 +300,10 @@ def verify_otp(db: Session, activation_id: str, otp: str) -> dict:
 
     verification.attempt_count += 1
     expected_hash = hash_otp(activation.activation_id, otp.strip())
+    if not verification.otp_hash:
+        activation.status = "failed"
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OTP has expired. Please request a new code.")
     if not hmac.compare_digest(verification.otp_hash, expected_hash):
         db.commit()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid activation code.")

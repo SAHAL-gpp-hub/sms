@@ -1,6 +1,6 @@
 // frontend/src/pages/portal/PortalResults.jsx
 import { useState, useEffect } from 'react'
-import { usePortalContext } from '../../layouts/PortalLayout'
+import { usePortalContext } from '../../layouts/portalContext'
 import { portalAPI } from '../../services/api'
 
 const GRADE_COLORS = {
@@ -40,7 +40,7 @@ async function downloadMarksheet(examId, studentId, examName) {
     link.click()
     link.remove()
     window.URL.revokeObjectURL(blobUrl)
-  } catch (err) {
+  } catch {
     alert('Failed to download marksheet. Please try again.')
   }
 }
@@ -173,17 +173,33 @@ export default function PortalResults() {
   const [error,   setError]   = useState(false)
 
   useEffect(() => {
-    setLoading(true); setError(false); setResults([])
-    const req = isParent && selectedChildId
-      ? portalAPI.getChildResults(selectedChildId)
-      : !isParent
-        ? portalAPI.getResults()
-        : null
+    let cancelled = false
+    const load = async () => {
+      setLoading(true); setError(false); setResults([])
+      const req = isParent && selectedChildId
+        ? portalAPI.getChildResults(selectedChildId)
+        : !isParent
+          ? portalAPI.getResults()
+          : null
 
-    if (!req) { setLoading(false); return }
+      if (!req) {
+        setLoading(false)
+        return
+      }
 
-    req.then(r => { setResults(r.data || []); setLoading(false) })
-       .catch(() => { setError(true); setLoading(false) })
+      try {
+        const res = await req
+        if (cancelled) return
+        setResults(res.data || [])
+        setLoading(false)
+      } catch {
+        if (cancelled) return
+        setError(true)
+        setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
   }, [isParent, selectedChildId])
 
   // Pass selectedChildId so parent can download their child's marksheet

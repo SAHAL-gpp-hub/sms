@@ -1,11 +1,11 @@
 // Defaulters.jsx — Fully responsive with mobile card view
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { feeAPI, setupAPI, formatINR, extractError, openSignedPdf } from '../../services/api'
+import { feeAPI, setupAPI, formatINR, openSignedPdf } from '../../services/api'
 import { PageHeader, FilterRow, Select, EmptyState, TableSkeleton } from '../../components/UI'
 
-function DefaulterCard({ d, index, resolveClassName }) {
+function DefaulterCard({ d, resolveClassName }) {
   const balancePct = d.total_due > 0 ? Math.min(((d.balance / d.total_due) * 100), 100).toFixed(0) : 0
   return (
     <div style={{
@@ -82,7 +82,7 @@ export default function Defaulters() {
     })
   }, [])
 
-  useEffect(() => {
+  const fetchDefaulters = useCallback(() => {
     setLoading(true)
     const params = {}
     if (classFilter) params.class_id = classFilter
@@ -92,6 +92,10 @@ export default function Defaulters() {
       .catch(() => toast.error('Failed to load defaulters'))
       .finally(() => setLoading(false))
   }, [classFilter, yearFilter])
+
+  useEffect(() => {
+    fetchDefaulters()
+  }, [fetchDefaulters])
 
   const resolveClassName = (classId) => {
     const cls = classes.find(c => c.id === classId)

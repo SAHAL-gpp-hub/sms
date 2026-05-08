@@ -12,7 +12,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.base_models import AcademicCalendar, AcademicYear, CalendarEventTypeEnum
+from app.models.base_models import AcademicCalendar, AcademicYear
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -92,10 +92,6 @@ def get_holiday_dates(db: Session, academic_year_id: int) -> set[date]:
     events = db.query(AcademicCalendar).filter(
         AcademicCalendar.academic_year_id   == academic_year_id,
         AcademicCalendar.affects_attendance == True,    # noqa: E712
-        AcademicCalendar.event_type.in_([
-            CalendarEventTypeEnum.holiday,
-            CalendarEventTypeEnum.exam_period,
-        ]),
     ).all()
 
     holiday_dates: set[date] = set()

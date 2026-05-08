@@ -119,9 +119,15 @@ def backfill_enrollments(db: Session) -> dict:
         .all()
     )
 
-    # Students excluded due to NULL FK (for diagnostic count)
-    null_class = db.query(Student).filter(Student.class_id.is_(None)).count()
-    null_year  = db.query(Student).filter(Student.academic_year_id.is_(None)).count()
+    # Students excluded due to NULL FK (for diagnostic count). Keep the sets
+    # separate so a malformed row with both fields missing is counted once in
+    # the total but still visible in each category.
+    null_class_ids = {
+        row[0] for row in db.query(Student.id).filter(Student.class_id.is_(None)).all()
+    }
+    null_year_ids = {
+        row[0] for row in db.query(Student.id).filter(Student.academic_year_id.is_(None)).all()
+    }
 
     created           = 0
     skipped_enrolled  = 0
@@ -167,9 +173,9 @@ def backfill_enrollments(db: Session) -> dict:
         "created":          created,
         "skipped":          skipped_enrolled,   # ← kept for API compat
         "skipped_enrolled": skipped_enrolled,
-        "skipped_no_class": null_class,
-        "skipped_no_year":  null_year,
-        "total":            len(students) + null_class + null_year,
+        "skipped_no_class": len(null_class_ids),
+        "skipped_no_year":  len(null_year_ids),
+        "total":            len(students) + len(null_class_ids | null_year_ids),
         "note": (
             "If created=0 and skipped_enrolled=N, all students already have "
             "enrollment rows (either from the initial migration or from a prior "

@@ -17,7 +17,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.models.base_models import Class, Exam, Student, Subject
+from app.models.base_models import Class, Enrollment, Exam, Student, Subject
 from app.routers.auth import (
     CurrentUser,
     ensure_class_access,
@@ -328,7 +328,12 @@ def bulk_save_marks(
             student = students_by_id[entry.student_id]
             exam = exams_by_id[entry.exam_id]
             subject = subjects_by_id[entry.subject_id]
-            if student.class_id != exam.class_id:
+            enrolled_for_exam = db.query(Enrollment.id).filter_by(
+                student_id=student.id,
+                class_id=exam.class_id,
+                academic_year_id=exam.academic_year_id,
+            ).first()
+            if student.class_id != exam.class_id and not enrolled_for_exam:
                 raise HTTPException(
                     status_code=422,
                     detail=f"Student {student.id} does not belong to exam class {exam.class_id}",

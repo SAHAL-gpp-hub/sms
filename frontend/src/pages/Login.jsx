@@ -1,7 +1,7 @@
 // Login.jsx — Redesigned: warm geometric brutalism meets Islamic pattern art
 // Concept: School in Gujarat → geometric tile motifs, warm saffron-teal palette,
 // bold editorial typography, asymmetric split layout.
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { authAPI, extractError } from '../services/api'
 import { normalizeAuthUser, setAuthUser, setToken } from '../services/auth'
@@ -66,18 +66,6 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading]           = useState(false)
   const [error, setError]               = useState(null)
-  const [mounted, setMounted]           = useState(false)
-  const [focusedField, setFocusedField] = useState(null)
-
-  useEffect(() => {
-    // Staggered mount animation
-    const t = setTimeout(() => setMounted(true), 50)
-    return () => clearTimeout(t)
-  }, [])
-
-  // In frontend/src/pages/Login.jsx
-// Replace the handleSubmit function's navigate call with this logic:
-
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)

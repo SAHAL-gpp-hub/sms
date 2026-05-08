@@ -52,13 +52,15 @@ def _get_accessible_student_fee(db: Session, user: CurrentUser, student_fee_id: 
 
 def verify_checkout_signature(order_id: str, payment_id: str, signature: str) -> None:
     _require_razorpay_config()
+    if not signature:
+        raise HTTPException(status_code=400, detail="Missing payment signature")
     payload = f"{order_id}|{payment_id}".encode()
     expected = hmac.new(
         settings.RAZORPAY_KEY_SECRET.encode(),
         payload,
         hashlib.sha256,
     ).hexdigest()
-    if not hmac.compare_digest(expected, signature):
+    if not hmac.compare_digest(expected, str(signature)):
         raise HTTPException(status_code=400, detail="Payment signature verification failed")
 
 
@@ -72,7 +74,7 @@ def verify_webhook_signature(body: bytes, signature: str | None) -> None:
         body,
         hashlib.sha256,
     ).hexdigest()
-    if not hmac.compare_digest(expected, signature):
+    if not hmac.compare_digest(expected, str(signature)):
         raise HTTPException(status_code=400, detail="Invalid webhook signature")
 
 

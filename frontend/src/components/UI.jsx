@@ -1,5 +1,4 @@
 // components/UI.jsx — Fully responsive shared UI primitives
-import { useState } from 'react'
 
 // ── Skeleton Loader ───────────────────────────────────────────────────────
 export function Skeleton({ width, height = '14px', borderRadius = '6px', style = {} }) {
@@ -167,6 +166,61 @@ export function PageHeader({ title, subtitle, actions, back }) {
           {actions}
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Page Shell ────────────────────────────────────────────────────────────
+export function PageShell({ eyebrow, title, subtitle, actions, children, className = '' }) {
+  return (
+    <div className={`page-shell ${className}`}>
+      {(eyebrow || title || subtitle || actions) && (
+        <div className="page-header">
+          <div style={{ minWidth: 0, flex: 1 }}>
+            {eyebrow && <div className="dashboard-kicker">{eyebrow}</div>}
+            {title && <h1 className="page-title">{title}</h1>}
+            {subtitle && <p className="page-subtitle">{subtitle}</p>}
+          </div>
+          {actions && <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>{actions}</div>}
+        </div>
+      )}
+      {children}
+    </div>
+  )
+}
+
+// ── Section Panel ────────────────────────────────────────────────────────
+export function SectionPanel({ title, subtitle, actions, children, className = '', bodyStyle = {} }) {
+  return (
+    <section className={`section-panel ${className}`}>
+      {(title || subtitle || actions) && (
+        <div className="section-panel-header">
+          <div style={{ minWidth: 0 }}>
+            {title && <div className="section-title">{title}</div>}
+            {subtitle && <div style={{ marginTop: '3px', fontSize: '12.5px', color: 'var(--text-tertiary)' }}>{subtitle}</div>}
+          </div>
+          {actions && <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>{actions}</div>}
+        </div>
+      )}
+      <div className="section-panel-body" style={bodyStyle}>{children}</div>
+    </section>
+  )
+}
+
+// ── Metric Card ──────────────────────────────────────────────────────────
+export function MetricCard({ label, value, sub, color = 'var(--brand-600)', icon, loading }) {
+  return (
+    <div className="metric-card" style={{ '--metric-color': color }}>
+      <div className="metric-card-top">
+        <div style={{ minWidth: 0 }}>
+          <div className="metric-label">{label}</div>
+          <div className="metric-value" style={{ color }}>
+            {loading ? <Skeleton height="30px" width="96px" /> : value}
+          </div>
+          {sub && <div className="metric-sub">{loading ? <Skeleton height="12px" width="82px" /> : sub}</div>}
+        </div>
+        {icon && <div className="metric-icon">{icon}</div>}
+      </div>
     </div>
   )
 }
@@ -344,9 +398,62 @@ export function TabBar({ tabs, active, onChange }) {
 // ── Filter Row ────────────────────────────────────────────────────────────
 export function FilterRow({ children }) {
   return (
-    <div className="card" style={{ padding: '14px 16px', marginBottom: '14px' }}>
-      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+    <div className="data-toolbar">
+      <div className="filter-row-inner">
         {children}
+      </div>
+    </div>
+  )
+}
+
+// ── Data Toolbar ─────────────────────────────────────────────────────────
+export function DataToolbar({ children }) {
+  return (
+    <div className="data-toolbar">
+      <div className="data-toolbar-inner">{children}</div>
+    </div>
+  )
+}
+
+// ── Action Grid ──────────────────────────────────────────────────────────
+export function ActionGrid({ actions }) {
+  return (
+    <div className="action-grid">
+      {actions.map(action => {
+        const Comp = action.to ? 'a' : 'button'
+        const props = action.to ? { href: action.to } : { type: 'button', onClick: action.onClick }
+        return (
+          <Comp key={action.label} className="action-tile" style={{ '--action-color': action.color || 'var(--brand-600)' }} {...props}>
+            {action.icon && <span className="action-tile-icon">{action.icon}</span>}
+            <span className="action-tile-label">{action.label}</span>
+          </Comp>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Responsive Table ─────────────────────────────────────────────────────
+export function ResponsiveTable({ children, className = '' }) {
+  return (
+    <div className="table-scroll-wrapper scroll-shadow-right">
+      <table className={`data-table data-table-responsive ${className}`}>{children}</table>
+    </div>
+  )
+}
+
+// ── Mobile Sheet ─────────────────────────────────────────────────────────
+export function MobileSheet({ open, title, children, onClose }) {
+  if (!open) return null
+  return (
+    <div className="mobile-sheet-layer">
+      <button className="sidebar-backdrop" onClick={onClose} aria-label="Close" />
+      <div className="mobile-sheet">
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}>
+          <div style={{ width: 38, height: 4, background: 'var(--gray-200)', borderRadius: 999 }} />
+        </div>
+        {title && <div className="section-panel-header"><div className="section-title">{title}</div></div>}
+        <div className="section-panel-body">{children}</div>
       </div>
     </div>
   )

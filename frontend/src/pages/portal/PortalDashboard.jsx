@@ -1,7 +1,7 @@
 // frontend/src/pages/portal/PortalDashboard.jsx
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { usePortalContext } from '../../layouts/PortalLayout'
+import { usePortalContext } from '../../layouts/portalContext'
 import { portalAPI } from '../../services/api'
 
 const fmt = (n) =>
@@ -66,26 +66,30 @@ export default function PortalDashboard() {
 
   // Re-fetch whenever active child changes
   useEffect(() => {
-    setLoading(true)
-    setResults(null); setAttendance(null); setFees(null)
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      setResults(null); setAttendance(null); setFees(null)
 
-    const sid = isParent ? selectedChildId : null
+      const sid = isParent ? selectedChildId : null
+      if (isParent && !selectedChildId) {
+        setLoading(false)
+        return
+      }
 
-    if (isParent && !selectedChildId) {
-      setLoading(false)
-      return
-    }
-
-    Promise.allSettled([
-      isParent ? portalAPI.getChildResults(sid)   : portalAPI.getResults(),
-      isParent ? portalAPI.getAttendanceSummary(sid) : portalAPI.getAttendanceSummary(),
-      isParent ? portalAPI.getChildFees(sid)      : portalAPI.getFees(),
-    ]).then(([resR, attR, feeR]) => {
+      const [resR, attR, feeR] = await Promise.allSettled([
+        isParent ? portalAPI.getChildResults(sid)   : portalAPI.getResults(),
+        isParent ? portalAPI.getAttendanceSummary(sid) : portalAPI.getAttendanceSummary(),
+        isParent ? portalAPI.getChildFees(sid)      : portalAPI.getFees(),
+      ])
+      if (cancelled) return
       if (resR.status === 'fulfilled') setResults(resR.value.data)
       if (attR.status === 'fulfilled') setAttendance(attR.value.data)
       if (feeR.status === 'fulfilled') setFees(feeR.value.data)
       setLoading(false)
-    })
+    }
+    load()
+    return () => { cancelled = true }
   }, [isParent, selectedChildId])
 
   const latestExam  = Array.isArray(results) ? results[0] : null

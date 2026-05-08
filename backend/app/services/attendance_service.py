@@ -18,11 +18,11 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.base_models import (
-    Attendance, AcademicYear, Class, FeePayment, FeeStructure,
+    Attendance, AcademicYear, Class, Enrollment, FeePayment, FeeStructure,
     Student, StudentFee, StudentStatusEnum,
 )
 from app.schemas.attendance import AttendanceEntry
-from app.services.calendar_service import count_working_days_for_month
+from app.services.calendar_service import count_working_days, count_working_days_for_month
 from app.core.config import settings
 
 
@@ -80,28 +80,46 @@ def get_monthly_summary(db: Session, class_id: int, year: int, month: int) -> li
     FIXED: Uses calendar-aware working day count.
     Falls back to Sunday-exclusion if no academic_year_id can be determined.
     """
-    students = (
-        db.query(Student)
-        .filter_by(class_id=class_id)
-        .filter(Student.status == StudentStatusEnum.Active)
-        .all()
-    )
-
     # Determine academic_year_id from the class
     cls = db.query(Class).filter_by(id=class_id).first()
     academic_year_id = cls.academic_year_id if cls else None
-
-    # FIXED: calendar-aware working day count
-    working_days = count_working_days_for_month(db, academic_year_id, year, month)
 
     _, days_in_month = monthrange(year, month)
     month_start = date(year, month, 1)
     month_end   = date(year, month, days_in_month)
 
+    enrollments = []
+    if academic_year_id:
+        enrollments = (
+            db.query(Enrollment)
+            .filter(
+                Enrollment.class_id == class_id,
+                Enrollment.academic_year_id == academic_year_id,
+                Enrollment.status.in_(["active", "retained", "provisional"]),
+                Enrollment.enrolled_on <= month_end,
+            )
+            .all()
+        )
+
+    if enrollments:
+        student_ids = [e.student_id for e in enrollments]
+        students = db.query(Student).filter(Student.id.in_(student_ids)).all()
+        enrollment_by_student = {e.student_id: e for e in enrollments}
+    else:
+        students = (
+            db.query(Student)
+            .filter_by(class_id=class_id)
+            .filter(Student.status == StudentStatusEnum.Active)
+            .all()
+        )
+        enrollment_by_student = {}
+        student_ids = [s.id for s in students]
+
     all_records = db.query(Attendance).filter(
         Attendance.class_id == class_id,
         Attendance.date     >= month_start,
         Attendance.date     <= month_end,
+        Attendance.student_id.in_(student_ids) if student_ids else False,
     ).all()
 
     att_by_student: dict[int, dict] = {}
@@ -110,6 +128,9 @@ def get_monthly_summary(db: Session, class_id: int, year: int, month: int) -> li
 
     results = []
     for student in students:
+        enrollment = enrollment_by_student.get(student.id)
+        working_from = max(month_start, enrollment.enrolled_on) if enrollment else month_start
+        working_days = count_working_days(db, academic_year_id, working_from, month_end)
         status_map  = att_by_student.get(student.id, {})
         present     = sum(1 for s in status_map.values() if s == "P")
         absent      = sum(1 for s in status_map.values() if s == "A")

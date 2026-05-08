@@ -164,7 +164,7 @@ def get_current_user(
         raise credentials_exception
 
     # STEP 4.7: Reject tokens whose jti has been revoked (logged out).
-    if jti and db.query(TokenBlocklist).filter_by(jti=jti).first():
+    if jti and db.query(TokenBlocklist.id).filter_by(jti=jti).first():
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has been revoked. Please log in again.",
@@ -281,6 +281,7 @@ def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     db.query(TokenBlocklist).filter(TokenBlocklist.expires_at < datetime.now(timezone.utc)).delete()
+    db.commit()
 
     token = create_access_token(
         subject=user.id,

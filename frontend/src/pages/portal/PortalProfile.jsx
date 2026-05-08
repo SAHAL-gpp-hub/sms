@@ -1,6 +1,6 @@
 // frontend/src/pages/portal/PortalProfile.jsx
 import { useState, useEffect } from 'react'
-import { usePortalContext } from '../../layouts/PortalLayout'
+import { usePortalContext } from '../../layouts/portalContext'
 import { portalAPI } from '../../services/api'
 import { getAuthUser } from '../../services/auth'
 
