@@ -22,8 +22,6 @@ function ActivationShell({ children }) {
   return (
     <div className="activation-root">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600;700;800&display=swap');
-
         .activation-root {
           min-height: 100vh;
           display: flex;
@@ -310,7 +308,7 @@ function ActivationShell({ children }) {
         </div>
         <div className="activation-hero">
           <div className="activation-hero-eyebrow">Portal Access</div>
-          <h2 className="activation-hero-title">Student & parent onboarding</h2>
+          <h2 className="activation-hero-title">Student & Parent Onboarding</h2>
           <p className="activation-hero-desc">Activate your school portal account securely and continue to attendance, fees and results.</p>
         </div>
         <div className="activation-stats">
