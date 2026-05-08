@@ -250,8 +250,6 @@ export default function PortalLayout() {
   return (
     <PortalContext.Provider value={ctxValue}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap');
-
         .portal-root  {
           font-family:var(--font-sans);
           background:
@@ -260,14 +258,94 @@ export default function PortalLayout() {
           min-height:100vh;
           display:flex;
           justify-content:center;
+          align-items:stretch;
         }
         .portal-shell {
           width:100%;
-          max-width:520px;
+          max-width:640px;
           min-height:100vh;
           display:flex;
           flex-direction:column;
           background:transparent;
+        }
+        .portal-sidebar { display:none; }
+        .portal-sidebar-header {
+          padding: 24px 22px 16px;
+          border-bottom: 1px solid #ecf2f8;
+        }
+        .portal-sidebar-brand {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          min-width: 0;
+        }
+        .portal-sidebar-logo {
+          width: 40px;
+          height: 40px;
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          background: linear-gradient(135deg,#0d7377,#0f766e);
+          box-shadow: 0 8px 24px rgba(13,115,119,0.34);
+          flex-shrink: 0;
+        }
+        .portal-sidebar-title {
+          font-size: 14px;
+          font-weight: 900;
+          color: #0f172a;
+          letter-spacing: -0.02em;
+          line-height: 1.15;
+        }
+        .portal-sidebar-sub {
+          font-size: 11px;
+          color: #64748b;
+          font-weight: 600;
+          margin-top: 2px;
+        }
+        .portal-sidebar-nav {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          padding: 14px 12px;
+        }
+        .portal-sidebar-nav-item {
+          display: flex;
+          align-items: center;
+          gap: 11px;
+          min-height: 46px;
+          border-radius: 12px;
+          padding: 0 12px;
+          text-decoration: none;
+          font-size: 13px;
+          font-weight: 800;
+          border: 1px solid transparent;
+          transition: all 0.16s;
+        }
+        .portal-sidebar-nav-active {
+          color: #0f766e;
+          background: #e6f4f2;
+          border-color: #bde4df;
+          box-shadow: inset 0 0 0 1px rgba(13,115,119,0.08);
+        }
+        .portal-sidebar-nav-inactive {
+          color: #64748b;
+          background: transparent;
+        }
+        .portal-sidebar-nav-inactive:hover {
+          color: #0f172a;
+          background: #f8fafc;
+          border-color: #e2e8f0;
+        }
+        .portal-sidebar-footer {
+          margin-top: auto;
+          padding: 14px 16px 18px;
+          border-top: 1px solid #ecf2f8;
+          font-size: 11px;
+          color: #64748b;
+          line-height: 1.5;
+          font-weight: 600;
         }
 
         .portal-header {
@@ -350,11 +428,108 @@ export default function PortalLayout() {
           box-shadow:var(--shadow-card);
         }
 
-        @media (min-width:521px) { .portal-shell { box-shadow:0 0 44px rgba(15,23,42,0.12); } }
+        @media (min-width:521px) {
+          .portal-shell { box-shadow:0 0 44px rgba(15,23,42,0.12); }
+        }
+        @media (min-width:900px) {
+          .portal-root { padding: 18px; }
+          .portal-shell {
+            max-width: 1340px;
+            min-height: calc(100vh - 36px);
+            border-radius: 28px;
+            overflow: hidden;
+            background: rgba(255,255,255,0.72);
+            border: 1px solid rgba(203,213,225,0.72);
+            display: grid;
+            grid-template-columns: 282px minmax(0, 1fr);
+            grid-template-rows: auto auto minmax(0, 1fr);
+            grid-template-areas:
+              "sidebar header"
+              "sidebar strip"
+              "sidebar main";
+            box-shadow:
+              0 28px 60px rgba(15,23,42,0.12),
+              0 6px 22px rgba(15,23,42,0.07);
+          }
+          .portal-sidebar {
+            grid-area: sidebar;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #e2e8f0;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            min-height: 100%;
+          }
+          .portal-header {
+            grid-area: header;
+            top: 0;
+            padding: 18px 24px 14px;
+            gap: 14px;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+          }
+          .portal-logo { width: 42px; height: 42px; border-radius: 13px; }
+          .portal-header-text h1 { font-size: 18px; }
+          .portal-header-text p { font-size: 12px; margin-top: 2px; }
+          .portal-icon-btn { width: 38px; height: 38px; border-radius: 12px; }
+          .portal-active-strip {
+            grid-area: strip;
+            padding: 10px 24px;
+            border-bottom: 1px solid rgba(203,213,225,0.64);
+          }
+          .portal-main {
+            grid-area: main;
+            padding: 24px 26px 30px;
+          }
+          .portal-main > * {
+            max-width: 980px;
+          }
+          .portal-bottom-nav {
+            display: none;
+          }
+        }
       `}</style>
 
       <div className="portal-root">
         <div className="portal-shell">
+          <aside className="portal-sidebar">
+            <div className="portal-sidebar-header">
+              <div className="portal-sidebar-brand">
+                <div className="portal-sidebar-logo">
+                  <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
+                      d="M12 14l9-5-9-5-9 5 9 5z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
+                      d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+                  </svg>
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div className="portal-sidebar-title">Student & Parent Portal</div>
+                  <div className="portal-sidebar-sub">Iqra English Medium School</div>
+                </div>
+              </div>
+            </div>
+            <nav className="portal-sidebar-nav">
+              {NAV_ITEMS.map(item => (
+                <NavLink
+                  key={`side-${item.to}`}
+                  to={item.to}
+                  end={item.end}
+                  className={({ isActive }) =>
+                    `portal-sidebar-nav-item ${isActive ? 'portal-sidebar-nav-active' : 'portal-sidebar-nav-inactive'}`
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      {item.icon(isActive)}
+                      <span>{item.label}</span>
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </nav>
+            <div className="portal-sidebar-footer">
+              Optimized for mobile, tablet, and desktop workflows.
+            </div>
+          </aside>
 
           {/* ── Header ── */}
           <header className="portal-header">

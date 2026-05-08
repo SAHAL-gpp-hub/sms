@@ -637,8 +637,6 @@ export default function Login() {
                       className="field-input"
                       value={email}
                       onChange={e => setEmail(e.target.value)}
-                      onFocus={() => setFocusedField('email')}
-                      onBlur={() => setFocusedField(null)}
                       placeholder="admin@iqraschool.in"
                       required
                       autoFocus
@@ -663,8 +661,6 @@ export default function Login() {
                       className="field-input"
                       value={password}
                       onChange={e => setPassword(e.target.value)}
-                      onFocus={() => setFocusedField('password')}
-                      onBlur={() => setFocusedField(null)}
                       placeholder="••••••••"
                       required
                       autoComplete="current-password"
