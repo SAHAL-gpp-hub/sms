@@ -46,20 +46,12 @@ from app.models.base_models import (
     EnrollmentStatusEnum, Exam, FeePayment, FeeStructure, Mark, Student,
     StudentFee, StudentStatusEnum, Subject, TransferCertificate, YearStatusEnum,
 )
+from app.core.constants import CLASS_ORDER, PROMOTION_LOCK_KEY, RECEIPT_NUMBER_LOCK_KEY, TC_NUMBER_LOCK_KEY
 from app.services.marks_service import GSEB_SUBJECTS, get_class_results
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Constants
 # ─────────────────────────────────────────────────────────────────────────────
-
-TC_NUMBER_LOCK_KEY      = 202426
-RECEIPT_NUMBER_LOCK_KEY = 202422
-PROMOTION_LOCK_KEY      = 202430   # distinct key for promotion serialisation
-
-CLASS_ORDER = [
-    "Nursery", "LKG", "UKG",
-    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
-]
 
 PASSING_PERCENTAGE = Decimal("33.00")   # default GSEB passing threshold
 PROMOTION_ACTIONS = {"promoted", "retained", "graduated", "transferred", "dropped", "on_hold"}

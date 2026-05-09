@@ -28,6 +28,7 @@ from typing import Optional
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.constants import RECEIPT_NUMBER_LOCK_KEY
 from app.models.base_models import (
     Class, FeeHead, FeePayment, FeeStructure, Student, StudentFee, StudentStatusEnum,
 )
@@ -38,12 +39,6 @@ from app.schemas.fee import (
 
 logger = logging.getLogger("sms.fees")
 
-
-# Advisory lock key for receipt number generation (pg_advisory_xact_lock).
-# This constant serialises concurrent payment submissions so two requests
-# never read the same MAX(id) and generate the same receipt number.
-# Must be different from TC_NUMBER_LOCK_KEY in yearend_service.py.
-RECEIPT_NUMBER_LOCK_KEY = 202422
 
 PRELOADED_FEE_HEADS = [
     {"name": "Tuition Fee",       "frequency": "Monthly"},

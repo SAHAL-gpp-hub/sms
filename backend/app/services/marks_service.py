@@ -24,6 +24,7 @@ from app.models.base_models import (
     Subject, Exam, Mark, Student, Class, StudentStatusEnum, Enrollment,
     ExamSubjectConfig,
 )
+from app.core.constants import CLASS_ORDER
 from app.schemas.marks import (
     SubjectCreate, SubjectUpdate, ExamCreate, MarkEntry,
     ExamSubjectConfigCreate,
@@ -61,9 +62,6 @@ GSEB_SUBJECTS = {
 }
 
 EXAM_TYPES  = ["Unit Test 1", "Unit Test 2", "Half-Yearly", "Annual", "Practical"]
-CLASS_ORDER = ["Nursery", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-
-
 def get_grade(percentage: Decimal):
     pct = float(percentage)
     if pct > 100.0:
