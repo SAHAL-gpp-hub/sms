@@ -1287,7 +1287,7 @@ def issue_tc(db: Session, student_id: int, reason: str = "Parent's Request") -> 
         try:
             db.execute(text(f"SELECT pg_advisory_xact_lock({TC_NUMBER_LOCK_KEY})"))
             seq_val = db.execute(text("SELECT nextval('tc_number_seq')")).scalar()
-        except Exception:
+        except (OperationalError, ProgrammingError):
             seq_val = (db.query(func.max(TransferCertificate.id)).scalar() or 0) + 1
         db.add(TransferCertificate(
             tc_number=f"TC-{date.today().year}-{int(seq_val):04d}",
@@ -1316,7 +1316,7 @@ def _ensure_tc_certificate(
     try:
         db.execute(text(f"SELECT pg_advisory_xact_lock({TC_NUMBER_LOCK_KEY})"))
         seq_val = db.execute(text("SELECT nextval('tc_number_seq')")).scalar()
-    except Exception:
+    except (OperationalError, ProgrammingError):
         seq_val = (db.query(func.max(TransferCertificate.id)).scalar() or 0) + 1
 
     cert = TransferCertificate(
