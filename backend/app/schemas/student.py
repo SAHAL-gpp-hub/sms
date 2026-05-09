@@ -18,14 +18,7 @@ FIXES:
 from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
 from datetime import date
-from enum import Enum
-from app.models.base_models import StudentStatusEnum
-
-
-class GenderEnum(str, Enum):
-    M     = "M"
-    F     = "F"
-    Other = "Other"
+from app.models.base_models import GenderEnum, StudentStatusEnum
 
 
 class StudentCreate(BaseModel):
@@ -206,8 +199,14 @@ class StudentOut(BaseModel):
     guardian_phone:   Optional[str]
     address:          Optional[str]
     category:         Optional[str]
+    aadhar_last4:     Optional[str]
     admission_date:   date
     academic_year_id: int
     status:           StudentStatusEnum
+    photo_path:       Optional[str] = None
+    reason_for_leaving: Optional[str] = None
+    previous_school:  Optional[str] = None
+    student_user_id:  Optional[int] = None
+    parent_user_id:   Optional[int] = None
 
     model_config = {"from_attributes": True}

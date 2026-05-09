@@ -1,7 +1,7 @@
 // frontend/src/pages/admin/UserManagement.jsx — Full rebuild
 // Tabs: Users list | Teacher Assignments | Portal Linking
 import { useEffect, useState, useCallback } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { adminAPI, setupAPI, studentAPI, extractError } from '../../services/api'
 import {
@@ -82,7 +82,6 @@ function PasswordResetModal({ user, onClose, onSuccess }) {
 // TAB 1 — Users List
 // ══════════════════════════════════════════════════════════════════════════════
 function UsersTab() {
-  const navigate = useNavigate()
   const [users, setUsers]             = useState([])
   const [loading, setLoading]         = useState(true)
   const [roleFilter, setRoleFilter]   = useState('')
@@ -510,7 +509,7 @@ function PortalLinkingTab() {
   const [bulkResult, setBulkResult]     = useState(null)
   const [generatingFor, setGeneratingFor] = useState(null)
 
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     setLoading(true)
     try {
       const [portalRes, studRes] = await Promise.all([
@@ -524,24 +523,24 @@ function PortalLinkingTab() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const fetchLinkStatus = async () => {
+  const fetchLinkStatus = useCallback(async () => {
     setStatusLoading(true)
     try {
       const res = await adminAPI.getLinkStatus()
       setLinkStatus(res.data)
-    } catch (err) {
+    } catch {
       toast.error('Failed to load link status')
     } finally {
       setStatusLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     fetchAll()
     fetchLinkStatus()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fetchAll, fetchLinkStatus])
 
   const handleLink = async () => {
     if (!form.user_id)    { toast.error('Select a portal account'); return }

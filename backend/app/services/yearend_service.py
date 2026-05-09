@@ -46,20 +46,12 @@ from app.models.base_models import (
     EnrollmentStatusEnum, Exam, FeePayment, FeeStructure, Mark, Student,
     StudentFee, StudentStatusEnum, Subject, TransferCertificate, YearStatusEnum,
 )
+from app.core.constants import CLASS_ORDER, PROMOTION_LOCK_KEY, RECEIPT_NUMBER_LOCK_KEY, TC_NUMBER_LOCK_KEY
 from app.services.marks_service import GSEB_SUBJECTS, get_class_results
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Constants
 # ─────────────────────────────────────────────────────────────────────────────
-
-TC_NUMBER_LOCK_KEY      = 202426
-RECEIPT_NUMBER_LOCK_KEY = 202422
-PROMOTION_LOCK_KEY      = 202430   # distinct key for promotion serialisation
-
-CLASS_ORDER = [
-    "Nursery", "LKG", "UKG",
-    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
-]
 
 PASSING_PERCENTAGE = Decimal("33.00")   # default GSEB passing threshold
 PROMOTION_ACTIONS = {"promoted", "retained", "graduated", "transferred", "dropped", "on_hold"}
@@ -1295,7 +1287,7 @@ def issue_tc(db: Session, student_id: int, reason: str = "Parent's Request") -> 
         try:
             db.execute(text(f"SELECT pg_advisory_xact_lock({TC_NUMBER_LOCK_KEY})"))
             seq_val = db.execute(text("SELECT nextval('tc_number_seq')")).scalar()
-        except Exception:
+        except (OperationalError, ProgrammingError):
             seq_val = (db.query(func.max(TransferCertificate.id)).scalar() or 0) + 1
         db.add(TransferCertificate(
             tc_number=f"TC-{date.today().year}-{int(seq_val):04d}",
@@ -1311,6 +1303,43 @@ def issue_tc(db: Session, student_id: int, reason: str = "Parent's Request") -> 
     return student
 
 
+def _ensure_tc_certificate(
+    db: Session,
+    student_id: int,
+    reason: Optional[str] = None,
+    conduct: Optional[str] = None,
+) -> TransferCertificate:
+    """
+    Return an existing TransferCertificate for a student or create one atomically.
+
+    Uses a DB advisory lock + sequence when available, with an ID-based fallback
+    for local/test setups. Persists and commits newly created certificates.
+    """
+    cert = db.query(TransferCertificate).filter_by(student_id=student_id).first()
+    if cert:
+        return cert
+
+    try:
+        db.execute(text(f"SELECT pg_advisory_xact_lock({TC_NUMBER_LOCK_KEY})"))
+        seq_val = db.execute(text("SELECT nextval('tc_number_seq')")).scalar()
+    except (OperationalError, ProgrammingError):
+        seq_val = (db.query(func.max(TransferCertificate.id)).scalar() or 0) + 1
+
+    resolved_reason = reason or "Parent's Request"
+    resolved_conduct = conduct or "Good"
+
+    cert = TransferCertificate(
+        tc_number=f"TC-{date.today().year}-{int(seq_val):04d}",
+        student_id=student_id,
+        reason=resolved_reason,
+        conduct=resolved_conduct,
+    )
+    db.add(cert)
+    db.commit()
+    db.refresh(cert)
+    return cert
+
+
 def get_tc_data(db: Session, student_id: int, reason: str, conduct: str) -> Optional[dict]:
     student = db.query(Student).filter(Student.id == student_id).first()
     if not student:
@@ -1319,9 +1348,12 @@ def get_tc_data(db: Session, student_id: int, reason: str, conduct: str) -> Opti
     cls  = db.query(Class).filter_by(id=student.class_id).first()
     year = db.query(AcademicYear).filter_by(id=student.academic_year_id).first()
 
-    cert = db.query(TransferCertificate).filter_by(student_id=student_id).first()
-    if not cert:
-        return None
+    cert = _ensure_tc_certificate(
+        db,
+        student_id,
+        reason=reason,
+        conduct=conduct,
+    )
     tc_number = cert.tc_number
 
     def fmt(d):

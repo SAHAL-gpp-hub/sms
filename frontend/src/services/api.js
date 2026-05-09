@@ -273,7 +273,6 @@ export const yearendAPI = {
     api.post(`/yearend/activate/${yearId}`, { skip_validation: skipValidation }),
   getCurrentYear: ()        => api.get('/yearend/current-year'),
   getYears:       ()        => api.get('/yearend/years'),
-  getAllYears:     ()        => api.get('/yearend/years'),
 
   validatePromotion: (classId, newYearId) =>
     api.get(`/yearend/promote/${classId}/validate`, {
