@@ -383,7 +383,7 @@ def get_defaulters(
         db.query(
             StudentFee.student_id.label("student_id"),
             func.coalesce(func.sum(StudentFee.net_amount), 0).label("total_due"),
-            func.coalesce(func.sum(func.coalesce(payment_totals.c.total_paid, 0)), 0).label("total_paid"),
+            func.sum(func.coalesce(payment_totals.c.total_paid, 0)).label("total_paid"),
         )
         .join(FeeStructure, StudentFee.fee_structure_id == FeeStructure.id, isouter=True)
         .outerjoin(payment_totals, payment_totals.c.student_fee_id == StudentFee.id)
