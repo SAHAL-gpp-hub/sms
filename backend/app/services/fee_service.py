@@ -369,29 +369,51 @@ def get_defaulters(
     Returns students with outstanding fee balance, using a single SQL query
     with GROUP BY instead of a Python loop with one query per student.
     """
+    payment_totals = (
+        db.query(
+            FeePayment.student_fee_id.label("student_fee_id"),
+            func.coalesce(func.sum(FeePayment.amount_paid), 0).label("total_paid"),
+        )
+        .group_by(FeePayment.student_fee_id)
+        .subquery()
+    )
+
+    fee_year = func.coalesce(StudentFee.academic_year_id, FeeStructure.academic_year_id)
+    fee_totals = (
+        db.query(
+            StudentFee.student_id.label("student_id"),
+            func.coalesce(func.sum(StudentFee.net_amount), 0).label("total_due"),
+            func.sum(func.coalesce(payment_totals.c.total_paid, 0)).label("total_paid"),
+        )
+        .join(FeeStructure, StudentFee.fee_structure_id == FeeStructure.id, isouter=True)
+        .outerjoin(payment_totals, payment_totals.c.student_fee_id == StudentFee.id)
+    )
+
+    if academic_year_id is not None:
+        fee_totals = fee_totals.filter(fee_year == academic_year_id)
+    else:
+        fee_totals = (
+            fee_totals
+            .join(Student, Student.id == StudentFee.student_id)
+            .filter(fee_year == Student.academic_year_id)
+        )
+
+    fee_totals = fee_totals.group_by(StudentFee.student_id).subquery()
+
     q = (
         db.query(
             Student,
             Class.name.label("class_name"),
-            func.coalesce(func.sum(StudentFee.net_amount), 0).label("total_due"),
-            func.coalesce(func.sum(FeePayment.amount_paid), 0).label("total_paid"),
+            fee_totals.c.total_due,
+            fee_totals.c.total_paid,
         )
+        .join(fee_totals, fee_totals.c.student_id == Student.id)
         .outerjoin(Class, Class.id == Student.class_id)
-        .join(StudentFee, StudentFee.student_id == Student.id, isouter=True)
-        .join(FeeStructure, StudentFee.fee_structure_id == FeeStructure.id, isouter=True)
-        .outerjoin(FeePayment, FeePayment.student_fee_id == StudentFee.id)
         .filter(Student.status == StudentStatusEnum.Active)
     )
 
-    if academic_year_id is not None:
-        q = q.filter(FeeStructure.academic_year_id == academic_year_id)
-    else:
-        q = q.filter(FeeStructure.academic_year_id == Student.academic_year_id)
-
     if class_id is not None:
         q = q.filter(Student.class_id == class_id)
-
-    q = q.group_by(Student.id)
 
     defaulters = []
     for student, class_name, total_due, total_paid in q.all():
