@@ -116,43 +116,44 @@ def _create_enrollment_for_student(db: Session, student: Student) -> None:
     # Note: caller is responsible for db.commit() — we only add to session here
 
 
-def create_student(db: Session, data: StudentCreate) -> Student:
+def _persist_student(
+    db: Session,
+    payload: dict,
+    *,
+    student_id_override: Optional[str] = None,
+    auto_commit: bool = True,
+) -> Student:
     """
-    Creates a student record AND an enrollment record for the current year.
-
-    ID generation is race-proof via advisory locking.
+    Creates a student row and its enrollment, optionally preserving an imported
+    legacy student_id. When auto_commit is False the caller owns the enclosing
+    transaction and any error aborts the whole unit of work.
     """
-    year    = data.admission_date.year
-    payload = data.model_dump()
+    year = payload["admission_date"].year
+    candidate_student_id = student_id_override or generate_student_id(db, year)
 
-    student_id = generate_student_id(db, year)
-    student    = Student(student_id=student_id, **payload)
-    db.add(student)
+    def _insert(student_id: str) -> Student:
+        student = Student(student_id=student_id, **payload)
+        db.add(student)
+        db.flush()
+        _create_enrollment_for_student(db, student)
+        if auto_commit:
+            db.commit()
+            db.refresh(student)
+        return student
 
     try:
-        db.flush()  # assign student.id without committing
-        # FIX: auto-create enrollment so the student appears in all year-scoped queries
-        _create_enrollment_for_student(db, student)
-        db.commit()
-        db.refresh(student)
-        return student
+        return _insert(candidate_student_id)
     except IntegrityError as exc:
-        db.rollback()
+        if auto_commit:
+            db.rollback()
         err_str = str(exc.orig).lower()
-
-        # Retry once — only for student_id collisions
-        if "student_id" in err_str and ("unique" in err_str or "duplicate" in err_str):
-            student_id = generate_student_id(db, year)
-            student    = Student(student_id=student_id, **payload)
-            db.add(student)
+        if not student_id_override and "student_id" in err_str and ("unique" in err_str or "duplicate" in err_str):
+            retry_student_id = generate_student_id(db, year)
             try:
-                db.flush()
-                _create_enrollment_for_student(db, student)
-                db.commit()
-                db.refresh(student)
-                return student
+                return _insert(retry_student_id)
             except IntegrityError as exc2:
-                db.rollback()
+                if auto_commit:
+                    db.rollback()
                 raise HTTPException(
                     status_code=500,
                     detail=(
@@ -160,8 +161,34 @@ def create_student(db: Session, data: StudentCreate) -> Student:
                         f"locking. Last error: {exc2.orig}"
                     ),
                 ) from exc2
-
         raise HTTPException(status_code=400, detail=str(exc.orig)) from exc
+
+
+def create_student(db: Session, data: StudentCreate) -> Student:
+    """
+    Creates a student record AND an enrollment record for the current year.
+
+    ID generation is race-proof via advisory locking.
+    """
+    return _persist_student(db, data.model_dump())
+
+
+def create_student_from_import(
+    db: Session,
+    data: StudentCreate,
+    *,
+    student_id_override: Optional[str] = None,
+    previous_school: Optional[str] = None,
+    auto_commit: bool = False,
+) -> Student:
+    payload = data.model_dump()
+    payload["previous_school"] = previous_school
+    return _persist_student(
+        db,
+        payload,
+        student_id_override=student_id_override,
+        auto_commit=auto_commit,
+    )
 
 
 def get_students(

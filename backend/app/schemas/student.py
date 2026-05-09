@@ -42,6 +42,7 @@ class StudentCreate(BaseModel):
     aadhar_last4:     Optional[str]  = None
     admission_date:   date
     academic_year_id: int
+    previous_school:  Optional[str]  = None
 
     @field_validator("contact")
     @classmethod
@@ -122,6 +123,7 @@ class StudentUpdate(BaseModel):
     # silently ignored (the field values were excluded from model_dump).
     aadhar_last4:    Optional[str]  = None
     admission_date:  Optional[date] = None
+    previous_school: Optional[str]  = None
 
     @field_validator("contact")
     @classmethod

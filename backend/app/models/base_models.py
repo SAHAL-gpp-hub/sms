@@ -89,6 +89,11 @@ class AuditOperationEnum(str, enum.Enum):
     student_activation_failed = "student_activation_failed"
 
 
+class ImportStatusEnum(str, enum.Enum):
+    completed = "completed"
+    rolled_back = "rolled_back"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Reference / Setup Tables
 # ─────────────────────────────────────────────────────────────────────────────
@@ -240,6 +245,47 @@ class Student(Base):
     # Relationships
     enrollments = relationship("Enrollment", back_populates="student",
                                order_by="Enrollment.academic_year_id")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Import Audit
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ImportBatch(Base):
+    __tablename__ = "import_batches"
+
+    id                 = Column(Integer, primary_key=True)
+    entity_type        = Column(String(32), nullable=False, index=True)
+    file_name          = Column(String(255), nullable=False)
+    file_format        = Column(String(16), nullable=False)
+    merge_mode         = Column(String(32), nullable=False, default="skip_duplicates")
+    status             = Column(Enum(ImportStatusEnum), nullable=False, default=ImportStatusEnum.completed, index=True)
+    total_rows         = Column(Integer, nullable=False, default=0)
+    imported_rows      = Column(Integer, nullable=False, default=0)
+    skipped_rows       = Column(Integer, nullable=False, default=0)
+    error_rows         = Column(Integer, nullable=False, default=0)
+    summary            = Column(JSON, nullable=True)
+    rollback_summary   = Column(JSON, nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at         = Column(DateTime(timezone=True), server_default=func.now())
+    rolled_back_at     = Column(DateTime(timezone=True), nullable=True)
+
+    created_by = relationship("User")
+    items = relationship("ImportBatchItem", back_populates="batch", cascade="all, delete-orphan")
+
+
+class ImportBatchItem(Base):
+    __tablename__ = "import_batch_items"
+
+    id              = Column(Integer, primary_key=True)
+    import_batch_id = Column(Integer, ForeignKey("import_batches.id", ondelete="CASCADE"), nullable=False, index=True)
+    entity_type     = Column(String(32), nullable=False, index=True)
+    entity_id       = Column(Integer, nullable=True)
+    action          = Column(String(32), nullable=False)
+    payload         = Column(JSON, nullable=True)
+    created_at      = Column(DateTime(timezone=True), server_default=func.now())
+
+    batch = relationship("ImportBatch", back_populates="items")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

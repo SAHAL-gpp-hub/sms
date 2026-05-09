@@ -197,6 +197,38 @@ export const studentAPI = {
   getTc: (id, params)  => openProtectedPdf(`/students/${id}/tc`, params, `TC_${id}.pdf`),
 }
 
+async function downloadBlob(path, fileName) {
+  const res = await api.get(path, { responseType: 'blob' })
+  const blobUrl = window.URL.createObjectURL(new Blob([res.data]))
+  const link = document.createElement('a')
+  link.href = blobUrl
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(blobUrl)
+}
+
+function buildImportForm(file, options = {}) {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('create_missing_classes', String(Boolean(options.createMissingClasses)))
+  return form
+}
+
+export const studentImportAPI = {
+  downloadTemplate: () => downloadBlob('/imports/students/template', 'student-import-template.csv'),
+  downloadSample: () => downloadBlob('/imports/students/sample', 'student-import-sample.csv'),
+  preview: (file, options = {}) => api.post('/imports/students/preview', buildImportForm(file, options), {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  commit: (file, options = {}) => api.post('/imports/students/commit', buildImportForm(file, options), {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  listBatches: () => api.get('/imports/students/batches'),
+  rollbackBatch: (batchId) => api.post(`/imports/students/batches/${batchId}/rollback`),
+}
+
 // ── Fees ──────────────────────────────────────────────────────────────────────
 export const feeAPI = {
   getFeeHeads:        ()       => api.get('/fees/heads'),
