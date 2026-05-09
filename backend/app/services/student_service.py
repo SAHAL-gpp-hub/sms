@@ -167,6 +167,8 @@ def create_student(db: Session, data: StudentCreate) -> Student:
 def get_students(
     db: Session,
     class_id: Optional[int]           = None,
+    class_ids: Optional[list[int]]    = None,
+    student_ids: Optional[list[int]]  = None,
     search: Optional[str]             = None,
     academic_year_id: Optional[int]   = None,
     limit: int                         = 50,
@@ -176,19 +178,28 @@ def get_students(
 
     if class_id is not None:
         query = query.filter(Student.class_id == class_id)
+    elif class_ids:
+        query = query.filter(Student.class_id.in_(class_ids))
+    if student_ids is not None:
+        if len(student_ids) == 0:
+            return []
+        query = query.filter(Student.id.in_(student_ids))
     if academic_year_id is not None:
         query = query.filter(Student.academic_year_id == academic_year_id)
+    search = search.strip() if search else None
     if search:
+        id_prefix = f"{search}%"
         query = query.filter(
             or_(
                 Student.name_en.ilike(f"%{search}%"),
                 Student.name_gu.ilike(f"%{search}%"),
-                Student.gr_number.ilike(f"%{search}%"),
-                Student.student_id.ilike(f"%{search}%"),
-                Student.contact.ilike(f"%{search}%"),
+                Student.gr_number.ilike(id_prefix),
+                Student.student_id.ilike(id_prefix),
+                Student.contact.ilike(id_prefix),
             )
         )
 
+    query = query.order_by(Student.id.desc())
     return query.offset(offset).limit(limit).all()
 
 

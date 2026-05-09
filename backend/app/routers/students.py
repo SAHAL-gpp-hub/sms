@@ -36,23 +36,46 @@ def list_students(
     if current_user.role == "teacher":
         if class_id is not None and class_id not in current_user.assigned_class_ids:
             raise HTTPException(status_code=403, detail="You are not assigned to this class")
-        students = student_service.get_students(
-            db, class_id, search, academic_year_id, limit=200, offset=0
+        return student_service.get_students(
+            db=db,
+            class_id=class_id,
+            class_ids=current_user.assigned_class_ids if class_id is None else None,
+            search=search,
+            academic_year_id=academic_year_id,
+            limit=limit,
+            offset=offset,
         )
-        return [s for s in students if s.class_id in current_user.assigned_class_ids][offset:offset + limit]
     if current_user.role == "student":
         if current_user.linked_student_id is None:
             return []
-        student = db.query(Student).filter_by(id=current_user.linked_student_id).first()
-        return [student] if student else []
+        return student_service.get_students(
+            db=db,
+            student_ids=[current_user.linked_student_id],
+            search=search,
+            academic_year_id=academic_year_id,
+            limit=limit,
+            offset=offset,
+        )
     if current_user.role == "parent":
         if not current_user.linked_student_ids:
             return []
-        students = student_service.get_students(
-            db, class_id, search, academic_year_id, limit=200, offset=0
+        return student_service.get_students(
+            db=db,
+            class_id=class_id,
+            student_ids=current_user.linked_student_ids,
+            search=search,
+            academic_year_id=academic_year_id,
+            limit=limit,
+            offset=offset,
         )
-        return [s for s in students if s.id in current_user.linked_student_ids][offset:offset + limit]
-    return student_service.get_students(db, class_id, search, academic_year_id, limit, offset)
+    return student_service.get_students(
+        db=db,
+        class_id=class_id,
+        search=search,
+        academic_year_id=academic_year_id,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/{student_id}", response_model=StudentOut)

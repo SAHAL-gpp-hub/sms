@@ -1,9 +1,11 @@
 // StudentList.jsx — Fully responsive with mobile card view
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { studentAPI, setupAPI, extractError } from '../../services/api'
 import { PageHeader, SearchInput, Select, TableSkeleton, EmptyState, ConfirmModal, StatusBadge, FilterRow } from '../../components/UI'
+import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 
 function StudentCard({ student, cls, onDelete, onDownloadTC }) {
   return (
@@ -135,11 +137,9 @@ function StudentCard({ student, cls, onDelete, onDownloadTC }) {
 }
 
 export default function StudentList() {
-  const [students, setStudents] = useState([])
-  const [classes, setClasses] = useState([])
+  const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [classFilter, setClassFilter] = useState('')
-  const [loading, setLoading] = useState(true)
   const [seeding, setSeeding] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [tcTarget, setTcTarget] = useState(null)
@@ -156,26 +156,34 @@ export default function StudentList() {
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  const fetchStudents = useCallback(async () => {
-    setLoading(true)
-    try {
+  const debouncedSearch = useDebouncedValue(search, 350)
+
+  const classesQuery = useQuery({
+    queryKey: ['classes'],
+    queryFn: async () => {
+      const r = await setupAPI.getClasses()
+      return r.data || []
+    },
+  })
+
+  const studentsQuery = useQuery({
+    queryKey: ['students', debouncedSearch, classFilter],
+    queryFn: async () => {
       const params = { limit: 200 }
-      if (search) params.search = search
+      if (debouncedSearch) params.search = debouncedSearch
       if (classFilter) params.class_id = classFilter
-      const res = await studentAPI.list(params)
-      setStudents(res.data)
-    } catch {
-      toast.error('Failed to load students')
-    } finally {
-      setLoading(false)
-    }
-  }, [search, classFilter])
+      const r = await studentAPI.list(params)
+      return r.data || []
+    },
+  })
 
   useEffect(() => {
-    setupAPI.getClasses().then(r => setClasses(r.data)).catch(() => {})
-  }, [])
+    if (studentsQuery.isError) toast.error('Failed to load students')
+  }, [studentsQuery.isError])
 
-  useEffect(() => { fetchStudents() }, [fetchStudents])
+  const classes = classesQuery.data || []
+  const students = studentsQuery.data || []
+  const loading = studentsQuery.isLoading || studentsQuery.isFetching
 
   const handleDownloadTC = (studentId) => {
     setTcTarget(studentId)
@@ -195,7 +203,7 @@ export default function StudentList() {
     setSeeding(true)
     try {
       await setupAPI.seed()
-      await setupAPI.getClasses().then(r => setClasses(r.data))
+      await queryClient.invalidateQueries({ queryKey: ['classes'] })
       toast.success('Classes and academic year created!')
     } catch (err) {
       toast.error(extractError(err))
@@ -211,7 +219,7 @@ export default function StudentList() {
       await studentAPI.delete(deleteTarget.id)
       toast.success(`${deleteTarget.name} marked as Left`)
       setDeleteTarget(null)
-      fetchStudents()
+      await queryClient.invalidateQueries({ queryKey: ['students'] })
     } catch (err) {
       toast.error(extractError(err))
     } finally {

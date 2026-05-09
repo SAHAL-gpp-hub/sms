@@ -4,6 +4,8 @@ from datetime import date
 from typing import Optional, Union
 from pydantic import BaseModel
 from app.core.database import get_db
+from app.core.cache import response_cache
+from app.core.config import settings
 from app.models.base_models import Class, Enrollment, Student
 from app.routers.auth import (
     CurrentUser,
@@ -95,4 +97,10 @@ def get_dashboard_stats(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_role("admin")),
 ):
-    return attendance_service.get_dashboard_stats(db)
+    cache_key = "dashboard_stats:admin"
+    cached = response_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    data = attendance_service.get_dashboard_stats(db)
+    response_cache.set(cache_key, data, settings.RESPONSE_CACHE_TTL_SECONDS)
+    return data

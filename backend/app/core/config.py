@@ -26,6 +26,8 @@ class Settings(BaseSettings):
 
     # Set to true to print all SQL to stdout — useful when debugging connection issues
     DB_ECHO: bool = False
+    SQL_TIMING_LOG_ENABLED: bool = True
+    SQL_SLOW_QUERY_MS: int = 250
 
     # ── JWT / Security ────────────────────────────────────────────────────
     # MUST be overridden in production via .env or docker-compose environment:
@@ -68,6 +70,9 @@ class Settings(BaseSettings):
     SMTP_TIMEOUT_SECONDS: int = 10
     NOTIFICATION_WORKER_ENABLED: bool = True
     NOTIFICATION_WORKER_INTERVAL_SECONDS: int = 10
+    RESPONSE_CACHE_TTL_SECONDS: int = 20
+    PERF_LOG_REQUESTS: bool = True
+    PERF_SLOW_REQUEST_MS: int = 500
 
     # ── Razorpay online fee payments ─────────────────────────────────────
     RAZORPAY_KEY_ID: str | None = None

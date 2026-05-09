@@ -372,9 +372,11 @@ def get_defaulters(
     q = (
         db.query(
             Student,
+            Class.name.label("class_name"),
             func.coalesce(func.sum(StudentFee.net_amount), 0).label("total_due"),
             func.coalesce(func.sum(FeePayment.amount_paid), 0).label("total_paid"),
         )
+        .outerjoin(Class, Class.id == Student.class_id)
         .join(StudentFee, StudentFee.student_id == Student.id, isouter=True)
         .join(FeeStructure, StudentFee.fee_structure_id == FeeStructure.id, isouter=True)
         .outerjoin(FeePayment, FeePayment.student_fee_id == StudentFee.id)
@@ -392,14 +394,14 @@ def get_defaulters(
     q = q.group_by(Student.id)
 
     defaulters = []
-    for student, total_due, total_paid in q.all():
+    for student, class_name, total_due, total_paid in q.all():
         balance = Decimal(str(total_due)) - Decimal(str(total_paid))
         if balance > 0:
             defaulters.append({
                 "student_id":   student.id,
                 "student_name": student.name_en,
                 "class_id":     student.class_id,
-                "class_name":   db.query(Class.name).filter_by(id=student.class_id).scalar() or "—",
+                "class_name":   class_name or "—",
                 "contact":      student.contact,
                 "total_due":    float(total_due),
                 "total_paid":   float(total_paid),
