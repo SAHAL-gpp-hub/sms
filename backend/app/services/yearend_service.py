@@ -1303,6 +1303,34 @@ def issue_tc(db: Session, student_id: int, reason: str = "Parent's Request") -> 
     return student
 
 
+def _ensure_tc_certificate(
+    db: Session,
+    student_id: int,
+    reason: str = "Parent's Request",
+    conduct: str = "Good",
+) -> TransferCertificate:
+    cert = db.query(TransferCertificate).filter_by(student_id=student_id).first()
+    if cert:
+        return cert
+
+    try:
+        db.execute(text(f"SELECT pg_advisory_xact_lock({TC_NUMBER_LOCK_KEY})"))
+        seq_val = db.execute(text("SELECT nextval('tc_number_seq')")).scalar()
+    except Exception:
+        seq_val = (db.query(func.max(TransferCertificate.id)).scalar() or 0) + 1
+
+    cert = TransferCertificate(
+        tc_number=f"TC-{date.today().year}-{int(seq_val):04d}",
+        student_id=student_id,
+        reason=reason,
+        conduct=conduct,
+    )
+    db.add(cert)
+    db.commit()
+    db.refresh(cert)
+    return cert
+
+
 def get_tc_data(db: Session, student_id: int, reason: str, conduct: str) -> Optional[dict]:
     student = db.query(Student).filter(Student.id == student_id).first()
     if not student:
@@ -1311,9 +1339,12 @@ def get_tc_data(db: Session, student_id: int, reason: str, conduct: str) -> Opti
     cls  = db.query(Class).filter_by(id=student.class_id).first()
     year = db.query(AcademicYear).filter_by(id=student.academic_year_id).first()
 
-    cert = db.query(TransferCertificate).filter_by(student_id=student_id).first()
-    if not cert:
-        return None
+    cert = _ensure_tc_certificate(
+        db,
+        student_id,
+        reason=reason or "Parent's Request",
+        conduct=conduct or "Good",
+    )
     tc_number = cert.tc_number
 
     def fmt(d):

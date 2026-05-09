@@ -1,7 +1,7 @@
 // frontend/src/pages/admin/UserManagement.jsx — Full rebuild
 // Tabs: Users list | Teacher Assignments | Portal Linking
 import { useEffect, useState, useCallback } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { adminAPI, setupAPI, studentAPI, extractError } from '../../services/api'
 import {
@@ -82,7 +82,6 @@ function PasswordResetModal({ user, onClose, onSuccess }) {
 // TAB 1 — Users List
 // ══════════════════════════════════════════════════════════════════════════════
 function UsersTab() {
-  const navigate = useNavigate()
   const [users, setUsers]             = useState([])
   const [loading, setLoading]         = useState(true)
   const [roleFilter, setRoleFilter]   = useState('')
@@ -531,7 +530,7 @@ function PortalLinkingTab() {
     try {
       const res = await adminAPI.getLinkStatus()
       setLinkStatus(res.data)
-    } catch (err) {
+    } catch {
       toast.error('Failed to load link status')
     } finally {
       setStatusLoading(false)
@@ -541,7 +540,7 @@ function PortalLinkingTab() {
   useEffect(() => {
     fetchAll()
     fetchLinkStatus()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleLink = async () => {
     if (!form.user_id)    { toast.error('Select a portal account'); return }
