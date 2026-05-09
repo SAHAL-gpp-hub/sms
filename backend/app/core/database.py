@@ -20,10 +20,14 @@ FIXES:
     printed to stdout. Set DB_ECHO=true in .env for debugging.
 """
 
+import logging
+import time
+
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from .config import settings
 
+logger = logging.getLogger("sms.sql")
 
 # ── Engine ────────────────────────────────────────────────────────────────
 # pool_pre_ping: validate connection before checkout (fixes stale-connection errors)
@@ -39,6 +43,22 @@ engine = create_engine(
         "options": "-c statement_timeout=30000",  # 30s max per query
     },
 )
+
+
+if settings.SQL_TIMING_LOG_ENABLED:
+    @event.listens_for(engine, "before_cursor_execute")
+    def _before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        conn.info.setdefault("query_start_time", []).append(time.perf_counter())
+
+    @event.listens_for(engine, "after_cursor_execute")
+    def _after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        timings = conn.info.get("query_start_time") or []
+        start = timings.pop() if timings else None
+        if start is None:
+            return
+        duration_ms = (time.perf_counter() - start) * 1000
+        if duration_ms >= settings.SQL_SLOW_QUERY_MS:
+            logger.warning("Slow SQL query: %.2f ms | %s", duration_ms, statement.splitlines()[0][:220])
 
 # ── Session ───────────────────────────────────────────────────────────────
 SessionLocal = sessionmaker(

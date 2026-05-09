@@ -182,9 +182,22 @@ def get_dashboard_stats(db: Session) -> dict:
     total_paid        = db.query(func.sum(FeePayment.amount_paid)).scalar() or Decimal("0")
     total_outstanding = total_due - total_paid
 
-    from app.services.fee_service import get_defaulters
-    defaulters     = get_defaulters(db)
-    defaulter_count = len(defaulters)
+    defaulter_rows = (
+        db.query(
+            Student.id.label("student_id"),
+            (
+                func.coalesce(func.sum(StudentFee.net_amount), 0)
+                - func.coalesce(func.sum(FeePayment.amount_paid), 0)
+            ).label("balance"),
+        )
+        .join(StudentFee, StudentFee.student_id == Student.id, isouter=True)
+        .join(FeeStructure, StudentFee.fee_structure_id == FeeStructure.id, isouter=True)
+        .outerjoin(FeePayment, FeePayment.student_fee_id == StudentFee.id)
+        .filter(Student.status == StudentStatusEnum.Active)
+        .group_by(Student.id)
+        .all()
+    )
+    defaulter_count = sum(1 for row in defaulter_rows if Decimal(str(row.balance)) > 0)
 
     recent_payments = (
         db.query(FeePayment)

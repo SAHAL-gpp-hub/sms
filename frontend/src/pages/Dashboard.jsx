@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { attendanceAPI, formatINR, setupAPI } from '../services/api'
 import { getAuthUser } from '../services/auth'
 import { EmptyState, MetricCard, SectionPanel, Skeleton } from '../components/UI'
@@ -68,19 +68,19 @@ function Hero({ title, copy, today, actions }) {
 
 function TeacherDashboard({ today }) {
   const authUser = getAuthUser()
-  const [classes, setClasses] = useState([])
-  const [loadingClasses, setLoadingClasses] = useState(true)
+  const classesQuery = useQuery({
+    queryKey: ['classes'],
+    queryFn: async () => {
+      const r = await setupAPI.getClasses()
+      return r.data || []
+    },
+  })
+  const classes = classesQuery.data || []
+  const loadingClasses = classesQuery.isLoading
 
   const classTeacherClassIds = authUser?.classTeacherClassIds || []
   const subjectAssignments = authUser?.subjectAssignments || []
   const assignedClassIds = authUser?.assignedClassIds || []
-
-  useEffect(() => {
-    setupAPI.getClasses()
-      .then(r => setClasses(r.data || []))
-      .catch(() => setClasses([]))
-      .finally(() => setLoadingClasses(false))
-  }, [])
 
   const classLabel = (id) => {
     const cls = classes.find(c => c.id === id)
@@ -158,18 +158,18 @@ function TeacherDashboard({ today }) {
 export default function Dashboard() {
   const authUser = getAuthUser()
   const isTeacher = authUser?.role === 'teacher'
-  const [stats, setStats] = useState(null)
-  const [loading, setLoading] = useState(!isTeacher)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    if (isTeacher) {
-      return
-    }
-    attendanceAPI.getDashboardStats()
-      .then(r => { setStats(r.data); setLoading(false) })
-      .catch(() => { setError(true); setLoading(false) })
-  }, [isTeacher])
+  const statsQuery = useQuery({
+    queryKey: ['dashboard-stats'],
+    enabled: !isTeacher,
+    queryFn: async () => {
+      const r = await attendanceAPI.getDashboardStats()
+      return r.data
+    },
+    staleTime: 20_000,
+  })
+  const stats = statsQuery.data
+  const loading = !isTeacher && (statsQuery.isLoading || statsQuery.isFetching)
+  const error = !isTeacher && statsQuery.isError
 
   const today = new Date().toLocaleDateString('en-IN', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',

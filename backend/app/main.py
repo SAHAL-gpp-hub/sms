@@ -10,9 +10,11 @@ Changes vs original:
 
 import logging
 import asyncio
+import time
+from collections import defaultdict, deque
 from contextlib import asynccontextmanager, suppress
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -38,7 +40,7 @@ from app.routers import (
     students,
     yearend,
 )
-from app.routers.auth import get_current_user, limiter
+from app.routers.auth import get_current_user, limiter, require_role
 from app.services.notification_service import run_notification_worker
 
 logger = logging.getLogger("sms")
@@ -85,6 +87,7 @@ app = FastAPI(
     description="SMS for Iqra English Medium School — Palanpur, Gujarat",
     lifespan=lifespan,
 )
+app.state.latency_windows = defaultdict(lambda: deque(maxlen=200))
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -97,6 +100,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _percentile(values: list[float], pct: float) -> float:
+    if not values:
+        return 0.0
+    idx = min(len(values) - 1, max(0, int(round((pct / 100) * (len(values) - 1)))))
+    return round(sorted(values)[idx], 2)
+
+
+@app.middleware("http")
+async def request_timing_middleware(request: Request, call_next):
+    started = time.perf_counter()
+    response = await call_next(request)
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    route_key = request.url.path
+    app.state.latency_windows[route_key].append(elapsed_ms)
+    response.headers["X-Request-Time-Ms"] = f"{elapsed_ms:.2f}"
+    if settings.PERF_LOG_REQUESTS and elapsed_ms >= settings.PERF_SLOW_REQUEST_MS:
+        logger.warning("Slow request: %.2f ms | %s %s", elapsed_ms, request.method, route_key)
+    return response
 
 # ── Public routes (no auth required) ─────────────────────────────────────────
 app.include_router(auth.router)
@@ -138,3 +161,19 @@ def health():
             else "Database unreachable. Check DATABASE_URL."
         ),
     }
+
+
+@app.get("/metrics/latency")
+def latency_metrics(_: object = Depends(require_role("admin"))):
+    payload = {}
+    for path, samples in app.state.latency_windows.items():
+        values = list(samples)
+        if not values:
+            continue
+        payload[path] = {
+            "count": len(values),
+            "p95_ms": _percentile(values, 95),
+            "p99_ms": _percentile(values, 99),
+            "avg_ms": round(sum(values) / len(values), 2),
+        }
+    return payload

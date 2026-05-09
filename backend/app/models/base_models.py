@@ -171,8 +171,8 @@ class Enrollment(Base):
 
     id               = Column(Integer, primary_key=True)
     student_id       = Column(Integer, ForeignKey("students.id", ondelete="RESTRICT"), nullable=False)
-    academic_year_id = Column(Integer, ForeignKey("academic_years.id"), nullable=False)
-    class_id         = Column(Integer, ForeignKey("classes.id"), nullable=False)
+    academic_year_id = Column(Integer, ForeignKey("academic_years.id"), nullable=False, index=True)
+    class_id         = Column(Integer, ForeignKey("classes.id"), nullable=False, index=True)
     roll_number      = Column(String(30), nullable=True)   # string: supports "2025-07-A-01"
     original_roll_number = Column(String(30), nullable=True)
     status           = Column(
@@ -224,7 +224,7 @@ class Student(Base):
     category         = Column(String(10), nullable=True)
     aadhar_last4     = Column(String(4), nullable=True)
     admission_date   = Column(Date, nullable=False)
-    academic_year_id = Column(Integer, ForeignKey("academic_years.id"), nullable=False)
+    academic_year_id = Column(Integer, ForeignKey("academic_years.id"), nullable=False, index=True)
     student_user_id  = Column(Integer, ForeignKey("users.id"), nullable=True)
     parent_user_id   = Column(Integer, ForeignKey("users.id"), nullable=True)
     status           = Column(
@@ -270,9 +270,9 @@ class Exam(Base):
 
     id               = Column(Integer, primary_key=True)
     name             = Column(String(50), nullable=False)
-    class_id         = Column(Integer, ForeignKey("classes.id"))
+    class_id         = Column(Integer, ForeignKey("classes.id"), index=True)
     exam_date        = Column(Date, nullable=True)
-    academic_year_id = Column(Integer, ForeignKey("academic_years.id"))
+    academic_year_id = Column(Integer, ForeignKey("academic_years.id"), index=True)
     weightage        = Column(Numeric(5, 2), nullable=True)  # NEW % contribution to final
 
     subject_configs = relationship(
@@ -362,11 +362,11 @@ class StudentFee(Base):
     __tablename__ = "student_fees"
 
     id                = Column(Integer, primary_key=True)
-    student_id        = Column(Integer, ForeignKey("students.id"))
+    student_id        = Column(Integer, ForeignKey("students.id"), index=True)
     fee_structure_id  = Column(Integer, ForeignKey("fee_structures.id"))
     concession        = Column(Numeric(10, 2), default=0)
     net_amount        = Column(Numeric(10, 2), nullable=False)
-    academic_year_id  = Column(Integer, ForeignKey("academic_years.id"), nullable=True)
+    academic_year_id  = Column(Integer, ForeignKey("academic_years.id"), nullable=True, index=True)
     invoice_type      = Column(String(10), nullable=False, default="regular")  # NEW regular/arrear
     source_invoice_id = Column(Integer, ForeignKey("student_fees.id"), nullable=True)  # NEW for arrears
 
@@ -377,7 +377,7 @@ class FeePayment(Base):
     id             = Column(Integer, primary_key=True)
     student_fee_id = Column(Integer, ForeignKey("student_fees.id"))
     amount_paid    = Column(Numeric(10, 2), nullable=False)
-    payment_date   = Column(Date, nullable=False)
+    payment_date   = Column(Date, nullable=False, index=True)
     mode           = Column(String(20), nullable=False)
     receipt_number = Column(String(30), unique=True)
     collected_by   = Column(String(100), nullable=True)

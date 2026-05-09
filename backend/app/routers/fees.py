@@ -16,6 +16,8 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from app.core.database import get_db
+from app.core.cache import response_cache
+from app.core.config import settings
 from app.models.base_models import AcademicYear
 from app.routers.auth import CurrentUser, ensure_student_access, require_role
 from app.schemas.fee import (
@@ -27,6 +29,10 @@ from app.schemas.fee import (
 from app.services import fee_service
 
 router = APIRouter(prefix="/api/v1/fees", tags=["Fees"])
+
+def _invalidate_fee_caches() -> None:
+    response_cache.invalidate_prefix("defaulters:")
+    response_cache.invalidate_prefix("dashboard_stats:")
 
 
 # ---------------------------------------------------------------------------
@@ -44,7 +50,9 @@ def create_fee_head(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_role("admin")),
 ):
-    return fee_service.create_fee_head(db, data)
+    out = fee_service.create_fee_head(db, data)
+    _invalidate_fee_caches()
+    return out
 
 
 @router.post("/heads/seed")
@@ -53,6 +61,7 @@ def seed_fee_heads(
     _: CurrentUser = Depends(require_role("admin")),
 ):
     fee_service.seed_fee_heads(db)
+    _invalidate_fee_caches()
     return {"message": "Fee heads seeded successfully"}
 
 
@@ -84,7 +93,9 @@ def create_fee_structure(
     _: CurrentUser = Depends(require_role("admin")),
 ):
     try:
-        return fee_service.create_fee_structure(db, data)
+        out = fee_service.create_fee_structure(db, data)
+        _invalidate_fee_caches()
+        return out
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -98,6 +109,7 @@ def delete_fee_structure(
     fs = fee_service.delete_fee_structure(db, fs_id)
     if not fs:
         raise HTTPException(status_code=404, detail="Fee structure not found")
+    _invalidate_fee_caches()
     return {"message": "Deleted successfully"}
 
 
@@ -129,6 +141,7 @@ def assign_fees(
     # ISSUE 2 FIX: surface a clear message when 0 fees were assigned so the
     # operator knows there is a year/class mismatch rather than assuming success.
     if count == 0:
+        _invalidate_fee_caches()
         return {
             "message": (
                 "No student-fee records were created. "
@@ -137,6 +150,7 @@ def assign_fees(
             ),
             "assigned": 0,
         }
+    _invalidate_fee_caches()
     return {"message": f"Assigned fees to {count} student-fee records", "assigned": count}
 
 
@@ -160,6 +174,7 @@ def assign_fees_body(
 
     count = fee_service.assign_fees_to_class(db, class_id, academic_year_id)
     if count == 0:
+        _invalidate_fee_caches()
         return {
             "message": (
                 "No student-fee records were created. "
@@ -168,6 +183,7 @@ def assign_fees_body(
             ),
             "assigned": 0,
         }
+    _invalidate_fee_caches()
     return {"message": f"Assigned fees to {count} student-fee records", "assigned": count}
 
 
@@ -199,7 +215,9 @@ def record_payment(
     _: CurrentUser = Depends(require_role("admin")),
 ):
     try:
-        return fee_service.record_payment(db, data)
+        out = fee_service.record_payment(db, data)
+        _invalidate_fee_caches()
+        return out
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except LookupError as exc:
@@ -237,4 +255,10 @@ def get_defaulters(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_role("admin")),
 ):
-    return fee_service.get_defaulters(db, class_id, academic_year_id)
+    cache_key = f"defaulters:class={class_id or 'all'}:year={academic_year_id or 'all'}"
+    cached = response_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    data = fee_service.get_defaulters(db, class_id, academic_year_id)
+    response_cache.set(cache_key, data, settings.RESPONSE_CACHE_TTL_SECONDS)
+    return data

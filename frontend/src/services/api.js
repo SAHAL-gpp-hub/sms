@@ -103,14 +103,31 @@ export async function openProtectedPdf(path, params = {}, fallbackFileName = 'do
 }
 
 api.interceptors.request.use(config => {
+  config.metadata = { startTime: performance.now() }
   const token = getToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
 
 api.interceptors.response.use(
-  res => res,
+  res => {
+    const started = res.config?.metadata?.startTime
+    if (started) {
+      const duration = performance.now() - started
+      if (duration > 500) {
+        console.warn(`[perf] Slow API request (${duration.toFixed(1)}ms): ${res.config?.method?.toUpperCase()} ${res.config?.url}`)
+      }
+    }
+    return res
+  },
   err => {
+    const started = err.config?.metadata?.startTime
+    if (started) {
+      const duration = performance.now() - started
+      if (duration > 500) {
+        console.warn(`[perf] Slow failed API request (${duration.toFixed(1)}ms): ${err.config?.method?.toUpperCase()} ${err.config?.url}`)
+      }
+    }
     const url = err.config?.url || ''
     if (err.response && err.response.status === 401 && !url.startsWith('/student-auth')) {
       clearToken()

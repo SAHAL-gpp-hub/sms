@@ -1,6 +1,7 @@
 // Defaulters.jsx — Fully responsive with mobile card view
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { feeAPI, setupAPI, formatINR, openSignedPdf } from '../../services/api'
 import { PageHeader, FilterRow, Select, EmptyState, TableSkeleton } from '../../components/UI'
@@ -59,12 +60,10 @@ function DefaulterCard({ d, resolveClassName }) {
 }
 
 export default function Defaulters() {
-  const [defaulters, setDefaulters] = useState([])
   const [classes, setClasses]       = useState([])
   const [years, setYears]           = useState([])
   const [classFilter, setClassFilter] = useState('')
   const [yearFilter, setYearFilter]   = useState('')
-  const [loading, setLoading]       = useState(false)
   const [isMobile, setIsMobile]     = useState(window.innerWidth < 640)
 
   useEffect(() => {
@@ -82,20 +81,23 @@ export default function Defaulters() {
     })
   }, [])
 
-  const fetchDefaulters = useCallback(() => {
-    setLoading(true)
-    const params = {}
-    if (classFilter) params.class_id = classFilter
-    if (yearFilter)  params.academic_year_id = yearFilter
-    feeAPI.getDefaulters(params)
-      .then(r => setDefaulters(r.data))
-      .catch(() => toast.error('Failed to load defaulters'))
-      .finally(() => setLoading(false))
-  }, [classFilter, yearFilter])
+  const defaultersQuery = useQuery({
+    queryKey: ['defaulters', classFilter, yearFilter],
+    queryFn: async () => {
+      const params = {}
+      if (classFilter) params.class_id = classFilter
+      if (yearFilter) params.academic_year_id = yearFilter
+      const r = await feeAPI.getDefaulters(params)
+      return r.data || []
+    },
+  })
 
   useEffect(() => {
-    fetchDefaulters()
-  }, [fetchDefaulters])
+    if (defaultersQuery.isError) toast.error('Failed to load defaulters')
+  }, [defaultersQuery.isError])
+
+  const defaulters = defaultersQuery.data || []
+  const loading = defaultersQuery.isLoading || defaultersQuery.isFetching
 
   const resolveClassName = (classId) => {
     const cls = classes.find(c => c.id === classId)
