@@ -122,8 +122,8 @@ export default function StudentForm() {
     else if (form.contact.startsWith('0')) e.contact = 'Cannot start with 0'
     if (form.student_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.student_email)) e.student_email = 'Enter a valid email'
     if (form.guardian_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.guardian_email)) e.guardian_email = 'Enter a valid email'
-    if (form.student_phone && !/^\d{10}$/.test(form.student_phone)) e.student_phone = 'Must be exactly 10 digits'
-    if (form.guardian_phone && !/^\d{10}$/.test(form.guardian_phone)) e.guardian_phone = 'Must be exactly 10 digits'
+    if (isEdit && form.student_phone && !/^\d{10}$/.test(form.student_phone)) e.student_phone = 'Must be exactly 10 digits'
+    if (isEdit && form.guardian_phone && !/^\d{10}$/.test(form.guardian_phone)) e.guardian_phone = 'Must be exactly 10 digits'
     if (form.roll_number && parseInt(form.roll_number) <= 0) e.roll_number = 'Must be greater than 0'
     if (form.aadhar_last4 && (!/^\d{1,4}$/.test(form.aadhar_last4))) e.aadhar_last4 = 'Must be up to 4 numeric digits'
     if (form.dob && new Date(form.dob) > new Date()) e.dob = 'Cannot be in the future'
@@ -142,9 +142,9 @@ export default function StudentForm() {
         roll_number: form.roll_number ? parseInt(form.roll_number) : null,
         aadhar_last4: form.aadhar_last4 || null,
         student_email: form.student_email.trim().toLowerCase() || null,
-        student_phone: form.student_phone || null,
+        student_phone: isEdit ? (form.student_phone || null) : form.contact,
         guardian_email: form.guardian_email.trim().toLowerCase() || null,
-        guardian_phone: form.guardian_phone || null,
+        guardian_phone: isEdit ? (form.guardian_phone || null) : form.contact,
         previous_school: form.previous_school || null,
         reason_for_leaving: form.reason_for_leaving || null,
       }
@@ -286,20 +286,11 @@ export default function StudentForm() {
             placeholder="student@example.com"
           />
         </Field>
-        <Field label="Student WhatsApp" error={errors.student_phone} hint="Future WhatsApp OTP support">
-          <input
-            className={`input${errors.student_phone ? ' error' : ''}`}
-            value={form.student_phone}
-            onChange={e => {
-              const val = e.target.value.replace(/\D/g, '').slice(0, 10)
-              setForm(f => ({ ...f, student_phone: val }))
-              setErrors(prev => ({ ...prev, student_phone: undefined }))
-            }}
-            placeholder="9876543210"
-            maxLength={10}
-            inputMode="tel"
-          />
-        </Field>
+        {!isEdit && (
+          <Field label="WhatsApp Number" hint="Same as contact number for student and guardian">
+            <input className="input" value={form.contact} readOnly />
+          </Field>
+        )}
         <Field label="Guardian Email" error={errors.guardian_email} hint="Used for parent account activation">
           <input
             type="email"
@@ -309,20 +300,38 @@ export default function StudentForm() {
             placeholder="parent@example.com"
           />
         </Field>
-        <Field label="Guardian WhatsApp" error={errors.guardian_phone} hint="Future WhatsApp OTP support">
-          <input
-            className={`input${errors.guardian_phone ? ' error' : ''}`}
-            value={form.guardian_phone}
-            onChange={e => {
-              const val = e.target.value.replace(/\D/g, '').slice(0, 10)
-              setForm(f => ({ ...f, guardian_phone: val }))
-              setErrors(prev => ({ ...prev, guardian_phone: undefined }))
-            }}
-            placeholder="9876543210"
-            maxLength={10}
-            inputMode="tel"
-          />
-        </Field>
+        {isEdit && (
+          <Field label="Student WhatsApp" error={errors.student_phone} hint="Future WhatsApp OTP support">
+            <input
+              className={`input${errors.student_phone ? ' error' : ''}`}
+              value={form.student_phone}
+              onChange={e => {
+                const val = e.target.value.replace(/\D/g, '').slice(0, 10)
+                setForm(f => ({ ...f, student_phone: val }))
+                setErrors(prev => ({ ...prev, student_phone: undefined }))
+              }}
+              placeholder="9876543210"
+              maxLength={10}
+              inputMode="tel"
+            />
+          </Field>
+        )}
+        {isEdit && (
+          <Field label="Guardian WhatsApp" error={errors.guardian_phone} hint="Future WhatsApp OTP support">
+            <input
+              className={`input${errors.guardian_phone ? ' error' : ''}`}
+              value={form.guardian_phone}
+              onChange={e => {
+                const val = e.target.value.replace(/\D/g, '').slice(0, 10)
+                setForm(f => ({ ...f, guardian_phone: val }))
+                setErrors(prev => ({ ...prev, guardian_phone: undefined }))
+              }}
+              placeholder="9876543210"
+              maxLength={10}
+              inputMode="tel"
+            />
+          </Field>
+        )}
         <div style={{ gridColumn: '1 / -1' }}>
           <Field label="Address">
             <textarea
