@@ -23,7 +23,8 @@ from app.core.database import Base, get_db
 from app.core.security import get_password_hash
 from app.main import app
 from app.models.base_models import (
-    AcademicYear, Class, Exam, Student, GenderEnum, StudentStatusEnum, Subject,
+    AcademicYear, Class, Exam, FeeHead, FeePayment, FeeStructure, Student, StudentFee,
+    GenderEnum, StudentStatusEnum, Subject,
     TeacherClassAssignment, User,
 )
 
@@ -115,6 +116,46 @@ def setup_database():
         parent_user_id=parent_u.id,
     )
     db.add(student)
+    db.flush()
+
+    fee_head = FeeHead(name="Tuition Fee", frequency="Monthly", is_active=True)
+    db.add(fee_head)
+    db.flush()
+
+    fee_structure = FeeStructure(
+        class_id=cls_a.id,
+        fee_head_id=fee_head.id,
+        amount=1000,
+        academic_year_id=year.id,
+    )
+    db.add(fee_structure)
+    db.flush()
+
+    student_fee = StudentFee(
+        student_id=student.id,
+        fee_structure_id=fee_structure.id,
+        net_amount=1000,
+        academic_year_id=year.id,
+    )
+    db.add(student_fee)
+    db.flush()
+
+    db.add_all([
+        FeePayment(
+            student_fee_id=student_fee.id,
+            amount_paid=300,
+            payment_date=date(2025, 6, 10),
+            mode="Cash",
+            receipt_number="RCPT-TEST-0001",
+        ),
+        FeePayment(
+            student_fee_id=student_fee.id,
+            amount_paid=200,
+            payment_date=date(2025, 6, 20),
+            mode="Cash",
+            receipt_number="RCPT-TEST-0002",
+        ),
+    ])
     db.commit()
     db.close()
 
@@ -430,6 +471,25 @@ class TestFeeScoping:
         tok = token(client, "teachera@test.com", "teacher1234")
         res = client.get("/api/v1/fees/defaulters", headers=auth(tok))
         assert res.status_code == 403
+
+    def test_admin_can_view_defaulters_with_correct_totals(self, client):
+        tok = token(client, "admin@test.com", "admin1234")
+        res = client.get(
+            "/api/v1/fees/defaulters",
+            params={"academic_year_id": 1},
+            headers=auth(tok),
+        )
+        assert res.status_code == 200, res.text
+        assert res.json() == [{
+            "student_id": 1,
+            "student_name": "Test Student",
+            "class_id": 1,
+            "class_name": "5",
+            "contact": "9876543210",
+            "total_due": 1000.0,
+            "total_paid": 500.0,
+            "balance": 500.0,
+        }]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
