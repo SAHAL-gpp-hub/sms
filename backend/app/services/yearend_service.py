@@ -1306,9 +1306,15 @@ def issue_tc(db: Session, student_id: int, reason: str = "Parent's Request") -> 
 def _ensure_tc_certificate(
     db: Session,
     student_id: int,
-    reason: str = "Parent's Request",
-    conduct: str = "Good",
+    reason: Optional[str] = None,
+    conduct: Optional[str] = None,
 ) -> TransferCertificate:
+    """
+    Return an existing TransferCertificate for a student or create one atomically.
+
+    Uses a DB advisory lock + sequence when available, with an ID-based fallback
+    for local/test setups. Persists and commits newly created certificates.
+    """
     cert = db.query(TransferCertificate).filter_by(student_id=student_id).first()
     if cert:
         return cert
