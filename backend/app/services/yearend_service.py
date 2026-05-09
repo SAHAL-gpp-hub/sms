@@ -1319,11 +1319,14 @@ def _ensure_tc_certificate(
     except (OperationalError, ProgrammingError):
         seq_val = (db.query(func.max(TransferCertificate.id)).scalar() or 0) + 1
 
+    resolved_reason = reason or "Parent's Request"
+    resolved_conduct = conduct or "Good"
+
     cert = TransferCertificate(
         tc_number=f"TC-{date.today().year}-{int(seq_val):04d}",
         student_id=student_id,
-        reason=reason,
-        conduct=conduct,
+        reason=resolved_reason,
+        conduct=resolved_conduct,
     )
     db.add(cert)
     db.commit()
@@ -1342,8 +1345,8 @@ def get_tc_data(db: Session, student_id: int, reason: str, conduct: str) -> Opti
     cert = _ensure_tc_certificate(
         db,
         student_id,
-        reason=reason or "Parent's Request",
-        conduct=conduct or "Good",
+        reason=reason,
+        conduct=conduct,
     )
     tc_number = cert.tc_number
 

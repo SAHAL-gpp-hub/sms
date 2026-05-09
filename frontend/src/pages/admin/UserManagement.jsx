@@ -509,7 +509,7 @@ function PortalLinkingTab() {
   const [bulkResult, setBulkResult]     = useState(null)
   const [generatingFor, setGeneratingFor] = useState(null)
 
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     setLoading(true)
     try {
       const [portalRes, studRes] = await Promise.all([
@@ -523,9 +523,9 @@ function PortalLinkingTab() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const fetchLinkStatus = async () => {
+  const fetchLinkStatus = useCallback(async () => {
     setStatusLoading(true)
     try {
       const res = await adminAPI.getLinkStatus()
@@ -535,12 +535,12 @@ function PortalLinkingTab() {
     } finally {
       setStatusLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     fetchAll()
     fetchLinkStatus()
-  }, [])
+  }, [fetchAll, fetchLinkStatus])
 
   const handleLink = async () => {
     if (!form.user_id)    { toast.error('Select a portal account'); return }
