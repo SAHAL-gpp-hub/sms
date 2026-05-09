@@ -109,25 +109,22 @@ api.interceptors.request.use(config => {
   return config
 })
 
+function logSlowRequest(config, prefix = 'request') {
+  const started = config?.metadata?.startTime
+  if (!started) return
+  const duration = performance.now() - started
+  if (duration > 500) {
+    console.warn(`[perf] Slow ${prefix} (${duration.toFixed(1)}ms): ${config?.method?.toUpperCase()} ${config?.url}`)
+  }
+}
+
 api.interceptors.response.use(
   res => {
-    const started = res.config?.metadata?.startTime
-    if (started) {
-      const duration = performance.now() - started
-      if (duration > 500) {
-        console.warn(`[perf] Slow API request (${duration.toFixed(1)}ms): ${res.config?.method?.toUpperCase()} ${res.config?.url}`)
-      }
-    }
+    logSlowRequest(res.config, 'API request')
     return res
   },
   err => {
-    const started = err.config?.metadata?.startTime
-    if (started) {
-      const duration = performance.now() - started
-      if (duration > 500) {
-        console.warn(`[perf] Slow failed API request (${duration.toFixed(1)}ms): ${err.config?.method?.toUpperCase()} ${err.config?.url}`)
-      }
-    }
+    logSlowRequest(err.config, 'failed API request')
     const url = err.config?.url || ''
     if (err.response && err.response.status === 401 && !url.startsWith('/student-auth')) {
       clearToken()

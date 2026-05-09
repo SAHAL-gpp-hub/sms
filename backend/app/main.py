@@ -105,6 +105,7 @@ app.add_middleware(
 def _percentile(values: list[float], pct: float) -> float:
     if not values:
         return 0.0
+    # nearest-rank percentile on a sorted bounded window (fast enough for live health metrics)
     idx = min(len(values) - 1, max(0, int(round((pct / 100) * (len(values) - 1)))))
     return round(sorted(values)[idx], 2)
 

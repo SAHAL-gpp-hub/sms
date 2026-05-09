@@ -186,8 +186,7 @@ def get_students(
         query = query.filter(Student.id.in_(student_ids))
     if academic_year_id is not None:
         query = query.filter(Student.academic_year_id == academic_year_id)
-    if search:
-        search = search.strip()
+    search = search.strip() if search else None
     if search:
         id_prefix = f"{search}%"
         query = query.filter(
