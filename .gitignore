@@ -24,6 +24,8 @@ sms-frontend-improved/
 
 # Project-specific
 sms_tests/venv/
+sms_tests/reports/
+backups/runtime/
 
 # AI / tooling files
 .cursorrules

@@ -130,3 +130,23 @@ cp .env.example .env
 pip install -r requirements.txt
 pytest tests/ -v
 ```
+
+---
+
+## 🔁 CI/CD
+
+- CI workflows are under `.github/workflows/ci.yml`:
+  - backend: `pytest`
+  - frontend: `npm run lint` + `npm run build`
+  - extended API suite: `sms_tests/run_tests.sh --api-only`
+- Manual deployment workflow with rollback checklist is in `.github/workflows/deploy.yml`.
+
+---
+
+## 📚 Runbooks
+
+- Onboarding: [`docs/runbooks/onboarding.md`](docs/runbooks/onboarding.md)
+- Release + rollback: [`docs/runbooks/release-rollback.md`](docs/runbooks/release-rollback.md)
+- Backup + restore: [`docs/runbooks/backup-restore.md`](docs/runbooks/backup-restore.md)
+- Security hardening checklist: [`docs/security-hardening-checklist.md`](docs/security-hardening-checklist.md)
+- RBAC review baseline: [`docs/rbac-endpoint-review.md`](docs/rbac-endpoint-review.md)

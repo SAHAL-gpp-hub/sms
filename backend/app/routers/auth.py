@@ -325,6 +325,21 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
             ),
         )
 
+    if data.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only admin role can be created via this bootstrap endpoint.",
+        )
+
+    if db.query(User.id).first() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Registration bootstrap is allowed only when no users exist. "
+                "Use admin user management endpoints after initial setup."
+            ),
+        )
+
     existing = db.query(User).filter_by(email=data.email).first()
     if existing:
         raise HTTPException(
