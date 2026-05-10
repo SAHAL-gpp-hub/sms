@@ -24,6 +24,7 @@ from app.core.database import Base, check_db_connection, engine
 from app.core.config import settings
 from app.models.base_models import *  # noqa — registers all models with Base
 from app.routers import (
+    audit_logs,
     admin_users,
     analytics,
     attendance,
@@ -147,6 +148,7 @@ app.include_router(payments.router,     dependencies=_auth)
 app.include_router(notifications.router, dependencies=_auth)
 app.include_router(enrollments.router,  dependencies=_auth)   # NEW
 app.include_router(report_cards.router, dependencies=_auth)
+app.include_router(audit_logs.router, dependencies=_auth)
 
 
 @app.get("/")

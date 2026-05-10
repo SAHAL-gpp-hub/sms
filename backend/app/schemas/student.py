@@ -215,3 +215,10 @@ class StudentOut(BaseModel):
     parent_user_id:   Optional[int] = None
 
     model_config = {"from_attributes": True}
+
+
+class StudentPageOut(BaseModel):
+    items: list[StudentOut]
+    total: int
+    limit: int
+    offset: int

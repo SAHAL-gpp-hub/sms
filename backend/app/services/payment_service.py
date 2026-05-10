@@ -13,6 +13,8 @@ from app.core.config import settings
 from app.models.base_models import FeePayment, OnlinePaymentOrder, StudentFee
 from app.routers.auth import CurrentUser, ensure_student_access
 from app.services.fee_service import generate_receipt_number
+from app.models.base_models import DataAuditActionEnum
+from app.services.audit_service import log_data_change, model_snapshot
 
 logger = logging.getLogger("sms.payments")
 
@@ -166,6 +168,7 @@ def mark_order_paid(
     order: OnlinePaymentOrder,
     payment_id: str,
     signature: str | None = None,
+    actor_user_id: int | None = None,
 ) -> FeePayment:
     existing_payment = db.query(FeePayment).filter_by(online_order_id=order.id).first()
     if existing_payment:
@@ -212,6 +215,17 @@ def mark_order_paid(
     db.add(payment)
     db.commit()
     db.refresh(payment)
+    log_data_change(
+        db,
+        user_id=actor_user_id,
+        action=DataAuditActionEnum.create,
+        table_name="fee_payments",
+        record_id=payment.id,
+        old_value=None,
+        new_value=model_snapshot(payment),
+    )
+    db.commit()
+    db.refresh(payment)
     try:
         from app.services.notification_service import enqueue_payment_confirmation
         enqueue_payment_confirmation(db, payment.id)
@@ -228,4 +242,4 @@ def verify_payment(db: Session, user: CurrentUser, order_id: str, payment_id: st
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     _get_accessible_student_fee(db, user, order.student_fee_id)
-    return mark_order_paid(db, order, payment_id, signature)
+    return mark_order_paid(db, order, payment_id, signature, actor_user_id=user.id)

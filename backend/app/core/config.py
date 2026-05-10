@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-this-in-production-use-a-64-char-random-hex-string"
     ALGORITHM:  str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours — one full school day
+    LOGIN_2FA_OTP_EXPIRE_MINUTES: int = 10
+    LOGIN_2FA_MAX_ATTEMPTS: int = 5
     LATE_COUNTS_AS_PRESENT: bool = True
     CORS_ORIGINS: list[str] = []
 

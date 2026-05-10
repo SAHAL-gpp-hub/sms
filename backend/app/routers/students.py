@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.models.base_models import Student
 from app.pdf.report_pdf import render_tc_pdf
 from app.routers.auth import CurrentUser, ensure_student_access, require_role
-from app.schemas.student import StudentCreate, StudentOut, StudentUpdate
+from app.schemas.student import StudentCreate, StudentOut, StudentPageOut, StudentUpdate
 from app.services import student_service
 from fastapi.responses import Response
 
@@ -20,10 +20,10 @@ def create_student(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_role("admin")),
 ):
-    return student_service.create_student(db, data)
+    return student_service.create_student(db, data, actor_user_id=_.id)
 
 
-@router.get("/", response_model=List[StudentOut])
+@router.get("/", response_model=StudentPageOut)
 def list_students(
     class_id: Optional[int] = Query(None),
     academic_year_id: Optional[int] = Query(None),
@@ -37,7 +37,7 @@ def list_students(
     if current_user.role == "teacher":
         if class_id is not None and class_id not in current_user.assigned_class_ids:
             raise HTTPException(status_code=403, detail="You are not assigned to this class")
-        return student_service.get_students(
+        items, total = student_service.get_students_page(
             db=db,
             class_id=class_id,
             class_ids=current_user.assigned_class_ids if class_id is None else None,
@@ -47,10 +47,11 @@ def list_students(
             limit=limit,
             offset=offset,
         )
+        return {"items": items, "total": total, "limit": limit, "offset": offset}
     if current_user.role == "student":
         if current_user.linked_student_id is None:
-            return []
-        return student_service.get_students(
+            return {"items": [], "total": 0, "limit": limit, "offset": offset}
+        items, total = student_service.get_students_page(
             db=db,
             student_ids=[current_user.linked_student_id],
             search=search,
@@ -59,10 +60,11 @@ def list_students(
             limit=limit,
             offset=offset,
         )
+        return {"items": items, "total": total, "limit": limit, "offset": offset}
     if current_user.role == "parent":
         if not current_user.linked_student_ids:
-            return []
-        return student_service.get_students(
+            return {"items": [], "total": 0, "limit": limit, "offset": offset}
+        items, total = student_service.get_students_page(
             db=db,
             class_id=class_id,
             student_ids=current_user.linked_student_ids,
@@ -72,7 +74,8 @@ def list_students(
             limit=limit,
             offset=offset,
         )
-    return student_service.get_students(
+        return {"items": items, "total": total, "limit": limit, "offset": offset}
+    items, total = student_service.get_students_page(
         db=db,
         class_id=class_id,
         search=search,
@@ -81,6 +84,7 @@ def list_students(
         limit=limit,
         offset=offset,
     )
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 @router.get("/{student_id}", response_model=StudentOut)
@@ -100,7 +104,7 @@ def update_student(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_role("admin")),
 ):
-    student = student_service.update_student(db, student_id, data)
+    student = student_service.update_student(db, student_id, data, actor_user_id=_.id)
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
     return student
@@ -112,7 +116,7 @@ def delete_student(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_role("admin")),
 ):
-    success = student_service.delete_student(db, student_id)
+    success = student_service.delete_student(db, student_id, actor_user_id=_.id)
     if not success:
         raise HTTPException(status_code=404, detail="Student not found")
     return {"message": "Student marked as Left successfully"}

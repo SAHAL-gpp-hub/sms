@@ -177,6 +177,7 @@ export const authAPI = {
   registerStatus: () => api.get('/auth/register-status'),
   me:       ()     => api.get('/auth/me'),
   logout:   ()     => api.post('/auth/logout'),
+  verify2FA: (challengeId, otp) => api.post('/auth/verify-2fa', { challenge_id: challengeId, otp }),
 }
 
 export const studentAuthAPI = {

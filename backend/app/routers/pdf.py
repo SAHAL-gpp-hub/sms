@@ -7,9 +7,11 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from app.core.database import get_db
 from app.core.security import create_access_token, decode_access_token
+from app.models.base_models import FeePayment, StudentFee
 from app.routers.auth import CurrentUser, ensure_class_access, ensure_student_access, require_role
 from app.pdf.marksheet_pdf import render_marksheet_pdf
 from app.pdf.report_pdf import (
+    render_fee_receipt_pdf,
     render_defaulter_report,
     render_attendance_report,
     render_result_report
@@ -38,6 +40,15 @@ def _pdf_token(current_user: CurrentUser, resource: str) -> dict:
         extra_claims={"typ": "pdf-download", "resource": resource},
     )
     return {"token": token, "expires_in": 60, "resource": resource}
+
+
+def create_receipt_download_token(payment_id: int, expires_seconds: int = 3600 * 24 * 30) -> str:
+    return create_access_token(
+        subject=f"payment:{payment_id}",
+        role="receipt",
+        expires_delta=timedelta(seconds=expires_seconds),
+        extra_claims={"typ": "pdf-download", "resource": f"receipt:{payment_id}"},
+    )
 
 
 @router.get("/token/marksheet/student/{student_id}")
@@ -91,6 +102,22 @@ def result_report_token(
 ):
     ensure_class_access(current_user, class_id)
     return _pdf_token(current_user, f"report:results:{exam_id}:{class_id}")
+
+
+@router.get("/token/receipt/{payment_id}")
+def fee_receipt_token(
+    payment_id: int,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_role("admin", "student", "parent")),
+):
+    payment = db.query(FeePayment).filter_by(id=payment_id).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    student_fee = db.query(StudentFee).filter_by(id=payment.student_fee_id).first()
+    if not student_fee:
+        raise HTTPException(status_code=404, detail="Payment record is invalid")
+    ensure_student_access(db, current_user, student_fee.student_id)
+    return _pdf_token(current_user, f"receipt:{payment_id}")
 
 @router.get("/marksheet/student/{student_id}")
 def generate_student_marksheet(
@@ -185,4 +212,21 @@ def result_report(
         content=pdf,
         media_type="application/pdf",
         headers={"Content-Disposition": "inline; filename=result_report.pdf"}
+    )
+
+
+@router.get("/receipt/{payment_id}")
+def fee_receipt_pdf(
+    payment_id: int,
+    token: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    _require_pdf_token(token, f"receipt:{payment_id}")
+    pdf = render_fee_receipt_pdf(db, payment_id)
+    if not pdf:
+        raise HTTPException(status_code=404, detail="Payment receipt not found")
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=receipt_{payment_id}.pdf"},
     )

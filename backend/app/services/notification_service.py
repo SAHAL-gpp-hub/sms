@@ -113,10 +113,19 @@ class WhatsAppOTPProvider:
         return item
 
     def send_outbox(self, item: NotificationOutbox) -> None:
+        payload = item.payload or {}
+        if payload.get("message_type") == "document":
+            send_whatsapp_document(
+                phone=item.destination,
+                document_link=payload.get("document_link", ""),
+                filename=payload.get("filename") or "receipt.pdf",
+                caption=payload.get("caption"),
+            )
+            return
         send_whatsapp_template(
             phone=item.destination,
-            template_name=item.payload.get("template_name") if item.payload else "portal_activation_code",
-            params=(item.payload or {}).get("params", []),
+            template_name=payload.get("template_name", "portal_activation_code"),
+            params=payload.get("params", []),
         )
 
 
@@ -200,6 +209,44 @@ def send_whatsapp_template(phone: str, template_name: str, params: list[str]) ->
             }],
         },
     }
+    headers = {
+        "Authorization": f"Bearer {settings.WHATSAPP_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    with httpx.Client(timeout=10.0) as client:
+        response = client.post(url, json=payload, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+
+def send_whatsapp_document(
+    *,
+    phone: str,
+    document_link: str,
+    filename: str = "receipt.pdf",
+    caption: str | None = None,
+) -> dict:
+    if not settings.WHATSAPP_TOKEN or not settings.WHATSAPP_PHONE_NUMBER_ID:
+        raise RuntimeError("WhatsApp Cloud API is not configured")
+    if not document_link:
+        raise RuntimeError("WhatsApp document link is required")
+
+    destination = _normalize_indian_phone(phone)
+    url = (
+        f"https://graph.facebook.com/{settings.WHATSAPP_API_VERSION}/"
+        f"{settings.WHATSAPP_PHONE_NUMBER_ID}/messages"
+    )
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": f"91{destination}",
+        "type": "document",
+        "document": {
+            "link": document_link,
+            "filename": filename,
+        },
+    }
+    if caption:
+        payload["document"]["caption"] = caption
     headers = {
         "Authorization": f"Bearer {settings.WHATSAPP_TOKEN}",
         "Content-Type": "application/json",
@@ -298,6 +345,58 @@ def enqueue_template_notification(
     return log
 
 
+def enqueue_document_notification(
+    db: Session,
+    *,
+    student_id: int | None,
+    notification_type: str,
+    channel: str,
+    phone: str,
+    idempotency_key: str,
+    document_link: str,
+    filename: str,
+    caption: str | None = None,
+    preview_body: str | None = None,
+) -> NotificationLog:
+    destination = _normalize_indian_phone(phone)
+    existing = db.query(NotificationLog).filter(NotificationLog.idempotency_key == idempotency_key).first()
+    if existing:
+        return existing
+
+    body = preview_body or caption or "Document notification queued."
+    item = NotificationOutbox(
+        provider=channel,
+        destination=destination,
+        subject=filename,
+        body=body,
+        payload={
+            "student_id": student_id,
+            "notification_type": notification_type,
+            "message_type": "document",
+            "document_link": document_link,
+            "filename": filename,
+            "caption": caption,
+        },
+    )
+    db.add(item)
+    db.flush()
+
+    log = NotificationLog(
+        student_id=student_id,
+        notification_type=notification_type,
+        channel=channel,
+        recipient_phone=destination,
+        template_name="payment_receipt_pdf",
+        message_preview=body,
+        status="queued",
+        idempotency_key=idempotency_key,
+        outbox_id=item.id,
+    )
+    db.add(log)
+    db.flush()
+    return log
+
+
 def enqueue_payment_confirmation(db: Session, payment_id: int) -> NotificationLog | None:
     if not settings.AUTO_SEND_PAYMENT_CONFIRMATION:
         return None
@@ -317,25 +416,26 @@ def enqueue_payment_confirmation(db: Session, payment_id: int) -> NotificationLo
         return None
 
     amount = f"₹{Decimal(str(payment.amount_paid)):.0f}"
-    params = [
-        student.father_name or "Parent",
-        amount,
-        student.name_en,
-        payment.receipt_number,
-    ]
-    return enqueue_template_notification(
+    guardian_name = student.father_name or "Parent"
+    try:
+        from app.routers.pdf import create_receipt_download_token
+        token = create_receipt_download_token(payment.id)
+        base = settings.PORTAL_PUBLIC_URL.rstrip("/")
+        receipt_link = f"{base}/api/v1/pdf/receipt/{payment.id}?token={token}"
+    except Exception as exc:
+        raise RuntimeError(f"Could not create receipt link: {exc}") from exc
+
+    return enqueue_document_notification(
         db,
         student_id=student.id,
         notification_type="payment_confirmed",
         channel="whatsapp",
         phone=student.guardian_phone or student.contact,
-        template_name="payment_confirmation",
-        params=params,
-        idempotency_key=f"payment_confirmed:{payment.id}:whatsapp",
-        fallback_body=(
-            f"Dear {params[0]}, payment of {amount} received for "
-            f"{student.name_en}. Receipt No: {payment.receipt_number}."
-        ),
+        idempotency_key=f"payment_receipt:{payment.id}:whatsapp",
+        document_link=receipt_link,
+        filename=f"{payment.receipt_number}.pdf",
+        caption=f"Dear {guardian_name}, fee payment receipt for {student.name_en}. Amount {amount}.",
+        preview_body=f"Payment receipt PDF queued for {student.name_en} ({payment.receipt_number}).",
     )
 
 

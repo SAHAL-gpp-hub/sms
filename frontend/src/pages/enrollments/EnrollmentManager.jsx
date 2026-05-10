@@ -43,7 +43,8 @@ export default function EnrollmentManager() {
       .then(([yearRes, studentRes]) => {
         const yearList = yearRes.data || []
         setYears(yearList)
-        setStudents(studentRes.data || [])
+        const rawStudents = studentRes.data || []
+        setStudents(Array.isArray(rawStudents) ? rawStudents : (rawStudents.items || []))
         const current = yearList.find(y => y.is_current)
         if (current) setSelectedYear(String(current.id))
       })

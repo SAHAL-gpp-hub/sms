@@ -15,6 +15,10 @@ Endpoints:
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+import hashlib
+import hmac
+import secrets
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -31,7 +35,8 @@ from app.core.security import (
     get_password_hash,
     verify_password,
 )
-from app.models.base_models import Student, TeacherClassAssignment, TokenBlocklist, User
+from app.models.base_models import AdminLoginOTPChallenge, Student, TeacherClassAssignment, TokenBlocklist, User
+from app.services.notification_service import notification_service
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
 
@@ -47,6 +52,7 @@ limiter = Limiter(key_func=get_remote_address)
 # ---------------------------------------------------------------------------
 
 class Token(BaseModel):
+    requires_2fa: bool = False
     access_token: str
     token_type:   str = "bearer"
     user_id:      int
@@ -77,8 +83,40 @@ class UserOut(BaseModel):
     subject_assignments: list[dict] = []
     linked_student_id: int | None = None
     linked_student_ids: list[int] = []
+    two_factor_enabled: bool = False
+    two_factor_channel: str | None = None
+    two_factor_destination: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class LoginChallengeResponse(BaseModel):
+    requires_2fa: bool = True
+    challenge_id: str
+    expires_in_seconds: int
+    channel: str
+
+
+class LoginResponse(BaseModel):
+    requires_2fa: bool = False
+    access_token: str | None = None
+    token_type: str = "bearer"
+    user_id: int | None = None
+    user_name: str | None = None
+    role: str | None = None
+    assigned_class_ids: list[int] = []
+    class_teacher_class_ids: list[int] = []
+    subject_assignments: list[dict] = []
+    linked_student_id: int | None = None
+    linked_student_ids: list[int] = []
+    challenge_id: str | None = None
+    expires_in_seconds: int | None = None
+    channel: str | None = None
+
+
+class Verify2FARequest(BaseModel):
+    challenge_id: str
+    otp: str
 
 
 @dataclass
@@ -93,6 +131,9 @@ class CurrentUser:
     subject_assignments: list[dict] = field(default_factory=list)
     linked_student_id: int | None = None
     linked_student_ids: list[int] = field(default_factory=list)
+    two_factor_enabled: bool = False
+    two_factor_channel: str | None = None
+    two_factor_destination: str | None = None
 
 
 def build_current_user(db: Session, user: User) -> CurrentUser:
@@ -138,6 +179,67 @@ def build_current_user(db: Session, user: User) -> CurrentUser:
         subject_assignments=subject_assignments,
         linked_student_id=linked_student_id,
         linked_student_ids=linked_student_ids,
+        two_factor_enabled=bool(user.two_factor_enabled),
+        two_factor_channel=user.two_factor_channel,
+        two_factor_destination=user.two_factor_destination,
+    )
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _hash_login_otp(challenge_id: str, otp: str) -> str:
+    material = f"{challenge_id}:{otp}".encode("utf-8")
+    return hmac.new(settings.SECRET_KEY.encode("utf-8"), material, hashlib.sha256).hexdigest()
+
+
+def _create_admin_2fa_challenge(db: Session, user: User) -> LoginChallengeResponse:
+    channel = (user.two_factor_channel or "whatsapp").lower()
+    if channel not in {"whatsapp", "sms"}:
+        raise HTTPException(status_code=422, detail="Invalid admin 2FA channel. Use whatsapp or sms.")
+    destination = (user.two_factor_destination or "").strip()
+    if not destination:
+        raise HTTPException(status_code=422, detail="Admin 2FA destination is not configured.")
+
+    challenge_id = str(uuid.uuid4())
+    otp = f"{secrets.randbelow(1_000_000):06d}"
+    challenge = AdminLoginOTPChallenge(
+        challenge_id=challenge_id,
+        user_id=user.id,
+        channel=channel,
+        destination=destination,
+        otp_hash=_hash_login_otp(challenge_id, otp),
+        expires_at=_utcnow() + timedelta(minutes=settings.LOGIN_2FA_OTP_EXPIRE_MINUTES),
+        max_attempts=settings.LOGIN_2FA_MAX_ATTEMPTS,
+    )
+    db.add(challenge)
+    notification_service.enqueue_otp(
+        db,
+        channel,
+        destination,
+        otp,
+        {
+            "template_name": "admin_login_otp",
+            "params": [otp],
+            "account_type": "admin",
+            "name": user.name,
+            "message_type": "template",
+        },
+    )
+    db.commit()
+    return LoginChallengeResponse(
+        challenge_id=challenge_id,
+        expires_in_seconds=settings.LOGIN_2FA_OTP_EXPIRE_MINUTES * 60,
+        channel=channel,
     )
 
 
@@ -260,7 +362,7 @@ def ensure_student_access(db: Session, current_user: CurrentUser, student_id: in
 # Routes
 # ---------------------------------------------------------------------------
 
-@router.post("/login", response_model=Token, summary="Login and receive a JWT token")
+@router.post("/login", response_model=LoginResponse, summary="Login and receive a JWT token")
 @limiter.limit("10/minute")  # STEP 4.5: Brute-force protection
 def login(
     request: Request,
@@ -283,6 +385,68 @@ def login(
     db.query(TokenBlocklist).filter(TokenBlocklist.expires_at < datetime.now(timezone.utc)).delete()
     db.commit()
 
+    if user.role == "admin" and user.two_factor_enabled:
+        challenge = _create_admin_2fa_challenge(db, user)
+        return LoginResponse(
+            requires_2fa=True,
+            challenge_id=challenge.challenge_id,
+            expires_in_seconds=challenge.expires_in_seconds,
+            channel=challenge.channel,
+        )
+
+    token = create_access_token(
+        subject=user.id,
+        role=user.role,
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    current_user = build_current_user(db, user)
+    return LoginResponse(
+        requires_2fa=False,
+        access_token=token,
+        user_id=user.id,
+        user_name=user.name,
+        role=user.role,
+        assigned_class_ids=current_user.assigned_class_ids,
+        class_teacher_class_ids=current_user.class_teacher_class_ids,
+        subject_assignments=current_user.subject_assignments,
+        linked_student_id=current_user.linked_student_id,
+        linked_student_ids=current_user.linked_student_ids,
+    )
+
+
+@router.post("/verify-2fa", response_model=Token, summary="Verify admin login OTP and issue JWT")
+@limiter.limit("10/minute")
+def verify_login_2fa(
+    request: Request,
+    data: Verify2FARequest,
+    db: Session = Depends(get_db),
+):
+    challenge = (
+        db.query(AdminLoginOTPChallenge)
+        .filter_by(challenge_id=data.challenge_id)
+        .first()
+    )
+    now = _utcnow()
+    if not challenge or challenge.verified_at is not None or _as_utc(challenge.expires_at) <= now:
+        raise HTTPException(status_code=400, detail="2FA challenge expired. Please login again.")
+    if challenge.attempt_count >= challenge.max_attempts:
+        raise HTTPException(status_code=429, detail="Too many OTP attempts. Please login again.")
+
+    challenge.attempt_count += 1
+    expected = _hash_login_otp(challenge.challenge_id, data.otp.strip())
+    if not hmac.compare_digest(challenge.otp_hash, expected):
+        db.commit()
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+
+    user = db.query(User).filter_by(id=challenge.user_id, is_active=True).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    challenge.verified_at = now
+    db.commit()
+    db.query(TokenBlocklist).filter(TokenBlocklist.expires_at < now).delete()
+    db.commit()
+
     token = create_access_token(
         subject=user.id,
         role=user.role,
@@ -290,6 +454,7 @@ def login(
     )
     current_user = build_current_user(db, user)
     return Token(
+        requires_2fa=False,
         access_token=token,
         user_id=user.id,
         user_name=user.name,

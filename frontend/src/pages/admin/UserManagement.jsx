@@ -517,7 +517,8 @@ function PortalLinkingTab() {
         studentAPI.list({ limit: 200 }),
       ])
       setPortalUsers(portalRes.data || [])
-      setStudents(studRes.data || [])
+      const rawStudents = studRes.data || []
+      setStudents(Array.isArray(rawStudents) ? rawStudents : (rawStudents.items || []))
     } catch (err) {
       toast.error(extractError(err))
     } finally {

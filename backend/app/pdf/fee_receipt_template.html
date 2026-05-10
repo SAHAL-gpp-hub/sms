@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Fee Receipt</title>
+  <style>
+    @page { size: A4; margin: 15mm; }
+    body { font-family: Arial, sans-serif; color: #1f2937; font-size: 12px; }
+    .header { text-align: center; border-bottom: 2px solid #1d4ed8; padding-bottom: 8px; margin-bottom: 16px; }
+    .school { font-size: 20px; font-weight: 700; color: #1d4ed8; }
+    .title { font-size: 14px; font-weight: 700; margin-top: 4px; }
+    .meta { color: #6b7280; font-size: 11px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .card { border: 1px solid #d1d5db; border-radius: 6px; padding: 10px; }
+    .label { font-size: 10px; text-transform: uppercase; color: #6b7280; margin-bottom: 2px; }
+    .value { font-size: 13px; font-weight: 600; color: #111827; }
+    .amount { font-size: 22px; font-weight: 700; color: #059669; text-align: right; margin: 10px 0; }
+    .footer { margin-top: 24px; border-top: 1px solid #e5e7eb; padding-top: 10px; color: #6b7280; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="school">{{ school_name }}</div>
+    <div class="title">Fee Receipt</div>
+    <div class="meta">Generated on {{ generated_date }}</div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="label">Receipt No</div>
+      <div class="value">{{ receipt_number }}</div>
+    </div>
+    <div class="card">
+      <div class="label">Payment Date</div>
+      <div class="value">{{ payment_date }}</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="label">Student</div>
+      <div class="value">{{ student_name }} ({{ student_id }})</div>
+    </div>
+    <div class="card">
+      <div class="label">Father / Guardian</div>
+      <div class="value">{{ father_name }}</div>
+    </div>
+    <div class="card">
+      <div class="label">Class</div>
+      <div class="value">{{ class_name }}</div>
+    </div>
+    <div class="card">
+      <div class="label">Academic Year</div>
+      <div class="value">{{ academic_year }}</div>
+    </div>
+    <div class="card">
+      <div class="label">Contact</div>
+      <div class="value">{{ contact }}</div>
+    </div>
+    <div class="card">
+      <div class="label">Payment Mode</div>
+      <div class="value">{{ payment_mode }}</div>
+    </div>
+  </div>
+
+  <div class="amount">Amount Paid: ₹{{ "{:,.2f}".format(amount_paid) }}</div>
+  {% if notes %}
+    <div class="card">
+      <div class="label">Notes</div>
+      <div class="value">{{ notes }}</div>
+    </div>
+  {% endif %}
+
+  <div class="footer">This is a system-generated receipt.</div>
+</body>
+</html>
+

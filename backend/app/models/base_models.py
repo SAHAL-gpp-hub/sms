@@ -94,6 +94,12 @@ class ImportStatusEnum(str, enum.Enum):
     rolled_back = "rolled_back"
 
 
+class DataAuditActionEnum(str, enum.Enum):
+    create = "create"
+    update = "update"
+    delete = "delete"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Reference / Setup Tables
 # ─────────────────────────────────────────────────────────────────────────────
@@ -535,6 +541,9 @@ class User(Base):
     role          = Column(String(20), default="admin")
     is_active     = Column(Boolean, default=True)
     branch_id     = Column(Integer, ForeignKey("branches.id"), nullable=True, index=True)
+    two_factor_enabled = Column(Boolean, nullable=False, default=False)
+    two_factor_channel = Column(String(20), nullable=True)
+    two_factor_destination = Column(String(255), nullable=True)
 
 
 class TeacherClassAssignment(Base):
@@ -604,6 +613,22 @@ class OTPVerification(Base):
     activation_request = relationship("StudentActivationRequest")
 
 
+class AdminLoginOTPChallenge(Base):
+    __tablename__ = "admin_login_otp_challenges"
+
+    id            = Column(Integer, primary_key=True)
+    challenge_id  = Column(String(36), unique=True, nullable=False, index=True)
+    user_id       = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    channel       = Column(String(20), nullable=False, default="whatsapp")
+    destination   = Column(String(255), nullable=False)
+    otp_hash      = Column(String(128), nullable=False)
+    expires_at    = Column(DateTime(timezone=True), nullable=False, index=True)
+    verified_at   = Column(DateTime(timezone=True), nullable=True)
+    attempt_count = Column(Integer, nullable=False, default=0)
+    max_attempts  = Column(Integer, nullable=False, default=5)
+    created_at    = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class NotificationOutbox(Base):
     __tablename__ = "notification_outbox"
 
@@ -639,6 +664,19 @@ class NotificationLog(Base):
     outbox_id         = Column(Integer, ForeignKey("notification_outbox.id"), nullable=True)
     sent_at           = Column(DateTime(timezone=True), nullable=True)
     created_at        = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class DataAuditLog(Base):
+    __tablename__ = "data_audit_logs"
+
+    id         = Column(Integer, primary_key=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    action     = Column(Enum(DataAuditActionEnum), nullable=False, index=True)
+    table_name = Column(String(120), nullable=False, index=True)
+    record_id  = Column(String(64), nullable=False, index=True)
+    old_value  = Column(JSON, nullable=True)
+    new_value  = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
