@@ -98,6 +98,18 @@ class ImportStatusEnum(str, enum.Enum):
 # Reference / Setup Tables
 # ─────────────────────────────────────────────────────────────────────────────
 
+class Branch(Base):
+    __tablename__ = "branches"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(Text, nullable=False)
+    address = Column(Text, nullable=True)
+    phone = Column(Text, nullable=True)
+    gseb_affiliation_no = Column(Text, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class AcademicYear(Base):
     __tablename__ = "academic_years"
 
@@ -112,6 +124,7 @@ class AcademicYear(Base):
         nullable=False,
         default=YearStatusEnum.draft,
     )
+    branch_id   = Column(Integer, ForeignKey("branches.id"), nullable=True, index=True)
 
     # Relationships
     enrollments = relationship("Enrollment", back_populates="academic_year")
@@ -133,6 +146,7 @@ class Class(Base):
         nullable=False,
         default="not_started",
     )
+    branch_id        = Column(Integer, ForeignKey("branches.id"), nullable=True, index=True)
     # promotion_status values: not_started / in_progress / completed
 
 
@@ -230,6 +244,7 @@ class Student(Base):
     aadhar_last4     = Column(String(4), nullable=True)
     admission_date   = Column(Date, nullable=False)
     academic_year_id = Column(Integer, ForeignKey("academic_years.id"), nullable=False, index=True)
+    branch_id        = Column(Integer, ForeignKey("branches.id"), nullable=True, index=True)
     student_user_id  = Column(Integer, ForeignKey("users.id"), nullable=True)
     parent_user_id   = Column(Integer, ForeignKey("users.id"), nullable=True)
     status           = Column(
@@ -519,6 +534,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role          = Column(String(20), default="admin")
     is_active     = Column(Boolean, default=True)
+    branch_id     = Column(Integer, ForeignKey("branches.id"), nullable=True, index=True)
 
 
 class TeacherClassAssignment(Base):

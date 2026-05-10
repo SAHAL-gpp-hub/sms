@@ -6,8 +6,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.config import settings
 from app.core.security import get_password_hash
-from app.models.base_models import AcademicYear, Class, NotificationOutbox, Student, StudentActivationRequest, StudentStatusEnum, Subject, TeacherClassAssignment, User
+from app.models.base_models import AcademicYear, Branch, Class, NotificationOutbox, Student, StudentActivationRequest, StudentStatusEnum, Subject, TeacherClassAssignment, User
 from app.routers.auth import CurrentUser, require_role
 from app.services import student_activation_service
 
@@ -23,6 +24,7 @@ class AdminUserCreate(BaseModel):
     password: str
     role: str
     is_active: bool = True
+    branch_id: Optional[int] = None
 
     @field_validator("role")
     @classmethod
@@ -37,6 +39,7 @@ class AdminUserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     is_active: Optional[bool] = None
     role: Optional[str] = None
+    branch_id: Optional[int] = None
 
     @field_validator("role")
     @classmethod
@@ -52,6 +55,7 @@ class AdminUserOut(BaseModel):
     email: str
     role: str
     is_active: bool
+    branch_id: Optional[int] = None
 
     model_config = {"from_attributes": True}
 
@@ -89,6 +93,25 @@ class PortalLinkRequest(BaseModel):
         return value
 
 
+class BranchCreate(BaseModel):
+    name: str
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    gseb_affiliation_no: Optional[str] = None
+    is_active: bool = True
+
+
+class BranchOut(BaseModel):
+    id: int
+    name: str
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    gseb_affiliation_no: Optional[str] = None
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
 @router.post(
     "/users",
     response_model=AdminUserOut,
@@ -105,6 +128,7 @@ def create_user(
         password_hash=get_password_hash(data.password),
         role=data.role,
         is_active=data.is_active,
+        branch_id=data.branch_id if data.branch_id is not None else settings.DEFAULT_BRANCH_ID,
     )
     db.add(user)
     try:
@@ -620,3 +644,31 @@ def list_otp_failures(
         for row in rows
     ]
     return OtpOutboxResponse(total=len(items), items=items)
+
+
+@router.get("/branches", response_model=list[BranchOut])
+def list_branches(
+    include_inactive: bool = Query(False),
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
+    query = db.query(Branch)
+    if not include_inactive:
+        query = query.filter(Branch.is_active == True)  # noqa: E712
+    return query.order_by(Branch.id).all()
+
+
+@router.post("/branches", response_model=BranchOut, status_code=status.HTTP_201_CREATED)
+def create_branch(
+    data: BranchCreate,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
+    existing = db.query(Branch).filter(Branch.name.ilike(data.name.strip())).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Branch with this name already exists")
+    branch = Branch(**data.model_dump())
+    db.add(branch)
+    db.commit()
+    db.refresh(branch)
+    return branch

@@ -25,6 +25,7 @@ Edit `.env` and fill in **all three** values:
 | `DATABASE_URL`      | Connection string (pre-filled in `.env.example`) |
 | `SECRET_KEY`        | 64-char random hex string for JWT signing    |
 | `REGISTRATION_ENABLED` | Set `true` only during first-run setup    |
+| `DEFAULT_BRANCH_ID` | Default branch mapping for multi-branch base |
 
 **Generate a secret key:**
 
@@ -80,6 +81,23 @@ and exposes the PostgreSQL port `5432` for local DB tools.
 
 ---
 
+## ☁️ Production (VPS + SSL)
+
+Use the production override for internet-facing deployments:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+The production override:
+
+- keeps DB and backend ports internal only
+- mounts Let's Encrypt certificates into nginx
+- enables always-on container restart behavior
+- forces registration endpoint disablement
+
+---
+
 ## 🔐 Security Notes
 
 - **Change `SECRET_KEY`** before any public deployment — the example value is not secret.
@@ -114,6 +132,7 @@ nginx (port 80) ──▶ frontend (React/Vite, port 80)
 - Fee management (structures, assignment, payments, defaulters)
 - Marks & grading (GSEB grade scale, bulk entry, results)
 - Attendance (daily marking, monthly summary)
+- Analytics dashboard (admin-only school-wide trends)
 - PDF reports (marksheets, Transfer Certificates, result reports)
 - Year-end (academic year creation, class promotion, TC issuance)
 - JWT authentication with rate-limited login and token revocation (logout)
@@ -146,6 +165,8 @@ pytest tests/ -v
 ## 📚 Runbooks
 
 - Onboarding: [`docs/runbooks/onboarding.md`](docs/runbooks/onboarding.md)
+- Cloud deployment (VPS/SSL/domain/backups): [`docs/runbooks/cloud-deployment.md`](docs/runbooks/cloud-deployment.md)
+- S14 analytics + multi-branch + load testing: [`docs/runbooks/s14-analytics-branches-load-testing.md`](docs/runbooks/s14-analytics-branches-load-testing.md)
 - Release + rollback: [`docs/runbooks/release-rollback.md`](docs/runbooks/release-rollback.md)
 - Backup + restore: [`docs/runbooks/backup-restore.md`](docs/runbooks/backup-restore.md)
 - Security hardening checklist: [`docs/security-hardening-checklist.md`](docs/security-hardening-checklist.md)
