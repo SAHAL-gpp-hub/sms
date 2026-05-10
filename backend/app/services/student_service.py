@@ -27,6 +27,7 @@ from app.models.base_models import (
     Enrollment, EnrollmentStatusEnum,
     Student, StudentStatusEnum,
 )
+from app.core.config import settings
 from app.schemas.student import StudentCreate, StudentUpdate
 from fastapi import HTTPException
 
@@ -132,6 +133,8 @@ def _persist_student(
         payload["student_phone"] = payload.get("contact")
     if not payload.get("guardian_phone"):
         payload["guardian_phone"] = payload.get("contact")
+    if payload.get("branch_id") is None:
+        payload["branch_id"] = settings.DEFAULT_BRANCH_ID
 
     year = payload["admission_date"].year
     candidate_student_id = student_id_override or generate_student_id(db, year)
@@ -205,8 +208,9 @@ def get_students(
     academic_year_id: Optional[int]   = None,
     limit: int                         = 50,
     offset: int                        = 0,
+    branch_id: Optional[int]           = None,
 ):
-    query = db.query(Student).filter(Student.status == StudentStatusEnum.Active)
+    query = get_students_query(db, branch_id=branch_id).filter(Student.status == StudentStatusEnum.Active)
 
     if class_id is not None:
         query = query.filter(Student.class_id == class_id)
@@ -233,6 +237,13 @@ def get_students(
 
     query = query.order_by(Student.id.desc())
     return query.offset(offset).limit(limit).all()
+
+
+def get_students_query(db: Session, branch_id: Optional[int] = None):
+    query = db.query(Student)
+    if branch_id is not None:
+        query = query.filter(Student.branch_id == branch_id)
+    return query
 
 
 def get_student(

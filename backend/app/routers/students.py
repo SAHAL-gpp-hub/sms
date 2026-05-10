@@ -27,6 +27,7 @@ def create_student(
 def list_students(
     class_id: Optional[int] = Query(None),
     academic_year_id: Optional[int] = Query(None),
+    branch_id: Optional[int] = Query(None),
     search: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -42,6 +43,7 @@ def list_students(
             class_ids=current_user.assigned_class_ids if class_id is None else None,
             search=search,
             academic_year_id=academic_year_id,
+            branch_id=branch_id,
             limit=limit,
             offset=offset,
         )
@@ -53,6 +55,7 @@ def list_students(
             student_ids=[current_user.linked_student_id],
             search=search,
             academic_year_id=academic_year_id,
+            branch_id=branch_id,
             limit=limit,
             offset=offset,
         )
@@ -65,6 +68,7 @@ def list_students(
             student_ids=current_user.linked_student_ids,
             search=search,
             academic_year_id=academic_year_id,
+            branch_id=branch_id,
             limit=limit,
             offset=offset,
         )
@@ -73,6 +77,7 @@ def list_students(
         class_id=class_id,
         search=search,
         academic_year_id=academic_year_id,
+        branch_id=branch_id,
         limit=limit,
         offset=offset,
     )

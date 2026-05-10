@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     # This domain does not need to be resolvable — it is stored in the DB
     # only and used as a unique identifier.  Override in .env for production.
     PORTAL_EMAIL_DOMAIN: str = "portal.sms.local"
+    DEFAULT_BRANCH_ID: int = 1
 
     # ── Student / parent self-activation ─────────────────────────────────
     ACTIVATION_TOKEN_EXPIRE_MINUTES: int = 15

@@ -21,6 +21,7 @@ import Attendance from './pages/attendance/Attendance'
 import Reports from './pages/reports/Reports'
 import YearEnd from './pages/yearend/YearEnd'
 import Notifications from './pages/notifications/Notifications'
+import Analytics from './pages/analytics/Analytics'
 import ComingSoon from './pages/ComingSoon'
 import UserManagement from './pages/admin/UserManagement'
 import UserForm from './pages/admin/UserForm'
@@ -111,6 +112,7 @@ export default function App() {
 
           {/* Reports */}
           <Route path="reports" element={<Reports />} />
+          <Route path="analytics" element={<RoleRoute roles={['admin']}><Analytics /></RoleRoute>} />
 
           {/* Year-end */}
           <Route path="yearend" element={<RoleRoute roles={['admin']}><YearEnd /></RoleRoute>} />

@@ -25,6 +25,7 @@ Edit `.env` and fill in **all three** values:
 | `DATABASE_URL`      | Connection string (pre-filled in `.env.example`) |
 | `SECRET_KEY`        | 64-char random hex string for JWT signing    |
 | `REGISTRATION_ENABLED` | Set `true` only during first-run setup    |
+| `DEFAULT_BRANCH_ID` | Default branch mapping for multi-branch base |
 
 **Generate a secret key:**
 
@@ -131,6 +132,7 @@ nginx (port 80) ──▶ frontend (React/Vite, port 80)
 - Fee management (structures, assignment, payments, defaulters)
 - Marks & grading (GSEB grade scale, bulk entry, results)
 - Attendance (daily marking, monthly summary)
+- Analytics dashboard (admin-only school-wide trends)
 - PDF reports (marksheets, Transfer Certificates, result reports)
 - Year-end (academic year creation, class promotion, TC issuance)
 - JWT authentication with rate-limited login and token revocation (logout)
@@ -164,6 +166,7 @@ pytest tests/ -v
 
 - Onboarding: [`docs/runbooks/onboarding.md`](docs/runbooks/onboarding.md)
 - Cloud deployment (VPS/SSL/domain/backups): [`docs/runbooks/cloud-deployment.md`](docs/runbooks/cloud-deployment.md)
+- S14 analytics + multi-branch + load testing: [`docs/runbooks/s14-analytics-branches-load-testing.md`](docs/runbooks/s14-analytics-branches-load-testing.md)
 - Release + rollback: [`docs/runbooks/release-rollback.md`](docs/runbooks/release-rollback.md)
 - Backup + restore: [`docs/runbooks/backup-restore.md`](docs/runbooks/backup-restore.md)
 - Security hardening checklist: [`docs/security-hardening-checklist.md`](docs/security-hardening-checklist.md)

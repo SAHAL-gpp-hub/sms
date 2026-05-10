@@ -25,6 +25,7 @@ from app.core.config import settings
 from app.models.base_models import *  # noqa — registers all models with Base
 from app.routers import (
     admin_users,
+    analytics,
     attendance,
     auth,
     enrollments,   # NEW
@@ -139,6 +140,7 @@ app.include_router(fees.router,         dependencies=_auth)
 app.include_router(imports.router,      dependencies=_auth)
 app.include_router(marks.router,        dependencies=_auth)
 app.include_router(attendance.router,   dependencies=_auth)
+app.include_router(analytics.router,    dependencies=_auth)
 app.include_router(admin_users.router,  dependencies=_auth)
 app.include_router(portal.router,       dependencies=_auth)
 app.include_router(payments.router,     dependencies=_auth)

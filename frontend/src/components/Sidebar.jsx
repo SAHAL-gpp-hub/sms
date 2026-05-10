@@ -84,6 +84,12 @@ const navGroups = [
         icon: <Icon><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10" /></Icon>,
       },
       {
+        to: '/analytics',
+        label: 'Analytics',
+        roles: ['admin'],
+        icon: <Icon><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 3v18m-6-8h12M5 8h8m-8 8h6m6 5l4-4-4-4" /></Icon>,
+      },
+      {
         to: '/notifications',
         label: 'Notifications',
         roles: ['admin'],

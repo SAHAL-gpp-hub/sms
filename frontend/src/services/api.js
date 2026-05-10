@@ -298,6 +298,16 @@ export const attendanceAPI = {
   getDashboardStats: () => api.get('/attendance/dashboard-stats'),
 }
 
+// ── Analytics ────────────────────────────────────────────────────────────────
+export const analyticsAPI = {
+  feeCollection:      (params) => api.get('/analytics/fee-collection', { params }),
+  classPerformance:   (params) => api.get('/analytics/class-performance', { params }),
+  gradeDistribution:  (params) => api.get('/analytics/grade-distribution', { params }),
+  attendanceTrends:   (params) => api.get('/analytics/attendance-trends', { params }),
+  topStudents:        (params) => api.get('/analytics/top-students', { params }),
+  atRiskAttendance:   (params) => api.get('/analytics/at-risk-attendance', { params }),
+}
+
 // ── Year-End ──────────────────────────────────────────────────────────────────
 export const yearendAPI = {
   createNewYear:  (data)    => api.post('/yearend/new-year', data),

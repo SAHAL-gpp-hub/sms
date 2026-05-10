@@ -42,6 +42,7 @@ class StudentCreate(BaseModel):
     aadhar_last4:     Optional[str]  = None
     admission_date:   date
     academic_year_id: int
+    branch_id:        Optional[int] = None
     previous_school:  Optional[str]  = None
 
     @field_validator("contact")
@@ -124,6 +125,7 @@ class StudentUpdate(BaseModel):
     aadhar_last4:    Optional[str]  = None
     admission_date:  Optional[date] = None
     previous_school: Optional[str]  = None
+    branch_id:       Optional[int]  = None
 
     @field_validator("contact")
     @classmethod
@@ -204,6 +206,7 @@ class StudentOut(BaseModel):
     aadhar_last4:     Optional[str]
     admission_date:   date
     academic_year_id: int
+    branch_id:        Optional[int] = None
     status:           StudentStatusEnum
     photo_path:       Optional[str] = None
     reason_for_leaving: Optional[str] = None
