@@ -12,7 +12,19 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
-const EXAM_TYPES = ['Unit Test 1', 'Unit Test 2', 'Half-Yearly', 'Annual', 'Practical']
+const EXAM_TYPES = [
+  'Unit Test 1',
+  'Unit Test 2',
+  'Unit Test 3',
+  'Unit Test 4',
+  'Class Test',
+  'Monthly Test',
+  'Mid-Term',
+  'Half-Yearly',
+  'Preliminary',
+  'Annual',
+  'Practical',
+]
 const SUBJECT_TYPES = ['Theory', 'Practical', 'Theory+Practical']
 
 const GRADE_COLORS = {
@@ -1094,10 +1106,15 @@ export default function MarksEntry() {
 
   const handleCreateExam = async () => {
     if (!selectedClass || !selectedYear) return
+    const examName = newExam.name.trim()
+    if (!examName) {
+      toast.error('Enter an exam name')
+      return
+    }
     setCreatingExam(true)
     try {
       await marksAPI.createExam({
-        name:             newExam.name,
+        name:             examName,
         class_id:         parseInt(selectedClass),
         academic_year_id: parseInt(selectedYear),
         exam_date:        newExam.exam_date || null,
@@ -1105,7 +1122,8 @@ export default function MarksEntry() {
       const r = await marksAPI.getExams({ class_id: selectedClass, academic_year_id: selectedYear })
       setExams(r.data)
       setShowNewExam(false)
-      toast.success(`Exam "${newExam.name}" created`)
+      setNewExam({ name: 'Unit Test 1', exam_date: '' })
+      toast.success(`Exam "${examName}" created`)
     } catch (err) {
       toast.error(extractError(err))
     } finally {
@@ -1184,15 +1202,22 @@ export default function MarksEntry() {
           <div className="me-newexam-row">
             <div className="me-newexam-type">
               <label className="label">Exam Type</label>
-              <select className="input" value={newExam.name} onChange={e => setNewExam(n => ({ ...n, name: e.target.value }))}>
+              <input
+                className="input"
+                list="me-exam-type-options"
+                value={newExam.name}
+                onChange={e => setNewExam(n => ({ ...n, name: e.target.value }))}
+                placeholder="Type exam name (e.g., Unit Test 1)"
+              />
+              <datalist id="me-exam-type-options">
                 {EXAM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+              </datalist>
             </div>
             <div className="me-newexam-date">
               <label className="label">Date (optional)</label>
               <input type="date" className="input" value={newExam.exam_date} onChange={e => setNewExam(n => ({ ...n, exam_date: e.target.value }))} />
             </div>
-            <button className="btn btn-primary" onClick={handleCreateExam} disabled={creatingExam}>
+            <button className="btn btn-primary" onClick={handleCreateExam} disabled={creatingExam || !newExam.name.trim()}>
               {creatingExam ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Creating…</> : 'Create Exam'}
             </button>
             <button className="btn btn-secondary" onClick={() => setShowNewExam(false)}>Cancel</button>

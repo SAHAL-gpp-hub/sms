@@ -32,6 +32,7 @@ export default function Analytics() {
   const [attendanceMonths, setAttendanceMonths] = useState(3)
   const [riskThreshold, setRiskThreshold] = useState(75)
   const [selectedClassId, setSelectedClassId] = useState('')
+  const [selectedExamClassId, setSelectedExamClassId] = useState('')
 
   const yearsQuery = useQuery({
     queryKey: ['analytics-years'],
@@ -48,13 +49,33 @@ export default function Analytics() {
     queryFn: async () => (await setupAPI.getClasses(activeYearId)).data || [],
   })
   const examsQuery = useQuery({
-    queryKey: ['analytics-exams', activeYearId],
+    queryKey: ['analytics-exams', activeYearId, selectedExamClassId],
     enabled: !!activeYearId,
-    queryFn: async () => (await marksAPI.getExams({ academic_year_id: activeYearId })).data || [],
+    queryFn: async () => (await marksAPI.getExams({
+      academic_year_id: activeYearId,
+      class_id: selectedExamClassId || undefined,
+    })).data || [],
   })
-  const examOptions = examsQuery.data || []
+  const examOptions = useMemo(() => examsQuery.data || [], [examsQuery.data])
   const [examId, setExamId] = useState(null)
-  const activeExamId = examId || examOptions[0]?.id || null
+  const classLabelById = useMemo(() => {
+    const map = {}
+    ;(classesQuery.data || []).forEach(cls => {
+      map[String(cls.id)] = `${cls.name}${cls.division ? `-${cls.division}` : ''}`
+    })
+    return map
+  }, [classesQuery.data])
+  const visibleExamOptions = useMemo(() => (
+    examOptions.map(exam => ({
+      ...exam,
+      label: selectedExamClassId
+        ? exam.name
+        : `${exam.name}${classLabelById[String(exam.class_id)] ? ` — Class ${classLabelById[String(exam.class_id)]}` : ''}`,
+    }))
+  ), [examOptions, classLabelById, selectedExamClassId])
+  const activeExamId = examOptions.some(exam => exam.id === examId)
+    ? examId
+    : (examOptions[0]?.id || null)
 
   const feeQuery = useQuery({
     queryKey: ['analytics-fee', activeYearId, months],
@@ -127,8 +148,16 @@ export default function Analytics() {
             <select className="input" value={activeYearId || ''} onChange={e => setAcademicYearId(Number(e.target.value) || null)}>
               {years.map(year => <option key={year.id} value={year.id}>{year.label}</option>)}
             </select>
+            <select className="input" value={selectedExamClassId} onChange={e => setSelectedExamClassId(e.target.value)}>
+              <option value="">All classes</option>
+              {(classesQuery.data || []).map(cls => (
+                <option key={cls.id} value={cls.id}>
+                  Class {cls.name}{cls.division ? `-${cls.division}` : ''}
+                </option>
+              ))}
+            </select>
             <select className="input" value={activeExamId || ''} onChange={e => setExamId(Number(e.target.value) || null)}>
-              {examOptions.map(exam => <option key={exam.id} value={exam.id}>{exam.name}</option>)}
+              {visibleExamOptions.map(exam => <option key={exam.id} value={exam.id}>{exam.label}</option>)}
             </select>
           </div>
         )}
