@@ -1,0 +1,91 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deployment environment"
+        required: true
+        type: choice
+        options: [staging, production]
+      image_tag:
+        description: "Docker image tag to deploy (for example: main-2026-05-10)"
+          required: true
+          type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build release package
+        run: |
+          tar -czf sms-release.tar.gz \
+            docker-compose.yml \
+            docker-compose.dev.yml \
+            nginx.conf \
+            backend \
+            frontend
+
+      - name: Copy release package to target
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: sms-release.tar.gz
+          target: ${{ secrets.DEPLOY_PATH }}
+
+      - name: Deploy candidate release
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          APP_PATH: ${{ secrets.DEPLOY_PATH }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: IMAGE_TAG,APP_PATH
+          script: |
+            set -euo pipefail
+            cd "$APP_PATH"
+            mkdir -p releases/current releases/previous
+            rm -rf releases/previous/*
+            cp -a releases/current/. releases/previous/ 2>/dev/null || true
+            tar -xzf sms-release.tar.gz -C releases/current
+            cd releases/current
+            IMAGE_TAG="$IMAGE_TAG" docker compose up -d --build
+
+      - name: Health check and rollback on failure
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          APP_PATH: ${{ secrets.DEPLOY_PATH }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: APP_PATH
+          script: |
+            set -euo pipefail
+            cd "$APP_PATH/releases/current"
+            if curl -sf http://localhost:8000/health > /dev/null; then
+              echo "Health check passed"
+              exit 0
+            fi
+            echo "Health check failed, rolling back..."
+            cd "$APP_PATH"
+            rm -rf releases/current/*
+            cp -a releases/previous/. releases/current/
+            cd releases/current
+            docker compose up -d --build
+            curl -sf http://localhost:8000/health > /dev/null
+
+      - name: Deployment summary
+        run: |
+          echo "Deployment completed for ${{ inputs.environment }} with tag ${{ inputs.image_tag }}."
