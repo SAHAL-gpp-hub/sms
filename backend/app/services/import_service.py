@@ -340,6 +340,12 @@ def _build_preview(
             'previous_school': raw_row.get('previous_school', '').strip() or None,
         })
 
+        if normalized.get('contact'):
+            if not normalized.get('student_phone'):
+                normalized['student_phone'] = normalized['contact']
+            if not normalized.get('guardian_phone'):
+                normalized['guardian_phone'] = normalized['contact']
+
         for field in ('name_en', 'name_gu', 'father_name', 'contact'):
             if not normalized.get(field):
                 issues.append(f'{field} is required')

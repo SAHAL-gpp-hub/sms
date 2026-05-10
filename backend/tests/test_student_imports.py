@@ -134,6 +134,104 @@ def test_commit_import_creates_students_and_classes(client, auth_headers):
     db.close()
 
 
+def test_create_student_defaults_whatsapp_to_contact(client, auth_headers):
+    payload = {
+        'name_en': 'Fallback Create',
+        'name_gu': 'ફૉલબેક ક્રિએટ',
+        'dob': '2013-07-10',
+        'gender': 'M',
+        'class_id': 1,
+        'roll_number': 9,
+        'gr_number': 'GR2024991',
+        'father_name': 'Create Parent',
+        'mother_name': 'Create Mother',
+        'contact': '9876500001',
+        'student_email': 'fallback.create.student@test.com',
+        'student_phone': '',
+        'guardian_email': 'fallback.create.guardian@test.com',
+        'guardian_phone': '',
+        'address': 'Import Street',
+        'category': 'GEN',
+        'aadhar_last4': '1234',
+        'admission_date': '2024-06-01',
+        'academic_year_id': 1,
+        'previous_school': None,
+    }
+    res = client.post('/api/v1/students/', headers=auth_headers, json=payload)
+    assert res.status_code == 201
+    data = res.json()
+    assert data['contact'] == '9876500001'
+    assert data['student_phone'] == '9876500001'
+    assert data['guardian_phone'] == '9876500001'
+
+
+def test_update_student_defaults_blank_whatsapp_to_contact(client, auth_headers):
+    create_payload = {
+        'name_en': 'Fallback Update',
+        'name_gu': 'ફૉલબેક અપડેટ',
+        'dob': '2013-08-11',
+        'gender': 'F',
+        'class_id': 1,
+        'roll_number': 10,
+        'gr_number': 'GR2024992',
+        'father_name': 'Update Parent',
+        'mother_name': 'Update Mother',
+        'contact': '9876500002',
+        'student_email': 'fallback.update.student@test.com',
+        'student_phone': '9876500002',
+        'guardian_email': 'fallback.update.guardian@test.com',
+        'guardian_phone': '9876500002',
+        'address': 'Update Street',
+        'category': 'GEN',
+        'aadhar_last4': '5678',
+        'admission_date': '2024-06-01',
+        'academic_year_id': 1,
+        'previous_school': None,
+    }
+    create_res = client.post('/api/v1/students/', headers=auth_headers, json=create_payload)
+    assert create_res.status_code == 201
+    student_id = create_res.json()['id']
+
+    update_res = client.put(
+        f'/api/v1/students/{student_id}',
+        headers=auth_headers,
+        json={
+            'contact': '9876501234',
+            'student_phone': '',
+            'guardian_phone': '',
+        },
+    )
+    assert update_res.status_code == 200
+    updated = update_res.json()
+    assert updated['contact'] == '9876501234'
+    assert updated['student_phone'] == '9876501234'
+    assert updated['guardian_phone'] == '9876501234'
+    assert updated['name_en'] == create_payload['name_en']
+    assert updated['dob'] == create_payload['dob']
+
+
+def test_commit_import_defaults_blank_whatsapp_to_contact(client, auth_headers):
+    content = _csv_bytes([
+        'student_id,gr_number,name_en,name_gu,dob,gender,class_name,division,father_name,contact,student_phone,guardian_phone,admission_date,academic_year_label',
+        'NEW-2024-011,GR2024011,Import Phone Default,ઇમ્પોર્ટ ફોન ડિફોલ્ટ,2014-06-13,M,7,A,Hasan Ali,9876543205,,,2024-06-01,2025-26',
+    ])
+    res = client.post(
+        '/api/v1/imports/students/commit',
+        headers=auth_headers,
+        files={'file': ('students.csv', content, 'text/csv')},
+        data={'create_missing_classes': 'false'},
+    )
+    assert res.status_code == 200
+
+    db = TestingSessionLocal()
+    created_student = db.query(Student).filter_by(student_id='NEW-2024-011').first()
+    assert created_student is not None
+    assert created_student.contact == '9876543205'
+    assert created_student.student_phone == '9876543205'
+    assert created_student.guardian_phone == '9876543205'
+    db.close()
+
+
 def test_rollback_marks_imported_students_left(client, auth_headers):
     list_res = client.get('/api/v1/imports/students/batches', headers=auth_headers)
     assert list_res.status_code == 200

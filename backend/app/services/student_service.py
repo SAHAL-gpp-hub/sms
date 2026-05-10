@@ -128,6 +128,11 @@ def _persist_student(
     legacy student_id. When auto_commit is False the caller owns the enclosing
     transaction and any error aborts the whole unit of work.
     """
+    if not payload.get("student_phone"):
+        payload["student_phone"] = payload.get("contact")
+    if not payload.get("guardian_phone"):
+        payload["guardian_phone"] = payload.get("contact")
+
     year = payload["admission_date"].year
     candidate_student_id = student_id_override or generate_student_id(db, year)
 
@@ -249,7 +254,15 @@ def update_student(
     old_year_id  = student.academic_year_id
     old_class_id = student.class_id
 
-    for key, value in data.model_dump(exclude_unset=True).items():
+    updates = data.model_dump(exclude_unset=True)
+
+    resolved_contact = updates.get("contact", student.contact)
+    if "student_phone" in updates and not updates.get("student_phone") and resolved_contact:
+        updates["student_phone"] = resolved_contact
+    if "guardian_phone" in updates and not updates.get("guardian_phone") and resolved_contact:
+        updates["guardian_phone"] = resolved_contact
+
+    for key, value in updates.items():
         setattr(student, key, value)
 
     # If class or year changed, ensure enrollment exists for the new year

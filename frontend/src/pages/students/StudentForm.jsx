@@ -21,6 +21,14 @@ const STATUSES = [
   { value: 'Detained',    label: 'Detained' },
   { value: 'Provisional', label: 'Provisional' },
 ]
+const WHATSAPP_TOGGLE_STYLE = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '8px',
+  marginBottom: '8px',
+  fontSize: '12px',
+  color: 'var(--text-secondary)',
+}
 
 function SectionCard({ title, subtitle, children }) {
   return (
@@ -63,6 +71,8 @@ export default function StudentForm() {
   const [initialLoading, setInitialLoading] = useState(isEdit)
   const [errors, setErrors]             = useState({})
   const [form, setForm]                 = useState(EMPTY_FORM)
+  const [useContactForStudentWhatsApp, setUseContactForStudentWhatsApp] = useState(true)
+  const [useContactForGuardianWhatsApp, setUseContactForGuardianWhatsApp] = useState(true)
 
   useEffect(() => {
     Promise.all([
@@ -86,8 +96,10 @@ export default function StudentForm() {
           class_id: String(s.class_id) || '', roll_number: s.roll_number != null ? String(s.roll_number) : '',
           gr_number: s.gr_number || '', father_name: s.father_name || '',
           mother_name: s.mother_name || '', contact: s.contact || '',
-          student_email: s.student_email || '', student_phone: s.student_phone || '',
-          guardian_email: s.guardian_email || '', guardian_phone: s.guardian_phone || '',
+          student_email: s.student_email || '',
+          student_phone: s.student_phone ?? (s.contact || ''),
+          guardian_email: s.guardian_email || '',
+          guardian_phone: s.guardian_phone ?? (s.contact || ''),
           address: s.address || '', category: s.category || 'GEN',
           aadhar_last4: s.aadhar_last4 || '',
           admission_date: s.admission_date || '',
@@ -96,6 +108,8 @@ export default function StudentForm() {
           previous_school: s.previous_school || '',
           reason_for_leaving: s.reason_for_leaving || '',
         })
+        setUseContactForStudentWhatsApp(!s.student_phone || s.student_phone === s.contact)
+        setUseContactForGuardianWhatsApp(!s.guardian_phone || s.guardian_phone === s.contact)
         setInitialLoading(false)
       }).catch(() => {
         toast.error('Failed to load student data')
@@ -142,9 +156,13 @@ export default function StudentForm() {
         roll_number: form.roll_number ? parseInt(form.roll_number) : null,
         aadhar_last4: form.aadhar_last4 || null,
         student_email: form.student_email.trim().toLowerCase() || null,
-        student_phone: isEdit ? (form.student_phone || null) : form.contact,
+        student_phone: isEdit
+          ? ((useContactForStudentWhatsApp ? form.contact : form.student_phone) || null)
+          : form.contact,
         guardian_email: form.guardian_email.trim().toLowerCase() || null,
-        guardian_phone: isEdit ? (form.guardian_phone || null) : form.contact,
+        guardian_phone: isEdit
+          ? ((useContactForGuardianWhatsApp ? form.contact : form.guardian_phone) || null)
+          : form.contact,
         previous_school: form.previous_school || null,
         reason_for_leaving: form.reason_for_leaving || null,
       }
@@ -269,7 +287,12 @@ export default function StudentForm() {
             value={form.contact}
             onChange={e => {
               const val = e.target.value.replace(/\D/g, '').slice(0, 10)
-              setForm(f => ({ ...f, contact: val }))
+              setForm(f => ({
+                ...f,
+                contact: val,
+                ...(isEdit && useContactForStudentWhatsApp ? { student_phone: val } : {}),
+                ...(isEdit && useContactForGuardianWhatsApp ? { guardian_phone: val } : {}),
+              }))
               setErrors(prev => ({ ...prev, contact: undefined }))
             }}
             placeholder="9876543210"
@@ -287,7 +310,7 @@ export default function StudentForm() {
           />
         </Field>
         {!isEdit && (
-          <Field label="WhatsApp Number" hint="Same as contact number for student and guardian">
+          <Field label="WhatsApp Number" hint="In India, this is usually the same as contact for both student and guardian">
             <input className="input" value={form.contact} readOnly />
           </Field>
         )}
@@ -301,7 +324,26 @@ export default function StudentForm() {
           />
         </Field>
         {isEdit && (
-          <Field label="Student WhatsApp" error={errors.student_phone} hint="Future WhatsApp OTP support">
+          <Field
+            label="Student WhatsApp"
+            error={errors.student_phone}
+            hint="In India, this is usually the same as contact. Enter a different number only if needed."
+          >
+            <label style={WHATSAPP_TOGGLE_STYLE}>
+              <input
+                type="checkbox"
+                checked={useContactForStudentWhatsApp}
+                onChange={e => {
+                  const checked = e.target.checked
+                  setUseContactForStudentWhatsApp(checked)
+                  if (checked) {
+                    setForm(f => ({ ...f, student_phone: f.contact }))
+                    setErrors(prev => ({ ...prev, student_phone: undefined }))
+                  }
+                }}
+              />
+              Use contact as WhatsApp
+            </label>
             <input
               className={`input${errors.student_phone ? ' error' : ''}`}
               value={form.student_phone}
@@ -313,11 +355,31 @@ export default function StudentForm() {
               placeholder="9876543210"
               maxLength={10}
               inputMode="tel"
+              disabled={useContactForStudentWhatsApp}
             />
           </Field>
         )}
         {isEdit && (
-          <Field label="Guardian WhatsApp" error={errors.guardian_phone} hint="Future WhatsApp OTP support">
+          <Field
+            label="Guardian WhatsApp"
+            error={errors.guardian_phone}
+            hint="In India, this is usually the same as contact. Enter a different number only if needed."
+          >
+            <label style={WHATSAPP_TOGGLE_STYLE}>
+              <input
+                type="checkbox"
+                checked={useContactForGuardianWhatsApp}
+                onChange={e => {
+                  const checked = e.target.checked
+                  setUseContactForGuardianWhatsApp(checked)
+                  if (checked) {
+                    setForm(f => ({ ...f, guardian_phone: f.contact }))
+                    setErrors(prev => ({ ...prev, guardian_phone: undefined }))
+                  }
+                }}
+              />
+              Use contact as WhatsApp
+            </label>
             <input
               className={`input${errors.guardian_phone ? ' error' : ''}`}
               value={form.guardian_phone}
@@ -329,6 +391,7 @@ export default function StudentForm() {
               placeholder="9876543210"
               maxLength={10}
               inputMode="tel"
+              disabled={useContactForGuardianWhatsApp}
             />
           </Field>
         )}
