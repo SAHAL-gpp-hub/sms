@@ -31,7 +31,7 @@ sudo ufw enable
 sudo mkdir -p /opt/iqra-sms
 sudo chown deploy:deploy /opt/iqra-sms
 cd /opt/iqra-sms
-git clone https://github.com/yourrepo/school-sms.git .
+git clone https://github.com/SAHAL-gpp-hub/sms.git .
 ```
 
 Copy production env file from local machine (do not commit it):
