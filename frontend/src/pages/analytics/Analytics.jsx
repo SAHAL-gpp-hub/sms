@@ -104,18 +104,17 @@ export default function Analytics() {
   const feeTrend = feeQuery.data?.trend || []
   const feeSummary = feeQuery.data?.summary || {}
   const classPerformance = classPerfQuery.data || []
-  const gradeDistribution = gradeQuery.data || []
   const attendanceTrend = attendanceQuery.data || []
   const topStudents = topStudentsQuery.data || []
   const atRiskStudents = atRiskQuery.data?.students || []
 
   const pieData = useMemo(
     () =>
-      gradeDistribution.map((item, idx) => ({
+      (gradeQuery.data || []).map((item, idx) => ({
         ...item,
         fill: CHART_COLORS[idx % CHART_COLORS.length],
       })),
-    [gradeDistribution],
+    [gradeQuery.data],
   )
 
   return (
