@@ -148,7 +148,14 @@ export default function Analytics() {
             <select className="input" value={activeYearId || ''} onChange={e => setAcademicYearId(Number(e.target.value) || null)}>
               {years.map(year => <option key={year.id} value={year.id}>{year.label}</option>)}
             </select>
-            <select className="input" value={selectedExamClassId} onChange={e => setSelectedExamClassId(e.target.value)}>
+            <select
+              className="input"
+              value={selectedExamClassId}
+              onChange={e => {
+                setSelectedExamClassId(e.target.value)
+                setExamId(null)
+              }}
+            >
               <option value="">All classes</option>
               {(classesQuery.data || []).map(cls => (
                 <option key={cls.id} value={cls.id}>

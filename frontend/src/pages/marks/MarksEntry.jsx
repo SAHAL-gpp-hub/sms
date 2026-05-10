@@ -990,7 +990,7 @@ export default function MarksEntry() {
   const [view, setView]               = useState('entry')
 
   const [showNewExam, setShowNewExam] = useState(false)
-  const [newExam, setNewExam]         = useState({ name: 'Unit Test 1', exam_date: '' })
+  const [newExam, setNewExam]         = useState({ name: '', exam_date: '' })
   const [creatingExam, setCreatingExam] = useState(false)
 
   useEffect(() => {
@@ -1122,7 +1122,7 @@ export default function MarksEntry() {
       const r = await marksAPI.getExams({ class_id: selectedClass, academic_year_id: selectedYear })
       setExams(r.data)
       setShowNewExam(false)
-      setNewExam({ name: 'Unit Test 1', exam_date: '' })
+      setNewExam({ name: '', exam_date: '' })
       toast.success(`Exam "${examName}" created`)
     } catch (err) {
       toast.error(extractError(err))
