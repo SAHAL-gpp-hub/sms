@@ -4,8 +4,10 @@ import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { studentAPI, setupAPI, extractError } from '../../services/api'
+import { getRole } from '../../services/auth'
 import { PageHeader, SearchInput, Select, TableSkeleton, EmptyState, ConfirmModal, StatusBadge, FilterRow } from '../../components/UI'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
+import StudentImportPanel from './StudentImportPanel'
 
 function StudentCard({ student, cls, onDelete, onDownloadTC }) {
   return (
@@ -138,6 +140,7 @@ function StudentCard({ student, cls, onDelete, onDownloadTC }) {
 
 export default function StudentList() {
   const queryClient = useQueryClient()
+  const isAdmin = getRole() === 'admin'
   const [search, setSearch] = useState('')
   const [classFilter, setClassFilter] = useState('')
   const [seeding, setSeeding] = useState(false)
@@ -252,6 +255,8 @@ export default function StudentList() {
           </>
         }
       />
+
+      {isAdmin && <StudentImportPanel />}
 
       <FilterRow>
         <SearchInput

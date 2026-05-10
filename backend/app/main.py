@@ -29,6 +29,7 @@ from app.routers import (
     auth,
     enrollments,   # NEW
     fees,
+    imports,
     marks,
     notifications,
     pdf,
@@ -135,6 +136,7 @@ _auth = [Depends(get_current_user)]
 app.include_router(students.router,     dependencies=_auth)
 app.include_router(setup.router,        dependencies=_auth)
 app.include_router(fees.router,         dependencies=_auth)
+app.include_router(imports.router,      dependencies=_auth)
 app.include_router(marks.router,        dependencies=_auth)
 app.include_router(attendance.router,   dependencies=_auth)
 app.include_router(admin_users.router,  dependencies=_auth)
