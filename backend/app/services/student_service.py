@@ -25,11 +25,13 @@ from sqlalchemy.orm import Session
 
 from app.models.base_models import (
     Enrollment, EnrollmentStatusEnum,
+    DataAuditActionEnum,
     Student, StudentStatusEnum,
 )
 from app.core.config import settings
 from app.schemas.student import StudentCreate, StudentUpdate
 from fastapi import HTTPException
+from app.services.audit_service import log_data_change, model_snapshot
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -172,13 +174,25 @@ def _persist_student(
         raise HTTPException(status_code=400, detail=str(exc.orig)) from exc
 
 
-def create_student(db: Session, data: StudentCreate) -> Student:
+def create_student(db: Session, data: StudentCreate, actor_user_id: int | None = None) -> Student:
     """
     Creates a student record AND an enrollment record for the current year.
 
     ID generation is race-proof via advisory locking.
     """
-    return _persist_student(db, data.model_dump())
+    student = _persist_student(db, data.model_dump())
+    log_data_change(
+        db,
+        user_id=actor_user_id,
+        action=DataAuditActionEnum.create,
+        table_name="students",
+        record_id=student.id,
+        old_value=None,
+        new_value=model_snapshot(student),
+    )
+    db.commit()
+    db.refresh(student)
+    return student
 
 
 def create_student_from_import(
@@ -209,7 +223,7 @@ def get_students(
     limit: int                         = 50,
     offset: int                        = 0,
     branch_id: Optional[int]           = None,
-):
+) -> list[Student]:
     query = get_students_query(db, branch_id=branch_id).filter(Student.status == StudentStatusEnum.Active)
 
     if class_id is not None:
@@ -239,6 +253,45 @@ def get_students(
     return query.offset(offset).limit(limit).all()
 
 
+def get_students_page(
+    db: Session,
+    class_id: Optional[int] = None,
+    class_ids: Optional[list[int]] = None,
+    student_ids: Optional[list[int]] = None,
+    search: Optional[str] = None,
+    academic_year_id: Optional[int] = None,
+    limit: int = 50,
+    offset: int = 0,
+    branch_id: Optional[int] = None,
+) -> tuple[list[Student], int]:
+    query = get_students_query(db, branch_id=branch_id).filter(Student.status == StudentStatusEnum.Active)
+    if class_id is not None:
+        query = query.filter(Student.class_id == class_id)
+    elif class_ids:
+        query = query.filter(Student.class_id.in_(class_ids))
+    if student_ids is not None:
+        if len(student_ids) == 0:
+            return [], 0
+        query = query.filter(Student.id.in_(student_ids))
+    if academic_year_id is not None:
+        query = query.filter(Student.academic_year_id == academic_year_id)
+    search = search.strip() if search else None
+    if search:
+        id_prefix = f"{search}%"
+        query = query.filter(
+            or_(
+                Student.name_en.ilike(f"%{search}%"),
+                Student.name_gu.ilike(f"%{search}%"),
+                Student.gr_number.ilike(id_prefix),
+                Student.student_id.ilike(id_prefix),
+                Student.contact.ilike(id_prefix),
+            )
+        )
+    total = query.count()
+    items = query.order_by(Student.id.desc()).offset(offset).limit(limit).all()
+    return items, total
+
+
 def get_students_query(db: Session, branch_id: Optional[int] = None):
     query = db.query(Student)
     if branch_id is not None:
@@ -256,7 +309,7 @@ def get_student(
 
 
 def update_student(
-    db: Session, student_id: int, data: StudentUpdate
+    db: Session, student_id: int, data: StudentUpdate, actor_user_id: int | None = None
 ) -> Optional[Student]:
     student = get_student(db, student_id, include_inactive=True)
     if not student:
@@ -264,6 +317,7 @@ def update_student(
 
     old_year_id  = student.academic_year_id
     old_class_id = student.class_id
+    old_snapshot = model_snapshot(student)
 
     updates = data.model_dump(exclude_unset=True)
 
@@ -284,14 +338,38 @@ def update_student(
 
     db.commit()
     db.refresh(student)
+    log_data_change(
+        db,
+        user_id=actor_user_id,
+        action=DataAuditActionEnum.update,
+        table_name="students",
+        record_id=student.id,
+        old_value=old_snapshot,
+        new_value=model_snapshot(student),
+    )
+    db.commit()
+    db.refresh(student)
     return student
 
 
-def delete_student(db: Session, student_id: int) -> bool:
+def delete_student(db: Session, student_id: int, actor_user_id: int | None = None) -> bool:
     """Soft-delete: marks student as 'Left' rather than removing the row."""
     student = get_student(db, student_id, include_inactive=True)
     if not student or student.status == StudentStatusEnum.Left:
         return False
+    old_snapshot = model_snapshot(student)
     student.status = StudentStatusEnum.Left
     db.commit()
+    db.refresh(student)
+    log_data_change(
+        db,
+        user_id=actor_user_id,
+        action=DataAuditActionEnum.delete,
+        table_name="students",
+        record_id=student.id,
+        old_value=old_snapshot,
+        new_value=model_snapshot(student),
+    )
+    db.commit()
     return True
+    old_snapshot = model_snapshot(student)

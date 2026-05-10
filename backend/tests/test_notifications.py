@@ -132,8 +132,10 @@ def test_payment_confirmation_enqueue_is_idempotent():
         assert len(logs) == 1
         assert len(outbox) == 1
         assert logs[0].notification_type == "payment_confirmed"
-        assert logs[0].template_name == "payment_confirmation"
-        assert logs[0].idempotency_key == "payment_confirmed:1:whatsapp"
+        assert logs[0].template_name == "payment_receipt_pdf"
+        assert logs[0].idempotency_key == "payment_receipt:1:whatsapp"
+        assert outbox[0].payload.get("message_type") == "document"
+        assert "/api/v1/pdf/receipt/1?token=" in outbox[0].payload.get("document_link", "")
     finally:
         db.close()
 
@@ -141,11 +143,11 @@ def test_payment_confirmation_enqueue_is_idempotent():
 def test_process_pending_notification_updates_log(monkeypatch):
     sent = []
 
-    def fake_send(phone, template_name, params):
-        sent.append((phone, template_name, params))
+    def fake_send(*, phone, document_link, filename, caption=None):
+        sent.append((phone, document_link, filename, caption))
         return {"messages": [{"id": "wamid.test"}]}
 
-    monkeypatch.setattr(notification_service, "send_whatsapp_template", fake_send)
+    monkeypatch.setattr(notification_service, "send_whatsapp_document", fake_send)
     db = TestingSessionLocal()
     try:
         processed = notification_service.process_pending_notifications(db)
@@ -154,7 +156,7 @@ def test_process_pending_notification_updates_log(monkeypatch):
         item = db.query(NotificationOutbox).first()
         assert log.status == "sent"
         assert item.status == "sent"
-        assert sent[0][1] == "payment_confirmation"
+        assert "/api/v1/pdf/receipt/1?token=" in sent[0][1]
     finally:
         db.close()
 

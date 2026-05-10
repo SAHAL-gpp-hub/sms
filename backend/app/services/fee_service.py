@@ -30,12 +30,13 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.constants import RECEIPT_NUMBER_LOCK_KEY
 from app.models.base_models import (
-    Class, FeeHead, FeePayment, FeeStructure, Student, StudentFee, StudentStatusEnum,
+    Class, DataAuditActionEnum, FeeHead, FeePayment, FeeStructure, Student, StudentFee, StudentStatusEnum,
 )
 from app.schemas.fee import (
     FeeHeadCreate, FeeStructureCreate, PaymentCreate,
     StudentLedger, StudentLedgerItem,
 )
+from app.services.audit_service import log_data_change, model_snapshot
 
 logger = logging.getLogger("sms.fees")
 
@@ -294,7 +295,7 @@ def generate_receipt_number(db: Session) -> str:
     return f"RCPT-{year}-{int(num):05d}"
 
 
-def record_payment(db: Session, data: PaymentCreate) -> FeePayment:
+def record_payment(db: Session, data: PaymentCreate, actor_user_id: int | None = None) -> FeePayment:
     if Decimal(str(data.amount_paid)) <= 0:
         raise ValueError("Payment amount must be greater than 0")
 
@@ -324,6 +325,17 @@ def record_payment(db: Session, data: PaymentCreate) -> FeePayment:
     receipt = generate_receipt_number(db)
     payment = FeePayment(**data.model_dump(), receipt_number=receipt)
     db.add(payment)
+    db.commit()
+    db.refresh(payment)
+    log_data_change(
+        db,
+        user_id=actor_user_id,
+        action=DataAuditActionEnum.create,
+        table_name="fee_payments",
+        record_id=payment.id,
+        old_value=None,
+        new_value=model_snapshot(payment),
+    )
     db.commit()
     db.refresh(payment)
     try:

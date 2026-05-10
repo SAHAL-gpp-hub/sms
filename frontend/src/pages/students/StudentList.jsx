@@ -139,10 +139,12 @@ function StudentCard({ student, cls, onDelete, onDownloadTC }) {
 }
 
 export default function StudentList() {
+  const PAGE_SIZE = 50
   const queryClient = useQueryClient()
   const isAdmin = getRole() === 'admin'
   const [search, setSearch] = useState('')
   const [classFilter, setClassFilter] = useState('')
+  const [page, setPage] = useState(1)
   const [seeding, setSeeding] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [tcTarget, setTcTarget] = useState(null)
@@ -161,6 +163,10 @@ export default function StudentList() {
 
   const debouncedSearch = useDebouncedValue(search, 350)
 
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedSearch, classFilter])
+
   const classesQuery = useQuery({
     queryKey: ['classes'],
     queryFn: async () => {
@@ -170,13 +176,13 @@ export default function StudentList() {
   })
 
   const studentsQuery = useQuery({
-    queryKey: ['students', debouncedSearch, classFilter],
+    queryKey: ['students', debouncedSearch, classFilter, page],
     queryFn: async () => {
-      const params = { limit: 200 }
+      const params = { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }
       if (debouncedSearch) params.search = debouncedSearch
       if (classFilter) params.class_id = classFilter
       const r = await studentAPI.list(params)
-      return r.data || []
+      return r.data || { items: [], total: 0, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }
     },
   })
 
@@ -185,7 +191,10 @@ export default function StudentList() {
   }, [studentsQuery.isError])
 
   const classes = classesQuery.data || []
-  const students = studentsQuery.data || []
+  const studentsResponse = studentsQuery.data || { items: [], total: 0, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }
+  const students = Array.isArray(studentsResponse) ? studentsResponse : (studentsResponse.items || [])
+  const totalStudents = Array.isArray(studentsResponse) ? students.length : (studentsResponse.total || 0)
+  const totalPages = Math.max(1, Math.ceil(totalStudents / PAGE_SIZE))
   const loading = studentsQuery.isLoading || studentsQuery.isFetching
 
   const handleDownloadTC = (studentId) => {
@@ -236,7 +245,7 @@ export default function StudentList() {
     <div>
       <PageHeader
         title="Students"
-        subtitle={loading ? 'Loading...' : `${students.length} active student${students.length !== 1 ? 's' : ''}${classFilter ? ' in selected class' : ''}`}
+        subtitle={loading ? 'Loading...' : `${totalStudents} active student${totalStudents !== 1 ? 's' : ''}${classFilter ? ' in selected class' : ''}`}
         actions={
           <>
             {classes.length === 0 && (
@@ -328,9 +337,13 @@ export default function StudentList() {
 	                />
               ))}
               {students.length > 0 && (
-                <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center', padding: '8px 0' }}>
-                  Showing {students.length} student{students.length !== 1 ? 's' : ''}
-                  {students.length >= 200 && ' — refine search to see more'}
+                <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center', padding: '8px 0', display: 'grid', gap: 8 }}>
+                  <div>Showing {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, totalStudents)} of {totalStudents}</div>
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
+                    <button className="btn btn-secondary btn-sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>← Prev</button>
+                    <span style={{ alignSelf: 'center' }}>Page {page} / {totalPages}</span>
+                    <button className="btn btn-secondary btn-sm" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>Next →</button>
+                  </div>
                 </div>
               )}
             </div>
@@ -412,8 +425,12 @@ export default function StudentList() {
           </div>
           {!loading && students.length > 0 && (
             <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border-subtle)', fontSize: '12px', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span>Showing {students.length} student{students.length !== 1 ? 's' : ''}</span>
-              {students.length >= 200 && <span style={{ color: 'var(--warning-600)', fontWeight: 600 }}>Showing first 200 — refine search to see more</span>}
+              <span>Showing {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, totalStudents)} of {totalStudents}</span>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button className="btn btn-secondary btn-sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>← Prev</button>
+                <span>Page {page} / {totalPages}</span>
+                <button className="btn btn-secondary btn-sm" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>Next →</button>
+              </div>
             </div>
           )}
         </div>

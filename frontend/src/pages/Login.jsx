@@ -64,6 +64,9 @@ export default function Login() {
   const [email, setEmail]               = useState('')
   const [password, setPassword]         = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [requires2FA, setRequires2FA]   = useState(false)
+  const [challengeId, setChallengeId]   = useState('')
+  const [otp, setOtp]                   = useState('')
   const [loading, setLoading]           = useState(false)
   const [error, setError]               = useState(null)
   const handleSubmit = async (e) => {
@@ -71,15 +74,26 @@ export default function Login() {
     setLoading(true)
     setError(null)
     try {
-      const r = await authAPI.login(email, password)
-      setToken(r.data.access_token)
-      setAuthUser(normalizeAuthUser(r.data))
-      // S10: route student/parent to portal, admin/teacher to dashboard
-      const role = r.data.role
-      if (role === 'student' || role === 'parent') {
-        navigate('/portal')
+      if (requires2FA) {
+        const r = await authAPI.verify2FA(challengeId, otp)
+        setToken(r.data.access_token)
+        setAuthUser(normalizeAuthUser(r.data))
+        const role = r.data.role
+        if (role === 'student' || role === 'parent') navigate('/portal')
+        else navigate('/')
       } else {
-        navigate('/')
+        const r = await authAPI.login(email, password)
+        if (r.data?.requires_2fa) {
+          setRequires2FA(true)
+          setChallengeId(r.data.challenge_id || '')
+          setOtp('')
+          return
+        }
+        setToken(r.data.access_token)
+        setAuthUser(normalizeAuthUser(r.data))
+        const role = r.data.role
+        if (role === 'student' || role === 'parent') navigate('/portal')
+        else navigate('/')
       }
     } catch (err) {
       setError(extractError(err))
@@ -627,71 +641,89 @@ export default function Login() {
 
             <form onSubmit={handleSubmit}>
               <div className="field-group">
-                {/* Email */}
-                <div className="field-wrap">
-                  <label className="field-label" htmlFor="email">Email address</label>
-                  <div className="field-input-wrap">
-                    <input
-                      id="email"
-                      type="email"
-                      className="field-input"
-                      value={email}
-                      onChange={e => setEmail(e.target.value)}
-                      placeholder="admin@iqraschool.in"
-                      required
-                      autoFocus
-                      autoComplete="email"
-                    />
-                    <span className="field-icon">
-                      <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-                          d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                      </svg>
-                    </span>
+                {!requires2FA ? (
+                  <>
+                    <div className="field-wrap">
+                      <label className="field-label" htmlFor="email">Email address</label>
+                      <div className="field-input-wrap">
+                        <input
+                          id="email"
+                          type="email"
+                          className="field-input"
+                          value={email}
+                          onChange={e => setEmail(e.target.value)}
+                          placeholder="admin@iqraschool.in"
+                          required
+                          autoFocus
+                          autoComplete="email"
+                        />
+                        <span className="field-icon">
+                          <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                              d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                        </span>
+                      </div>
+                    </div>
+                    <div className="field-wrap">
+                      <label className="field-label" htmlFor="password">Password</label>
+                      <div className="field-input-wrap">
+                        <input
+                          id="password"
+                          type={showPassword ? 'text' : 'password'}
+                          className="field-input"
+                          value={password}
+                          onChange={e => setPassword(e.target.value)}
+                          placeholder="••••••••"
+                          required
+                          autoComplete="current-password"
+                          style={{ paddingRight: '46px' }}
+                        />
+                        <span className="field-icon">
+                          <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" strokeWidth={1.8} />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7 11V7a5 5 0 0110 0v4" />
+                          </svg>
+                        </span>
+                        <button
+                          type="button"
+                          className="field-action"
+                          onClick={() => setShowPassword(s => !s)}
+                          tabIndex={-1}
+                          aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        >
+                          {showPassword ? (
+                            <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                            </svg>
+                          ) : (
+                            <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="field-wrap">
+                    <label className="field-label" htmlFor="otp">One-time code</label>
+                    <div className="field-input-wrap">
+                      <input
+                        id="otp"
+                        type="text"
+                        className="field-input"
+                        value={otp}
+                        onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="Enter 6-digit OTP"
+                        required
+                        autoFocus
+                        autoComplete="one-time-code"
+                      />
+                    </div>
                   </div>
-                </div>
-
-                {/* Password */}
-                <div className="field-wrap">
-                  <label className="field-label" htmlFor="password">Password</label>
-                  <div className="field-input-wrap">
-                    <input
-                      id="password"
-                      type={showPassword ? 'text' : 'password'}
-                      className="field-input"
-                      value={password}
-                      onChange={e => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      required
-                      autoComplete="current-password"
-                      style={{ paddingRight: '46px' }}
-                    />
-                    <span className="field-icon">
-                      <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" strokeWidth={1.8} />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7 11V7a5 5 0 0110 0v4" />
-                      </svg>
-                    </span>
-                    <button
-                      type="button"
-                      className="field-action"
-                      onClick={() => setShowPassword(s => !s)}
-                      tabIndex={-1}
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    >
-                      {showPassword ? (
-                        <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                        </svg>
-                      ) : (
-                        <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                      )}
-                    </button>
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* Submit */}
@@ -703,7 +735,7 @@ export default function Login() {
                   </>
                 ) : (
                   <>
-                    Sign in to Dashboard
+                    {requires2FA ? 'Verify OTP & Sign in' : 'Sign in to Dashboard'}
                     <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>

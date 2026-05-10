@@ -192,6 +192,12 @@ def auth(tok):
     return {"Authorization": f"Bearer {tok}"}
 
 
+def student_items(payload):
+    if isinstance(payload, dict) and "items" in payload:
+        return payload["items"]
+    return payload
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 1. Login / JWT issuance
 # ══════════════════════════════════════════════════════════════════════════════
@@ -340,7 +346,7 @@ class TestStudentScoping:
         tok = token(client, "admin@test.com", "admin1234")
         res = client.get("/api/v1/students/", headers=auth(tok))
         assert res.status_code == 200
-        assert len(res.json()) >= 1
+        assert len(student_items(res.json())) >= 1
 
     def test_teacher_a_can_list_students(self, client):
         """Teacher A is assigned to class A — should see students in that class."""
@@ -354,6 +360,7 @@ class TestStudentScoping:
         assert res.status_code == 200
         data = res.json()
         # Should only contain the linked student
+        data = student_items(data)
         assert len(data) == 1
         assert data[0]["student_id"] == "SMS-2025-001"
 
@@ -361,7 +368,7 @@ class TestStudentScoping:
         tok = token(client, "parent@test.com", "parent1234")
         res = client.get("/api/v1/students/", headers=auth(tok))
         assert res.status_code == 200
-        data = res.json()
+        data = student_items(res.json())
         assert len(data) == 1
         assert data[0]["student_id"] == "SMS-2025-001"
 
@@ -431,7 +438,7 @@ class TestTeacherClassAccess:
 class TestFeeScoping:
     def _student_id(self, client):
         tok = token(client, "admin@test.com", "admin1234")
-        students = client.get("/api/v1/students/", headers=auth(tok)).json()
+        students = student_items(client.get("/api/v1/students/", headers=auth(tok)).json())
         return students[0]["id"], tok
 
     def test_admin_can_view_any_ledger(self, client):
@@ -653,7 +660,7 @@ class TestMarksScoping:
             params={"class_id": cls_a_id},
             headers=auth(tok),
         ).json()
-        students = client.get("/api/v1/students/", headers=auth(tok)).json()
+        students = student_items(client.get("/api/v1/students/", headers=auth(tok)).json())
         exams = client.get(
             "/api/v1/marks/exams",
             params={"class_id": cls_a_id, "academic_year_id": 1},
@@ -679,7 +686,7 @@ class TestMarksScoping:
             headers=auth(admin_tok),
         ).json()
         science = next(s for s in all_subjects if s["name"] == "Science")
-        students = client.get("/api/v1/students/", headers=auth(teacher_tok)).json()
+        students = student_items(client.get("/api/v1/students/", headers=auth(teacher_tok)).json())
         exams = client.get(
             "/api/v1/marks/exams",
             params={"class_id": cls_a_id, "academic_year_id": 1},

@@ -56,12 +56,31 @@ class AdminUserOut(BaseModel):
     role: str
     is_active: bool
     branch_id: Optional[int] = None
+    two_factor_enabled: bool = False
+    two_factor_channel: Optional[str] = None
+    two_factor_destination: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
 
 class PasswordResetRequest(BaseModel):
     new_password: str
+
+
+class AdminTwoFactorUpdate(BaseModel):
+    enabled: bool
+    channel: Optional[str] = None
+    destination: Optional[str] = None
+
+    @field_validator("channel")
+    @classmethod
+    def validate_channel(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        value = value.lower().strip()
+        if value not in {"whatsapp", "sms"}:
+            raise ValueError("channel must be whatsapp or sms")
+        return value
 
 
 class TeacherAssignmentCreate(BaseModel):
@@ -184,6 +203,33 @@ def update_user(
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail="User email already exists") from exc
+    db.refresh(user)
+    return user
+
+
+@router.put("/users/{user_id}/2fa", response_model=AdminUserOut)
+def update_user_2fa(
+    user_id: int,
+    data: AdminTwoFactorUpdate,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
+    user = db.query(User).filter_by(id=user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.role != "admin":
+        raise HTTPException(status_code=422, detail="2FA settings are only available for admin users")
+
+    user.two_factor_enabled = data.enabled
+    if data.enabled:
+        if not data.channel or not data.destination:
+            raise HTTPException(status_code=422, detail="channel and destination are required when enabling 2FA")
+        user.two_factor_channel = data.channel
+        user.two_factor_destination = data.destination.strip()
+    else:
+        user.two_factor_channel = None
+        user.two_factor_destination = None
+    db.commit()
     db.refresh(user)
     return user
 

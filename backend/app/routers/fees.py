@@ -212,10 +212,10 @@ def get_ledger(
 def record_payment(
     data: PaymentCreate,
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(require_role("admin")),
+    current_user: CurrentUser = Depends(require_role("admin")),
 ):
     try:
-        out = fee_service.record_payment(db, data)
+        out = fee_service.record_payment(db, data, actor_user_id=current_user.id)
         _invalidate_fee_caches()
         return out
     except ValueError as exc:
