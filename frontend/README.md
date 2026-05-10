@@ -10,7 +10,7 @@ React + Vite frontend for the Iqra School Management System.
 ## Local development
 
 ```bash
-cd /home/runner/work/sms/sms/frontend
+cd <repository-root>/frontend
 npm ci
 npm run dev
 ```
@@ -20,7 +20,7 @@ Open `http://localhost:5173`.
 ## Build and validate
 
 ```bash
-cd /home/runner/work/sms/sms/frontend
+cd <repository-root>/frontend
 npm run lint
 npm run build
 ```
@@ -28,7 +28,7 @@ npm run build
 ## Docker workflow
 
 ```bash
-cd /home/runner/work/sms/sms
+cd <repository-root>
 docker compose up -d --build frontend
 ```
 

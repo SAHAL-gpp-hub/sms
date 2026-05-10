@@ -6,7 +6,7 @@ if [ "$#" -ne 1 ]; then
   exit 1
 fi
 
-ROOT_DIR="/home/runner/work/sms/sms"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKUP_FILE="$1"
 
 if [ ! -f "$BACKUP_FILE" ]; then

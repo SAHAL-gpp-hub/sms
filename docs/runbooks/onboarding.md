@@ -3,7 +3,7 @@
 ## 1) Initial setup
 
 ```bash
-cd /home/runner/work/sms/sms
+cd <repository-root>
 cp .env.example .env
 ```
 

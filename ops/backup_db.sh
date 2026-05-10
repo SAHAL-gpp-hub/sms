@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="/home/runner/work/sms/sms"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKUP_DIR="$ROOT_DIR/backups/runtime"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 OUT_FILE="$BACKUP_DIR/sms_backup_${TIMESTAMP}.sql"

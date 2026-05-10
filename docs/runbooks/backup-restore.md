@@ -3,17 +3,17 @@
 ## Backup
 
 ```bash
-cd /home/runner/work/sms/sms
+cd <repository-root>
 ./ops/backup_db.sh
 ```
 
-The script writes timestamped dumps into `/home/runner/work/sms/sms/backups/runtime`.
+The script writes timestamped dumps into `<repository-root>/backups/runtime`.
 
 ## Restore
 
 ```bash
-cd /home/runner/work/sms/sms
-./ops/restore_db.sh /home/runner/work/sms/sms/backups/runtime/sms_backup_<timestamp>.sql
+cd <repository-root>
+./ops/restore_db.sh <repository-root>/backups/runtime/sms_backup_<timestamp>.sql
 ```
 
 ## Recovery drill (recommended monthly)
