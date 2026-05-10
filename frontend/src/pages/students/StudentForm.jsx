@@ -21,6 +21,14 @@ const STATUSES = [
   { value: 'Detained',    label: 'Detained' },
   { value: 'Provisional', label: 'Provisional' },
 ]
+const WHATSAPP_TOGGLE_STYLE = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '8px',
+  marginBottom: '8px',
+  fontSize: '12px',
+  color: 'var(--text-secondary)',
+}
 
 function SectionCard({ title, subtitle, children }) {
   return (
@@ -89,9 +97,9 @@ export default function StudentForm() {
           gr_number: s.gr_number || '', father_name: s.father_name || '',
           mother_name: s.mother_name || '', contact: s.contact || '',
           student_email: s.student_email || '',
-          student_phone: (s.student_phone || s.contact || ''),
+          student_phone: s.student_phone ?? (s.contact || ''),
           guardian_email: s.guardian_email || '',
-          guardian_phone: (s.guardian_phone || s.contact || ''),
+          guardian_phone: s.guardian_phone ?? (s.contact || ''),
           address: s.address || '', category: s.category || 'GEN',
           aadhar_last4: s.aadhar_last4 || '',
           admission_date: s.admission_date || '',
@@ -321,7 +329,7 @@ export default function StudentForm() {
             error={errors.student_phone}
             hint="In India, this is usually the same as contact. Enter a different number only if needed."
           >
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginBottom: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+            <label style={WHATSAPP_TOGGLE_STYLE}>
               <input
                 type="checkbox"
                 checked={useContactForStudentWhatsApp}
@@ -357,7 +365,7 @@ export default function StudentForm() {
             error={errors.guardian_phone}
             hint="In India, this is usually the same as contact. Enter a different number only if needed."
           >
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginBottom: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+            <label style={WHATSAPP_TOGGLE_STYLE}>
               <input
                 type="checkbox"
                 checked={useContactForGuardianWhatsApp}

@@ -206,6 +206,8 @@ def test_update_student_defaults_blank_whatsapp_to_contact(client, auth_headers)
     assert updated['contact'] == '9876501234'
     assert updated['student_phone'] == '9876501234'
     assert updated['guardian_phone'] == '9876501234'
+    assert updated['name_en'] == create_payload['name_en']
+    assert updated['dob'] == create_payload['dob']
 
 
 def test_commit_import_defaults_blank_whatsapp_to_contact(client, auth_headers):

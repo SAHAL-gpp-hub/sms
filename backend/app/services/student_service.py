@@ -255,13 +255,15 @@ def update_student(
     old_class_id = student.class_id
 
     updates = data.model_dump(exclude_unset=True)
+
+    resolved_contact = updates.get("contact", student.contact)
+    if "student_phone" in updates and not updates.get("student_phone") and resolved_contact:
+        updates["student_phone"] = resolved_contact
+    if "guardian_phone" in updates and not updates.get("guardian_phone") and resolved_contact:
+        updates["guardian_phone"] = resolved_contact
+
     for key, value in updates.items():
         setattr(student, key, value)
-
-    if "student_phone" in updates and not student.student_phone:
-        student.student_phone = student.contact
-    if "guardian_phone" in updates and not student.guardian_phone:
-        student.guardian_phone = student.contact
 
     # If class or year changed, ensure enrollment exists for the new year
     year_changed  = (student.academic_year_id != old_year_id)
