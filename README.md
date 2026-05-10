@@ -80,6 +80,23 @@ and exposes the PostgreSQL port `5432` for local DB tools.
 
 ---
 
+## ☁️ Production (VPS + SSL)
+
+Use the production override for internet-facing deployments:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+The production override:
+
+- keeps DB and backend ports internal only
+- mounts Let's Encrypt certificates into nginx
+- enables always-on container restart behavior
+- forces registration endpoint disablement
+
+---
+
 ## 🔐 Security Notes
 
 - **Change `SECRET_KEY`** before any public deployment — the example value is not secret.
@@ -146,6 +163,7 @@ pytest tests/ -v
 ## 📚 Runbooks
 
 - Onboarding: [`docs/runbooks/onboarding.md`](docs/runbooks/onboarding.md)
+- Cloud deployment (VPS/SSL/domain/backups): [`docs/runbooks/cloud-deployment.md`](docs/runbooks/cloud-deployment.md)
 - Release + rollback: [`docs/runbooks/release-rollback.md`](docs/runbooks/release-rollback.md)
 - Backup + restore: [`docs/runbooks/backup-restore.md`](docs/runbooks/backup-restore.md)
 - Security hardening checklist: [`docs/security-hardening-checklist.md`](docs/security-hardening-checklist.md)

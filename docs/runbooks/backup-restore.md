@@ -1,20 +1,30 @@
 # Runbook: PostgreSQL Backup and Restore
 
-## Backup
+## Backup (VPS production)
 
 ```bash
-cd <repository-root>
-./ops/backup_db.sh
+cd /opt/iqra-sms
+chmod +x scripts/backup.sh
+./scripts/backup.sh
 ```
 
-The script writes timestamped dumps into `<repository-root>/backups/runtime`.
+The script writes gzip-compressed dumps into `/opt/backups` with 30-day retention.
+If `b2` is available, backups are synced to Backblaze B2 automatically.
 
 ## Restore
 
 ```bash
-cd <repository-root>
-./ops/restore_db.sh <repository-root>/backups/runtime/sms_backup_<timestamp>.sql
+cd /opt/iqra-sms
+chmod +x scripts/restore.sh
+./scripts/restore.sh /opt/backups/school_sms_<timestamp>.sql.gz
 ```
+
+## Legacy local scripts (non-production)
+
+For local Docker-based recovery flows you can continue using:
+
+- `./ops/backup_db.sh`
+- `./ops/restore_db.sh <absolute-backup-path>`
 
 ## Recovery drill (recommended monthly)
 
