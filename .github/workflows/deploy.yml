@@ -10,8 +10,11 @@ on:
         options: [staging, production]
       image_tag:
         description: "Docker image tag to deploy (for example: main-2026-05-10)"
-        required: true
-        type: string
+          required: true
+          type: string
+
+permissions:
+  contents: read
 
 jobs:
   deploy:
