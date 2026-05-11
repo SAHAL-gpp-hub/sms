@@ -77,7 +77,10 @@ async def lifespan(app: FastAPI):
             logger.info("Alembic migrations applied.")
         except Exception as exc:
             logger.exception("Failed to apply database migrations at startup.")
-            raise RuntimeError("Database migrations failed during startup.") from exc
+            raise RuntimeError(
+                f"Database migrations failed during startup ({exc.__class__.__name__}). "
+                "Check migration files and DATABASE_URL."
+            ) from exc
 
         if check_db_connection():
             logger.info("✅ Database connection verified — PostgreSQL is reachable.")
