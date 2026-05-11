@@ -55,6 +55,9 @@ from app.services.enrollment_service import backfill_enrollments
 from app.pdf.report_pdf import render_tc_pdf
 
 router = APIRouter(prefix="/api/v1/yearend", tags=["Year-End"])
+# Endpoints that must be accessible without a global auth header (browser direct
+# downloads, informational lookups).  Mounted in the public section of main.py.
+public_router = APIRouter(prefix="/api/v1/yearend", tags=["Year-End"])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -106,10 +109,12 @@ class LockMarksRequest(BaseModel):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PUBLIC — no auth (browser direct downloads)
+# PUBLIC — no auth (browser direct downloads and informational lookups)
+# These endpoints are registered on public_router so they can be mounted
+# in main.py without the global JWT dependency.
 # ─────────────────────────────────────────────────────────────────────────────
 
-@router.get("/tc-pdf/{student_id}")
+@public_router.get("/tc-pdf/{student_id}")
 def download_tc(
     student_id: int,
     reason:  str = Query(default="Parent's Request"),
@@ -138,6 +143,40 @@ def download_tc(
     )
 
 
+@public_router.get("/current-year")
+def get_current_year(db: Session = Depends(get_db)):
+    year = db.query(AcademicYear).filter_by(is_current=True).first()
+    if not year:
+        raise HTTPException(status_code=404, detail="No current academic year set")
+    return {
+        "id":          year.id,
+        "label":       year.label,
+        "is_current":  year.is_current,
+        "status":      year.status.value if hasattr(year.status, "value") else year.status,
+        "start_date":  str(year.start_date),
+        "end_date":    str(year.end_date),
+    }
+
+
+@public_router.get("/years")
+def get_all_years(db: Session = Depends(get_db)):
+    years = db.query(AcademicYear).order_by(AcademicYear.id.desc()).all()
+    return [
+        {
+            "id":         y.id,
+            "label":      y.label,
+            "is_current": y.is_current,
+            "is_upcoming": y.is_upcoming,
+            "status":     y.status.value if hasattr(y.status, "value") else y.status,
+        }
+        for y in years
+    ]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PROTECTED — requires admin role (mounted with global auth dep in main.py)
+# ─────────────────────────────────────────────────────────────────────────────
+
 @router.get("/tc-pdf-token/{student_id}")
 def tc_pdf_token(
     student_id: int,
@@ -157,36 +196,6 @@ def tc_pdf_token(
         },
     )
     return {"token": token, "expires_in": 60, "resource": f"tc:{student_id}"}
-
-
-@router.get("/current-year")
-def get_current_year(db: Session = Depends(get_db)):
-    year = db.query(AcademicYear).filter_by(is_current=True).first()
-    if not year:
-        raise HTTPException(status_code=404, detail="No current academic year set")
-    return {
-        "id":          year.id,
-        "label":       year.label,
-        "is_current":  year.is_current,
-        "status":      year.status.value if hasattr(year.status, "value") else year.status,
-        "start_date":  str(year.start_date),
-        "end_date":    str(year.end_date),
-    }
-
-
-@router.get("/years")
-def get_all_years(db: Session = Depends(get_db)):
-    years = db.query(AcademicYear).order_by(AcademicYear.id.desc()).all()
-    return [
-        {
-            "id":         y.id,
-            "label":      y.label,
-            "is_current": y.is_current,
-            "is_upcoming": y.is_upcoming,
-            "status":     y.status.value if hasattr(y.status, "value") else y.status,
-        }
-        for y in years
-    ]
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -22,7 +22,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
@@ -70,6 +70,13 @@ class UserRegister(BaseModel):
     email:    EmailStr
     password: str
     role:     str = "admin"
+
+    @field_validator("password")
+    @classmethod
+    def password_min_length(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        return v
 
 
 class UserOut(BaseModel):
@@ -382,8 +389,6 @@ def login(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    db.query(TokenBlocklist).filter(TokenBlocklist.expires_at < datetime.now(timezone.utc)).delete()
-    db.commit()
 
     if user.role == "admin" and user.two_factor_enabled:
         challenge = _create_admin_2fa_challenge(db, user)
@@ -443,8 +448,6 @@ def verify_login_2fa(
         raise HTTPException(status_code=404, detail="User not found")
 
     challenge.verified_at = now
-    db.commit()
-    db.query(TokenBlocklist).filter(TokenBlocklist.expires_at < now).delete()
     db.commit()
 
     token = create_access_token(

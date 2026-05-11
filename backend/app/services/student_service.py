@@ -17,6 +17,7 @@ BUG FIX — Enrollment auto-creation:
 """
 
 from datetime import date
+import logging
 from typing import Optional
 
 from sqlalchemy import or_, text
@@ -32,6 +33,8 @@ from app.core.config import settings
 from app.schemas.student import StudentCreate, StudentUpdate
 from fastapi import HTTPException
 from app.services.audit_service import log_data_change, model_snapshot
+
+logger = logging.getLogger("sms.student_service")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -51,7 +54,11 @@ def generate_student_id(db: Session, year: int) -> str:
     try:
         db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": year})
     except Exception:
-        pass
+        logger.warning(
+            "Failed to acquire advisory lock for student ID generation (year=%s). "
+            "Proceeding without lock — concurrent ID generation may produce duplicates.",
+            year,
+        )
 
     rows = db.execute(
         text("SELECT student_id FROM students WHERE student_id LIKE :prefix"),
