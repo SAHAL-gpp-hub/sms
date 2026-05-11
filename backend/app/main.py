@@ -13,6 +13,10 @@ import asyncio
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager, suppress
+from pathlib import Path
+
+from alembic import command
+from alembic.config import Config
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,7 +24,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.core.database import Base, check_db_connection, engine
+from app.core.database import Base, check_db_connection, engine, get_db
 from app.core.config import settings
 from app.models.base_models import *  # noqa — registers all models with Base
 from app.routers import (
@@ -52,21 +56,41 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
 )
 
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
+
+def run_startup_migrations() -> None:
+    alembic_cfg = Config(str(BACKEND_ROOT / "alembic.ini"))
+    alembic_cfg.set_main_option("script_location", str(BACKEND_ROOT / "migrations"))
+    alembic_cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+    command.upgrade(alembic_cfg, "head")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if not settings.SECRET_KEY or "change-this" in settings.SECRET_KEY:
         raise RuntimeError("SECRET_KEY not configured; set a strong random value in .env")
-    Base.metadata.create_all(bind=engine)
-    logger.info("SQLAlchemy tables ensured.")
+    should_run_db_initialization = app.dependency_overrides.get(get_db) is None
+    if should_run_db_initialization:
+        try:
+            run_startup_migrations()
+            logger.info("Alembic migrations applied.")
+        except Exception as exc:
+            logger.exception("Failed to apply database migrations at startup.")
+            raise RuntimeError(
+                f"Database migrations failed during startup ({exc.__class__.__name__}). "
+                "Check migration files and DATABASE_URL."
+            ) from exc
 
-    if check_db_connection():
-        logger.info("✅ Database connection verified — PostgreSQL is reachable.")
+        if check_db_connection():
+            logger.info("✅ Database connection verified — PostgreSQL is reachable.")
+        else:
+            logger.error(
+                "❌ DATABASE CONNECTION FAILED.\n"
+                "   Check DATABASE_URL in .env or docker-compose.yml."
+            )
     else:
-        logger.error(
-            "❌ DATABASE CONNECTION FAILED.\n"
-            "   Check DATABASE_URL in .env or docker-compose.yml."
-        )
+        logger.info("Skipping startup database initialization because the database dependency is overridden.")
     app.state.notification_stop_event = asyncio.Event()
     app.state.notification_worker_task = None
     if settings.NOTIFICATION_WORKER_ENABLED:
