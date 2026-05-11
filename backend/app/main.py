@@ -13,6 +13,10 @@ import asyncio
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager, suppress
+from pathlib import Path
+
+from alembic import command
+from alembic.config import Config
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -52,11 +56,26 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
 )
 
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
+
+def run_startup_migrations() -> None:
+    alembic_cfg = Config(str(BACKEND_ROOT / "alembic.ini"))
+    alembic_cfg.set_main_option("script_location", str(BACKEND_ROOT / "migrations"))
+    alembic_cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+    command.upgrade(alembic_cfg, "head")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if not settings.SECRET_KEY or "change-this" in settings.SECRET_KEY:
         raise RuntimeError("SECRET_KEY not configured; set a strong random value in .env")
+    try:
+        run_startup_migrations()
+        logger.info("Alembic migrations applied.")
+    except Exception as exc:
+        logger.exception("Failed to apply database migrations at startup.")
+        raise RuntimeError("Database migrations failed during startup.") from exc
     Base.metadata.create_all(bind=engine)
     logger.info("SQLAlchemy tables ensured.")
 
