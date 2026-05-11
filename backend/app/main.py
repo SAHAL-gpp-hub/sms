@@ -24,7 +24,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.core.database import Base, check_db_connection, engine
+from app.core.database import Base, check_db_connection, engine, get_db
 from app.core.config import settings
 from app.models.base_models import *  # noqa — registers all models with Base
 from app.routers import (
@@ -70,12 +70,15 @@ def run_startup_migrations() -> None:
 async def lifespan(app: FastAPI):
     if not settings.SECRET_KEY or "change-this" in settings.SECRET_KEY:
         raise RuntimeError("SECRET_KEY not configured; set a strong random value in .env")
-    try:
-        run_startup_migrations()
-        logger.info("Alembic migrations applied.")
-    except Exception as exc:
-        logger.exception("Failed to apply database migrations at startup.")
-        raise RuntimeError("Database migrations failed during startup.") from exc
+    if app.dependency_overrides.get(get_db) is None:
+        try:
+            run_startup_migrations()
+            logger.info("Alembic migrations applied.")
+        except Exception as exc:
+            logger.exception("Failed to apply database migrations at startup.")
+            raise RuntimeError("Database migrations failed during startup.") from exc
+    else:
+        logger.info("Skipping startup migrations because the database dependency is overridden.")
     Base.metadata.create_all(bind=engine)
     logger.info("SQLAlchemy tables ensured.")
 
