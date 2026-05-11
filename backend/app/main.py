@@ -70,25 +70,26 @@ def run_startup_migrations() -> None:
 async def lifespan(app: FastAPI):
     if not settings.SECRET_KEY or "change-this" in settings.SECRET_KEY:
         raise RuntimeError("SECRET_KEY not configured; set a strong random value in .env")
-    if app.dependency_overrides.get(get_db) is None:
+    uses_default_db = app.dependency_overrides.get(get_db) is None
+    if uses_default_db:
         try:
             run_startup_migrations()
             logger.info("Alembic migrations applied.")
         except Exception as exc:
             logger.exception("Failed to apply database migrations at startup.")
             raise RuntimeError("Database migrations failed during startup.") from exc
-    else:
-        logger.info("Skipping startup migrations because the database dependency is overridden.")
-    Base.metadata.create_all(bind=engine)
-    logger.info("SQLAlchemy tables ensured.")
+        Base.metadata.create_all(bind=engine)
+        logger.info("SQLAlchemy tables ensured.")
 
-    if check_db_connection():
-        logger.info("✅ Database connection verified — PostgreSQL is reachable.")
+        if check_db_connection():
+            logger.info("✅ Database connection verified — PostgreSQL is reachable.")
+        else:
+            logger.error(
+                "❌ DATABASE CONNECTION FAILED.\n"
+                "   Check DATABASE_URL in .env or docker-compose.yml."
+            )
     else:
-        logger.error(
-            "❌ DATABASE CONNECTION FAILED.\n"
-            "   Check DATABASE_URL in .env or docker-compose.yml."
-        )
+        logger.info("Skipping startup DB initialization because the database dependency is overridden.")
     app.state.notification_stop_event = asyncio.Event()
     app.state.notification_worker_task = None
     if settings.NOTIFICATION_WORKER_ENABLED:
