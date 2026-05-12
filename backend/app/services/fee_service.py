@@ -220,6 +220,8 @@ def assign_fees_to_class(
                     academic_year_id=academic_year_id,
                 ))
                 assigned += 1
+                # Keep this set in sync as we enqueue rows, so repeated
+                # class/structure pairs in the same run are still idempotent.
                 existing_pairs.add((student.id, fs.id))
 
     db.commit()
