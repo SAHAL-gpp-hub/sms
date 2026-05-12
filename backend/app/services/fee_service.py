@@ -191,14 +191,25 @@ def assign_fees_to_class(
         .all()
     )
 
+    if not structures or not students:
+        return 0
+
+    student_ids = [student.id for student in students]
+    structure_ids = [fs.id for fs in structures]
+    existing_pairs = {
+        (student_id, fee_structure_id)
+        for student_id, fee_structure_id in (
+            db.query(StudentFee.student_id, StudentFee.fee_structure_id)
+            .filter(StudentFee.student_id.in_(student_ids))
+            .filter(StudentFee.fee_structure_id.in_(structure_ids))
+            .all()
+        )
+    }
+
     assigned = 0
     for student in students:
         for fs in structures:
-            exists = db.query(StudentFee).filter_by(
-                student_id=student.id,
-                fee_structure_id=fs.id,
-            ).first()
-            if not exists:
+            if (student.id, fs.id) not in existing_pairs:
                 db.add(StudentFee(
                     student_id=student.id,
                     fee_structure_id=fs.id,
@@ -209,6 +220,7 @@ def assign_fees_to_class(
                     academic_year_id=academic_year_id,
                 ))
                 assigned += 1
+                existing_pairs.add((student.id, fs.id))
 
     db.commit()
     return assigned

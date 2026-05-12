@@ -1,3 +1,10 @@
+"""
+In-memory response cache with TTL and LRU eviction.
+
+Note: this cache is process-local. In multi-worker deployments, each worker has
+its own independent cache and entries are not shared across processes.
+"""
+
 import threading
 import time
 from collections import OrderedDict

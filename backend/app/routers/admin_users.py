@@ -66,6 +66,13 @@ class AdminUserOut(BaseModel):
 class PasswordResetRequest(BaseModel):
     new_password: str
 
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, value: str) -> str:
+        if len(value) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        return value
+
 
 class AdminTwoFactorUpdate(BaseModel):
     enabled: bool
@@ -191,11 +198,13 @@ def update_user(
     user_id: int,
     data: AdminUserUpdate,
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(require_role("admin")),
+    current_user: CurrentUser = Depends(require_role("admin")),
 ):
     user = db.query(User).filter_by(id=user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if data.role is not None and user_id == current_user.id and data.role != user.role:
+        raise HTTPException(status_code=422, detail="You cannot change your own role")
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(user, key, value)
     try:

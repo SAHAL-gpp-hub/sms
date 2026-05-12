@@ -240,7 +240,7 @@ class Student(Base):
     roll_number      = Column(Integer, nullable=True)   # legacy; use enrollment.roll_number
     father_name      = Column(String(100), nullable=False)
     mother_name      = Column(String(100), nullable=True)
-    contact          = Column(String(10), nullable=False)
+    contact          = Column(String(20), nullable=False)
     student_email    = Column(String(100), unique=True, nullable=True)
     student_phone    = Column(String(20), nullable=True)
     guardian_email   = Column(String(100), nullable=True, index=True)
@@ -416,6 +416,9 @@ class FeeHead(Base):
 
 class FeeStructure(Base):
     __tablename__ = "fee_structures"
+    __table_args__ = (
+        UniqueConstraint("class_id", "fee_head_id", "academic_year_id", name="uq_fee_structure_class_head_year"),
+    )
 
     id               = Column(Integer, primary_key=True)
     class_id         = Column(Integer, ForeignKey("classes.id"))

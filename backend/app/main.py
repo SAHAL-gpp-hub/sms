@@ -13,6 +13,7 @@ import asyncio
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager, suppress
+from datetime import datetime, timezone
 from pathlib import Path
 
 from alembic import command
@@ -24,7 +25,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.core.database import Base, check_db_connection, engine, get_db
+from app.core.database import Base, SessionLocal, check_db_connection, engine, get_db
 from app.core.config import settings
 from app.models.base_models import *  # noqa — registers all models with Base
 from app.routers import (
@@ -66,10 +67,38 @@ def run_startup_migrations() -> None:
     command.upgrade(alembic_cfg, "head")
 
 
+def purge_expired_blocklisted_tokens() -> None:
+    db = SessionLocal()
+    try:
+        db.query(TokenBlocklist).filter(TokenBlocklist.expires_at < datetime.now(timezone.utc)).delete()
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to purge expired token blocklist entries")
+    finally:
+        db.close()
+
+
+async def run_token_blocklist_cleanup_worker(stop_event: asyncio.Event) -> None:
+    while not stop_event.is_set():
+        purge_expired_blocklisted_tokens()
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=3600)
+        except asyncio.TimeoutError:
+            continue
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if not settings.SECRET_KEY or "change-this" in settings.SECRET_KEY:
-        raise RuntimeError("SECRET_KEY not configured; set a strong random value in .env")
+    if (
+        not settings.SECRET_KEY
+        or "change-this" in settings.SECRET_KEY
+        or len(settings.SECRET_KEY) < settings.SECRET_KEY_MIN_LENGTH
+    ):
+        raise RuntimeError(
+            f"SECRET_KEY is weak or not configured; set a strong random value "
+            f"(min {settings.SECRET_KEY_MIN_LENGTH} chars) in .env"
+        )
     should_run_db_initialization = app.dependency_overrides.get(get_db) is None
     if should_run_db_initialization:
         try:
@@ -93,6 +122,10 @@ async def lifespan(app: FastAPI):
         logger.info("Skipping startup database initialization because the database dependency is overridden.")
     app.state.notification_stop_event = asyncio.Event()
     app.state.notification_worker_task = None
+    app.state.token_cleanup_stop_event = asyncio.Event()
+    app.state.token_cleanup_task = asyncio.create_task(
+        run_token_blocklist_cleanup_worker(app.state.token_cleanup_stop_event)
+    )
     if settings.NOTIFICATION_WORKER_ENABLED:
         app.state.notification_worker_task = asyncio.create_task(
             run_notification_worker(app.state.notification_stop_event)
@@ -105,6 +138,13 @@ async def lifespan(app: FastAPI):
         task.cancel()
         with suppress(asyncio.CancelledError):
             await task
+    if getattr(app.state, "token_cleanup_stop_event", None):
+        app.state.token_cleanup_stop_event.set()
+    cleanup_task = getattr(app.state, "token_cleanup_task", None)
+    if cleanup_task:
+        cleanup_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await cleanup_task
     logger.info("SMS backend shutting down.")
 
 
