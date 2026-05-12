@@ -6,7 +6,10 @@ specific seed data. This conftest provides lightweight helpers
 used across multiple test files.
 """
 import pytest
+import os
 from fastapi.testclient import TestClient
+
+os.environ.setdefault("SECRET_KEY", "test-secret-key-for-pytest-only-do-not-use-in-production")
 
 from app.main import app
 

@@ -48,7 +48,11 @@ def generate_student_id(db: Session, year: int) -> str:
     at the same time for the same year. The lock is released automatically
     when the surrounding transaction commits or rolls back.
     """
-    db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": year})
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        try:
+            db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": year})
+        except Exception as exc:
+            raise RuntimeError("Failed to acquire advisory lock for student ID generation") from exc
 
     rows = db.execute(
         text("SELECT student_id FROM students WHERE student_id LIKE :prefix"),
