@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     # MUST be overridden in production via .env or docker-compose environment:
     #   SECRET_KEY=<64 random hex chars>
     #   e.g.: python -c "import secrets; print(secrets.token_hex(32))"
-    SECRET_KEY: str = "change-this-in-production-use-a-64-char-random-hex-string"
+    SECRET_KEY: str
     ALGORITHM:  str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours — one full school day
     LOGIN_2FA_OTP_EXPIRE_MINUTES: int = 10

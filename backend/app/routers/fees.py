@@ -40,7 +40,10 @@ def _invalidate_fee_caches() -> None:
 # ---------------------------------------------------------------------------
 
 @router.get("/heads", response_model=list[FeeHeadOut])
-def get_fee_heads(db: Session = Depends(get_db)):
+def get_fee_heads(
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
     return fee_service.get_fee_heads(db)
 
 
@@ -74,12 +77,17 @@ def get_fee_structures(
     class_id:         Optional[int] = Query(None),
     academic_year_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
 ):
     return fee_service.get_fee_structures(db, class_id, academic_year_id)
 
 
 @router.get("/structure/{fs_id}", response_model=FeeStructureOut)
-def get_fee_structure(fs_id: int, db: Session = Depends(get_db)):
+def get_fee_structure(
+    fs_id: int,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
     fs = fee_service.get_fee_structure(db, fs_id)
     if not fs:
         raise HTTPException(status_code=404, detail="Fee structure not found")

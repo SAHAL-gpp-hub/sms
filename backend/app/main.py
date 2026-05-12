@@ -153,7 +153,7 @@ async def request_timing_middleware(request: Request, call_next):
 app.include_router(auth.router)
 app.include_router(student_auth.router)
 app.include_router(pdf.router)
-app.include_router(yearend.router)   # TC PDF download is public inside this router
+app.include_router(yearend.public_router)
 app.include_router(payments.public_router)
 
 # ── Protected routes (JWT Bearer token required) ──────────────────────────────
@@ -173,6 +173,7 @@ app.include_router(notifications.router, dependencies=_auth)
 app.include_router(enrollments.router,  dependencies=_auth)   # NEW
 app.include_router(report_cards.router, dependencies=_auth)
 app.include_router(audit_logs.router, dependencies=_auth)
+app.include_router(yearend.router, dependencies=_auth)
 
 
 @app.get("/")

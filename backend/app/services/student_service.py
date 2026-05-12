@@ -48,10 +48,7 @@ def generate_student_id(db: Session, year: int) -> str:
     at the same time for the same year. The lock is released automatically
     when the surrounding transaction commits or rolls back.
     """
-    try:
-        db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": year})
-    except Exception:
-        pass
+    db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": year})
 
     rows = db.execute(
         text("SELECT student_id FROM students WHERE student_id LIKE :prefix"),

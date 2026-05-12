@@ -190,15 +190,23 @@ def assign_fees_to_class(
         .filter(Student.status == StudentStatusEnum.Active)
         .all()
     )
+    if not students or not structures:
+        return 0
+
+    existing_pairs = {
+        (student_id, fee_structure_id)
+        for student_id, fee_structure_id in (
+            db.query(StudentFee.student_id, StudentFee.fee_structure_id)
+            .filter(StudentFee.student_id.in_([s.id for s in students]))
+            .filter(StudentFee.fee_structure_id.in_([fs.id for fs in structures]))
+            .all()
+        )
+    }
 
     assigned = 0
     for student in students:
         for fs in structures:
-            exists = db.query(StudentFee).filter_by(
-                student_id=student.id,
-                fee_structure_id=fs.id,
-            ).first()
-            if not exists:
+            if (student.id, fs.id) not in existing_pairs:
                 db.add(StudentFee(
                     student_id=student.id,
                     fee_structure_id=fs.id,

@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
@@ -72,7 +74,7 @@ async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
         body,
         request.headers.get("X-Razorpay-Signature"),
     )
-    payload = await request.json()
+    payload = json.loads(body)
     event = payload.get("event")
     if event == "payment.captured":
         entity = payload.get("payload", {}).get("payment", {}).get("entity", {})

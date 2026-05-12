@@ -455,8 +455,7 @@ class TestFeeScoping:
     def test_student_cannot_view_fee_structure(self, client):
         tok = token(client, "student@test.com", "student1234")
         res = client.get("/api/v1/fees/structure", headers=auth(tok))
-        # fee structure is public (no auth) — this should succeed
-        assert res.status_code == 200
+        assert res.status_code == 403
 
     def test_student_cannot_create_fee_structure(self, client):
         tok = token(client, "student@test.com", "student1234")

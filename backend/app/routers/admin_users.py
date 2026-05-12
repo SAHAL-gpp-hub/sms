@@ -1,7 +1,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -21,7 +21,7 @@ VALID_ROLES = {"admin", "teacher", "student", "parent"}
 class AdminUserCreate(BaseModel):
     name: str
     email: EmailStr
-    password: str
+    password: str = Field(min_length=8)
     role: str
     is_active: bool = True
     branch_id: Optional[int] = None
@@ -64,7 +64,7 @@ class AdminUserOut(BaseModel):
 
 
 class PasswordResetRequest(BaseModel):
-    new_password: str
+    new_password: str = Field(min_length=8)
 
 
 class AdminTwoFactorUpdate(BaseModel):
@@ -191,11 +191,16 @@ def update_user(
     user_id: int,
     data: AdminUserUpdate,
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(require_role("admin")),
+    current_user: CurrentUser = Depends(require_role("admin")),
 ):
     user = db.query(User).filter_by(id=user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if data.role is not None and data.role != user.role:
+        if data.role == "admin":
+            raise HTTPException(status_code=403, detail="Use user creation endpoint to create admin users")
+        if user.role == "admin" and user.id != current_user.id:
+            raise HTTPException(status_code=403, detail="Cannot change role of another admin user")
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(user, key, value)
     try:
