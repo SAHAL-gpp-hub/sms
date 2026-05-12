@@ -53,7 +53,8 @@ def generate_student_id(db: Session, year: int) -> str:
             db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": year})
         except Exception as exc:
             raise RuntimeError(
-                f"Failed to acquire advisory lock for student ID generation for year {year}"
+                f"Failed to acquire advisory lock for student ID generation for year {year}. "
+                "This may indicate database connectivity issues or concurrent ID generation load."
             ) from exc
 
     rows = db.execute(

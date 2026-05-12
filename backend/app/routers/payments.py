@@ -74,6 +74,7 @@ async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
         body,
         request.headers.get("X-Razorpay-Signature"),
     )
+    # Parse from cached raw body to avoid consuming the request stream twice.
     payload = json.loads(body)
     event = payload.get("event")
     if event == "payment.captured":

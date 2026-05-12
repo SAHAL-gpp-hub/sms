@@ -200,7 +200,7 @@ def update_user(
         if data.role == "admin":
             raise HTTPException(
                 status_code=403,
-                detail="Use the dedicated admin creation endpoint to grant admin privileges",
+                detail="Use POST /api/v1/admin/users to grant admin privileges",
             )
         if user.role == "admin" and user.id != current_user.id:
             raise HTTPException(status_code=403, detail="Cannot change role of another admin user")
