@@ -198,7 +198,7 @@ def update_user(
         raise HTTPException(status_code=404, detail="User not found")
     if data.role is not None and data.role != user.role:
         if data.role == "admin":
-            raise HTTPException(status_code=403, detail="Use user creation endpoint to create admin users")
+            raise HTTPException(status_code=403, detail="Cannot promote users to admin role via update endpoint")
         if user.role == "admin" and user.id != current_user.id:
             raise HTTPException(status_code=403, detail="Cannot change role of another admin user")
     for key, value in data.model_dump(exclude_unset=True).items():

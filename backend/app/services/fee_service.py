@@ -192,13 +192,15 @@ def assign_fees_to_class(
     )
     if not students or not structures:
         return 0
+    student_ids = [s.id for s in students]
+    structure_ids = [fs.id for fs in structures]
 
     existing_pairs = {
         (student_id, fee_structure_id)
         for student_id, fee_structure_id in (
             db.query(StudentFee.student_id, StudentFee.fee_structure_id)
-            .filter(StudentFee.student_id.in_([s.id for s in students]))
-            .filter(StudentFee.fee_structure_id.in_([fs.id for fs in structures]))
+            .filter(StudentFee.student_id.in_(student_ids))
+            .filter(StudentFee.fee_structure_id.in_(structure_ids))
             .all()
         )
     }
