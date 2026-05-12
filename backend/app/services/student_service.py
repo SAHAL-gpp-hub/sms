@@ -52,7 +52,9 @@ def generate_student_id(db: Session, year: int) -> str:
         try:
             db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": year})
         except Exception as exc:
-            raise RuntimeError("Failed to acquire advisory lock for student ID generation") from exc
+            raise RuntimeError(
+                f"Failed to acquire advisory lock for student ID generation for year {year}"
+            ) from exc
 
     rows = db.execute(
         text("SELECT student_id FROM students WHERE student_id LIKE :prefix"),
