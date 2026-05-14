@@ -1,6 +1,6 @@
 // MarksEntry.jsx — Full rebuild with Subject Manager + per-exam custom marks
 // Fully responsive across all device sizes (logic unchanged)
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import toast from 'react-hot-toast'
 import { marksAPI, setupAPI, extractError, openSignedPdf } from '../../services/api'
 import { getAuthUser } from '../../services/auth'
@@ -967,10 +967,13 @@ function ExamConfigPanel({ examId, classId, onConfigSaved }) {
 // Main MarksEntry page
 // ─────────────────────────────────────────────────────────────────────────────
 export default function MarksEntry() {
-  const authUser = getAuthUser()
+  const authUser = useMemo(() => getAuthUser(), [])
   const isTeacher = authUser?.role === 'teacher'
-  const subjectAssignments = authUser?.subjectAssignments || []
-  const marksClassIds = [...new Set(subjectAssignments.map(a => a.class_id))]
+  const subjectAssignments = useMemo(() => authUser?.subjectAssignments || [], [authUser])
+  const marksClassIds = useMemo(
+    () => [...new Set(subjectAssignments.map(a => a.class_id))],
+    [subjectAssignments]
+  )
   const [classes, setClasses]         = useState([])
   const [years, setYears]             = useState([])
   const [exams, setExams]             = useState([])
@@ -980,6 +983,9 @@ export default function MarksEntry() {
 
   const [gridData, setGridData]       = useState(null)
   const [localMarks, setLocalMarks]   = useState({})
+  const [dirty, setDirty]             = useState(false)
+  const [draftSavedAt, setDraftSavedAt] = useState(null)
+  const [subjectFilter, setSubjectFilter] = useState('all')
   const [saving, setSaving]           = useState(false)
   const [saved, setSaved]             = useState(false)
   const [loadingGrid, setLoadingGrid] = useState(false)
@@ -993,37 +999,10 @@ export default function MarksEntry() {
   const [newExam, setNewExam]         = useState({ name: '', exam_date: '' })
   const [creatingExam, setCreatingExam] = useState(false)
 
-  useEffect(() => {
-    setupAPI.getClasses().then(r => {
-      const allClasses = r.data || []
-      setClasses(
-        isTeacher
-          ? allClasses.filter(c => marksClassIds.includes(c.id))
-          : allClasses
-      )
-    })
-    setupAPI.getAcademicYears().then(r => {
-      setYears(r.data)
-      const curr = r.data.find(y => y.is_current)
-      if (curr) setSelectedYear(String(curr.id))
-    })
-  }, [])
+  // ── draftKey — depends on selectedExam + selectedClass ───────────────────
+  const draftKey = selectedExam && selectedClass ? `marks-draft:${selectedClass}:${selectedExam}` : null
 
-  useEffect(() => {
-    if (selectedClass && selectedYear) {
-      marksAPI.getExams({ class_id: selectedClass, academic_year_id: selectedYear })
-        .then(r => setExams(r.data))
-    } else {
-      setExams([])
-    }
-  }, [selectedClass, selectedYear])
-
-  useEffect(() => {
-    if (selectedExam && selectedClass && view === 'entry') {
-      loadGrid()
-    }
-  }, [selectedExam, selectedClass])
-
+  // ── loadGrid — defined BEFORE the useEffects that reference it ────────────
   const loadGrid = useCallback(async () => {
     if (!selectedExam || !selectedClass) return
     setLoadingGrid(true)
@@ -1042,16 +1021,87 @@ export default function MarksEntry() {
           }
         })
       })
+      if (draftKey) {
+        const raw = localStorage.getItem(draftKey)
+        if (raw) {
+          try {
+            const draft = JSON.parse(raw)
+            if (draft?.marks && window.confirm('Restore the unsaved marks draft for this class and exam?')) {
+              setLocalMarks(draft.marks)
+              setDraftSavedAt(draft.savedAt || null)
+              setDirty(true)
+              return
+            }
+          } catch {
+            localStorage.removeItem(draftKey)
+          }
+        }
+      }
       setLocalMarks(map)
+      setDirty(false)
+      setDraftSavedAt(null)
     } catch (err) {
       toast.error(extractError(err))
     } finally {
       setLoadingGrid(false)
     }
-  }, [selectedExam, selectedClass])
+  }, [selectedExam, selectedClass, draftKey])
+
+  // ── Effects ───────────────────────────────────────────────────────────────
+  useEffect(() => {
+    setupAPI.getClasses().then(r => {
+      const allClasses = r.data || []
+      setClasses(
+        isTeacher
+          ? allClasses.filter(c => marksClassIds.includes(c.id))
+          : allClasses
+      )
+    })
+    setupAPI.getAcademicYears().then(r => {
+      setYears(r.data)
+      const curr = r.data.find(y => y.is_current)
+      if (curr) setSelectedYear(String(curr.id))
+    })
+  }, [isTeacher, marksClassIds])
+
+  useEffect(() => {
+    if (selectedClass && selectedYear) {
+      marksAPI.getExams({ class_id: selectedClass, academic_year_id: selectedYear })
+        .then(r => setExams(r.data))
+    } else {
+      setExams([])
+    }
+  }, [selectedClass, selectedYear])
+
+  useEffect(() => {
+    if (selectedExam && selectedClass && view === 'entry') {
+      loadGrid()
+    }
+  }, [selectedExam, selectedClass, view, loadGrid])
+
+  useEffect(() => {
+    if (!draftKey || !dirty) return undefined
+    const timer = window.setTimeout(() => {
+      const savedAt = new Date().toISOString()
+      localStorage.setItem(draftKey, JSON.stringify({ marks: localMarks, savedAt }))
+      setDraftSavedAt(savedAt)
+    }, 600)
+    return () => window.clearTimeout(timer)
+  }, [dirty, draftKey, localMarks])
+
+  useEffect(() => {
+    if (!dirty) return undefined
+    const handler = event => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [dirty])
 
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleMarkChange = (studentId, subjectId, field, value) => {
+    setDirty(true)
     setLocalMarks(prev => ({
       ...prev,
       [studentId]: {
@@ -1062,8 +1112,36 @@ export default function MarksEntry() {
     setSaved(false)
   }
 
+  const validateMarks = () => {
+    if (!gridData) return true
+    const issues = []
+    gridData.students.forEach(student => {
+      gridData.subjects.forEach(subject => {
+        const marks = localMarks[student.student_id]?.[subject.id] || {}
+        if (marks.is_absent) return
+        const checks = [
+          { label: 'theory', value: marks.theory, max: subject.max_theory },
+          { label: 'practical', value: marks.practical, max: subject.max_practical },
+        ]
+        checks.forEach(check => {
+          if (check.value === '' || check.value === undefined || check.value === null || check.max <= 0) return
+          const numeric = Number(check.value)
+          if (Number.isNaN(numeric) || numeric < 0 || numeric > check.max) {
+            issues.push(`${student.student_name} ${subject.name} ${check.label} must be 0-${check.max}`)
+          }
+        })
+      })
+    })
+    if (issues.length) {
+      toast.error(`Fix marks first: ${issues.slice(0, 2).join('; ')}${issues.length > 2 ? ` and ${issues.length - 2} more` : ''}`)
+      return false
+    }
+    return true
+  }
+
   const handleSave = async () => {
     if (!gridData) return
+    if (!validateMarks()) return
     setSaving(true)
     try {
       const entries = []
@@ -1081,6 +1159,9 @@ export default function MarksEntry() {
         })
       })
       await marksAPI.bulkSaveMarks(entries)
+      if (draftKey) localStorage.removeItem(draftKey)
+      setDirty(false)
+      setDraftSavedAt(null)
       setSaved(true)
       toast.success('Marks saved successfully')
     } catch (err) {
@@ -1132,12 +1213,18 @@ export default function MarksEntry() {
   }
 
   // ── Derived ────────────────────────────────────────────────────────────────
+  const confirmLoseMarksDraft = () => !dirty || window.confirm('You have unsaved marks. Continue and keep only the autosaved draft?')
   const classOptions = classes.map(c => ({ value: String(c.id), label: `Class ${c.name} — ${c.division}` }))
   const yearOptions  = years.map(y => ({ value: String(y.id), label: y.label + (y.is_current ? ' (Current)' : '') }))
   const hasSubjects  = gridData?.subjects?.length > 0
   const hasStudents  = gridData?.students?.length > 0
   const hasCustomConfig = gridData?.subjects?.some(s => s.has_custom_config)
   const examName     = exams.find(e => String(e.id) === selectedExam)?.name || 'Exam'
+  const visibleSubjects = useMemo(() => {
+    if (!gridData?.subjects) return []
+    if (subjectFilter === 'all') return gridData.subjects
+    return gridData.subjects.filter(subject => String(subject.id) === subjectFilter)
+  }, [gridData, subjectFilter])
 
   const mainTabs = [
     { value: 'entry',     label: 'Marks Entry' },
@@ -1158,14 +1245,29 @@ export default function MarksEntry() {
       <FilterRow>
         <Select
           value={selectedClass}
-          onChange={e => { setSelectedClass(e.target.value); setSelectedExam(''); setGridData(null); setView('entry') }}
+          onChange={e => {
+            if (!confirmLoseMarksDraft()) return
+            setSelectedClass(e.target.value)
+            setSelectedExam('')
+            setGridData(null)
+            setSubjectFilter('all')
+            setDirty(false)
+            setView('entry')
+          }}
           options={classOptions}
           placeholder="Select class…"
           style={{ flex: 1, minWidth: '180px' }}
         />
         <Select
           value={selectedYear}
-          onChange={e => setSelectedYear(e.target.value)}
+          onChange={e => {
+            if (!confirmLoseMarksDraft()) return
+            setSelectedYear(e.target.value)
+            setSelectedExam('')
+            setGridData(null)
+            setSubjectFilter('all')
+            setDirty(false)
+          }}
           options={yearOptions}
           placeholder="Select year…"
           style={{ flex: 1, minWidth: '160px' }}
@@ -1174,7 +1276,14 @@ export default function MarksEntry() {
           <select
             className="input"
             value={selectedExam}
-            onChange={e => { setSelectedExam(e.target.value); setView('entry'); setGridData(null) }}
+            onChange={e => {
+              if (!confirmLoseMarksDraft()) return
+              setSelectedExam(e.target.value)
+              setView('entry')
+              setGridData(null)
+              setSubjectFilter('all')
+              setDirty(false)
+            }}
             style={{ flex: 1 }}
           >
             <option value="">Select exam…</option>
@@ -1245,6 +1354,7 @@ export default function MarksEntry() {
               tabs={mainTabs}
               active={view}
               onChange={v => {
+                if (v !== 'entry' && !confirmLoseMarksDraft()) return
                 if (v === 'results') { handleViewResults(); return }
                 if (v === 'entry' && selectedExam) loadGrid()
                 setView(v)
@@ -1372,12 +1482,22 @@ export default function MarksEntry() {
                         <span><strong>T</strong> = Theory</span>
                         <span><strong>P</strong> = Practical (where applicable)</span>
                         <span>Check <strong>Abs</strong> to mark absent</span>
+                        <span style={{ color: dirty ? 'var(--warning-600)' : 'var(--success-700)', fontWeight: 700 }}>
+                          {dirty ? `Draft autosaved${draftSavedAt ? ` ${new Date(draftSavedAt).toLocaleTimeString()}` : ''}` : 'Saved data loaded'}
+                        </span>
                         {hasCustomConfig && (
                           <span style={{ color: 'var(--brand-700)', fontWeight: 700, background: 'var(--brand-50)', padding: '2px 8px', borderRadius: '6px', border: '1px solid var(--brand-200)' }}>
                             Custom max marks active for this exam
                           </span>
                         )}
-                        <span style={{ color: 'var(--warning-600)', fontWeight: 600 }}>Scroll right to see all subjects</span>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
+                          <span style={{ fontWeight: 700 }}>Subject focus</span>
+                          <select className="input" value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)} style={{ height: '30px', minHeight: '30px', fontSize: '12px', padding: '4px 8px' }}>
+                            <option value="all">All subjects</option>
+                            {gridData.subjects.map(subject => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
+                          </select>
+                        </label>
+                        {subjectFilter === 'all' && <span style={{ color: 'var(--warning-600)', fontWeight: 600 }}>Scroll right to see all subjects</span>}
                       </div>
                       <div className="me-grid-scroll">
                         <table style={{ borderCollapse: 'separate', borderSpacing: 0, fontSize: '12.5px', minWidth: '100%' }}>
@@ -1400,7 +1520,7 @@ export default function MarksEntry() {
                                 letterSpacing: '0.06em', color: 'var(--text-secondary)',
                                 borderBottom: '1px solid var(--border-default)', width: '50px',
                               }}>Roll</th>
-                              {gridData.subjects.map(sub => (
+                              {visibleSubjects.map(sub => (
                                 <th key={sub.id} style={{
                                   background: sub.has_custom_config ? 'var(--brand-50)' : 'var(--gray-50)',
                                   padding: '8px 10px',
@@ -1442,7 +1562,7 @@ export default function MarksEntry() {
                                 <td style={{ padding: '8px 12px', textAlign: 'center', color: 'var(--text-tertiary)', borderBottom: '1px solid var(--border-subtle)', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
                                   {student.roll_number || '—'}
                                 </td>
-                                {gridData.subjects.map(sub => {
+                                {visibleSubjects.map(sub => {
                                   const m = localMarks[student.student_id]?.[sub.id] || {}
                                   return (
                                     <td key={sub.id} style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', textAlign: 'center', background: sub.has_custom_config && si % 2 === 0 ? '#fafbff' : undefined }}>
@@ -1510,7 +1630,7 @@ export default function MarksEntry() {
                       </div>
                       <div className="me-grid-footer">
                         <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
-                          {gridData.students.length} student{gridData.students.length !== 1 ? 's' : ''} · {gridData.subjects.length} subject{gridData.subjects.length !== 1 ? 's' : ''}
+                          {gridData.students.length} student{gridData.students.length !== 1 ? 's' : ''} · {visibleSubjects.length} of {gridData.subjects.length} subject{gridData.subjects.length !== 1 ? 's' : ''}
                         </span>
                         <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
                           {saving ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Saving…</> : 'Save All Marks'}

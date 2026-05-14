@@ -100,6 +100,27 @@ class DataAuditActionEnum(str, enum.Enum):
     delete = "delete"
 
 
+class OperationJobStatusEnum(str, enum.Enum):
+    pending = "pending"
+    running = "running"
+    completed = "completed"
+    failed = "failed"
+    cancelled = "cancelled"
+
+
+class CorrectionRequestStatusEnum(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+
+
+class ActivationInviteStatusEnum(str, enum.Enum):
+    pending = "pending"
+    used = "used"
+    revoked = "revoked"
+    expired = "expired"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Reference / Setup Tables
 # ─────────────────────────────────────────────────────────────────────────────
@@ -240,7 +261,7 @@ class Student(Base):
     roll_number      = Column(Integer, nullable=True)   # legacy; use enrollment.roll_number
     father_name      = Column(String(100), nullable=False)
     mother_name      = Column(String(100), nullable=True)
-    contact          = Column(String(10), nullable=False)
+    contact          = Column(String(20), nullable=False)
     student_email    = Column(String(100), unique=True, nullable=True)
     student_phone    = Column(String(20), nullable=True)
     guardian_email   = Column(String(100), nullable=True, index=True)
@@ -416,6 +437,9 @@ class FeeHead(Base):
 
 class FeeStructure(Base):
     __tablename__ = "fee_structures"
+    __table_args__ = (
+        UniqueConstraint("class_id", "fee_head_id", "academic_year_id", name="uq_fee_structure_class_head_year"),
+    )
 
     id               = Column(Integer, primary_key=True)
     class_id         = Column(Integer, ForeignKey("classes.id"))
@@ -572,6 +596,41 @@ class TokenBlocklist(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class AuthRefreshSession(Base):
+    __tablename__ = "auth_refresh_sessions"
+
+    id            = Column(Integer, primary_key=True)
+    user_id       = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash    = Column(String(128), unique=True, nullable=False, index=True)
+    family_id     = Column(String(36), nullable=False, index=True)
+    replaced_by_session_id = Column(Integer, ForeignKey("auth_refresh_sessions.id"), nullable=True)
+    user_agent    = Column(String(255), nullable=True)
+    ip_address    = Column(String(64), nullable=True)
+    expires_at    = Column(DateTime(timezone=True), nullable=False, index=True)
+    revoked_at    = Column(DateTime(timezone=True), nullable=True)
+    created_at    = Column(DateTime(timezone=True), server_default=func.now())
+    last_used_at  = Column(DateTime(timezone=True), nullable=True)
+
+
+class PortalActivationInvite(Base):
+    __tablename__ = "portal_activation_invites"
+
+    id            = Column(Integer, primary_key=True)
+    invite_id     = Column(String(36), unique=True, nullable=False, index=True)
+    token_hash    = Column(String(128), unique=True, nullable=False, index=True)
+    student_id    = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False, index=True)
+    account_type  = Column(String(20), nullable=False)
+    destination   = Column(String(255), nullable=False)
+    status        = Column(Enum(ActivationInviteStatusEnum), nullable=False, default=ActivationInviteStatusEnum.pending, index=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    expires_at    = Column(DateTime(timezone=True), nullable=False, index=True)
+    used_at       = Column(DateTime(timezone=True), nullable=True)
+    revoked_at    = Column(DateTime(timezone=True), nullable=True)
+    created_at    = Column(DateTime(timezone=True), server_default=func.now())
+
+    student = relationship("Student")
+
+
 class StudentActivationRequest(Base):
     __tablename__ = "student_activation_requests"
 
@@ -677,6 +736,39 @@ class DataAuditLog(Base):
     old_value  = Column(JSON, nullable=True)
     new_value  = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class OperationJob(Base):
+    __tablename__ = "operation_jobs"
+
+    id           = Column(Integer, primary_key=True)
+    job_type     = Column(String(80), nullable=False, index=True)
+    status       = Column(Enum(OperationJobStatusEnum), nullable=False, default=OperationJobStatusEnum.pending, index=True)
+    actor_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    payload      = Column(JSON, nullable=True)
+    progress     = Column(Integer, nullable=False, default=0)
+    result       = Column(JSON, nullable=True)
+    error        = Column(Text, nullable=True)
+    created_at   = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    updated_at   = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class ProfileCorrectionRequest(Base):
+    __tablename__ = "profile_correction_requests"
+
+    id              = Column(Integer, primary_key=True)
+    student_id      = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
+    requested_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    field_name      = Column(String(80), nullable=False)
+    current_value   = Column(Text, nullable=True)
+    requested_value = Column(Text, nullable=False)
+    reason          = Column(Text, nullable=True)
+    status          = Column(Enum(CorrectionRequestStatusEnum), nullable=False, default=CorrectionRequestStatusEnum.pending, index=True)
+    admin_note      = Column(Text, nullable=True)
+    resolved_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    resolved_at     = Column(DateTime(timezone=True), nullable=True)
+    created_at      = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

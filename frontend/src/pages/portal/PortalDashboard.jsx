@@ -162,7 +162,7 @@ export default function PortalDashboard() {
               Hello, {firstName}!
             </div>
             <div style={{ fontSize: '12px', opacity: 0.75, marginTop: '4px', fontWeight: 600 }}>
-              {profile ? `Std ${profile.class_id} · Roll ${profile.roll_number || '—'} · ${profile.student_id || ''}` : 'Iqra English Medium School'}
+              {profile ? `${profile.class_label || 'Class not assigned'} · Roll ${profile.roll_number || '—'} · ${profile.student_id || ''}` : 'Iqra English Medium School'}
             </div>
           </div>
         </div>
@@ -198,7 +198,7 @@ export default function PortalDashboard() {
                         </div>
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontSize: '12px', fontWeight: 800, color: active ? color : '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name_en}</div>
-                          <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Std {c.class_id}</div>
+                          <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>{c.class_label || 'Class not assigned'}</div>
                         </div>
                         {active && <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: color, flexShrink: 0, marginLeft: 'auto' }} />}
                       </div>

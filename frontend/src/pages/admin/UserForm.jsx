@@ -51,7 +51,7 @@ export default function UserForm() {
         toast.error('Failed to load user')
         setInitialLoading(false)
       })
-  }, [id])
+  }, [id, isEdit])
 
   const setField = field => e => {
     const val = e.target.type === 'checkbox' ? e.target.checked : e.target.value

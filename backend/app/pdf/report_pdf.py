@@ -1,4 +1,3 @@
-from weasyprint import HTML
 from jinja2 import Environment, FileSystemLoader
 from sqlalchemy.orm import Session
 from app.models.base_models import AcademicYear, Class, Exam, FeePayment, Student, StudentFee
@@ -11,6 +10,11 @@ import os
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__))
 MONTHS = ['January','February','March','April','May','June',
           'July','August','September','October','November','December']
+
+
+def _html_renderer():
+    from weasyprint import HTML
+    return HTML
 
 def render_defaulter_report(db: Session, academic_year_id: int = None) -> bytes:
     defaulters = get_defaulters(db, academic_year_id=academic_year_id)
@@ -28,7 +32,7 @@ def render_defaulter_report(db: Session, academic_year_id: int = None) -> bytes:
         total_collected=total_collected,
         generated_date=date.today().strftime("%d %B %Y")
     )
-    return HTML(string=html).write_pdf()
+    return _html_renderer()(string=html).write_pdf()
 
 def render_attendance_report(db: Session, class_id: int, year: int, month: int) -> bytes:
     cls = db.query(Class).filter_by(id=class_id).first()
@@ -43,7 +47,7 @@ def render_attendance_report(db: Session, class_id: int, year: int, month: int) 
         year=year,
         generated_date=date.today().strftime("%d %B %Y")
     )
-    return HTML(string=html).write_pdf()
+    return _html_renderer()(string=html).write_pdf()
 
 def render_result_report(db: Session, exam_id: int, class_id: int) -> bytes:
     cls = db.query(Class).filter_by(id=class_id).first()
@@ -70,7 +74,7 @@ def render_result_report(db: Session, exam_id: int, class_id: int) -> bytes:
         academic_year=year.label if year else "2025-26",
         generated_date=date.today().strftime("%d %B %Y")
     )
-    return HTML(string=html).write_pdf()
+    return _html_renderer()(string=html).write_pdf()
 
 def render_tc_pdf(db: Session, student_id: int, reason: str, conduct: str) -> bytes:
     from app.services.yearend_service import get_tc_data
@@ -81,7 +85,7 @@ def render_tc_pdf(db: Session, student_id: int, reason: str, conduct: str) -> by
     env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
     template = env.get_template("tc_template.html")
     html = template.render(**data)
-    return HTML(string=html).write_pdf()
+    return _html_renderer()(string=html).write_pdf()
 
 
 def render_fee_receipt_pdf(db: Session, payment_id: int) -> bytes | None:
@@ -118,4 +122,4 @@ def render_fee_receipt_pdf(db: Session, payment_id: int) -> bytes | None:
         academic_year=year.label if year else "",
         notes=payment.notes or "",
     )
-    return HTML(string=html).write_pdf()
+    return _html_renderer()(string=html).write_pdf()

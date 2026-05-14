@@ -64,6 +64,7 @@ export default function StudentForm() {
   const { id } = useParams()
   const navigate = useNavigate()
   const isEdit = Boolean(id)
+  const draftKey = `student-form-draft:${id || 'new'}`
 
   const [classes, setClasses]           = useState([])
   const [academicYears, setAcademicYears] = useState([])
@@ -71,6 +72,8 @@ export default function StudentForm() {
   const [initialLoading, setInitialLoading] = useState(isEdit)
   const [errors, setErrors]             = useState({})
   const [form, setForm]                 = useState(EMPTY_FORM)
+  const [dirty, setDirty]               = useState(false)
+  const [draftSavedAt, setDraftSavedAt] = useState(null)
   const [useContactForStudentWhatsApp, setUseContactForStudentWhatsApp] = useState(true)
   const [useContactForGuardianWhatsApp, setUseContactForGuardianWhatsApp] = useState(true)
 
@@ -83,7 +86,7 @@ export default function StudentForm() {
       setAcademicYears(yearRes.data)
       const current = yearRes.data.find(y => y.is_current)
       if (current && !isEdit) {
-        setForm(f => ({ ...f, academic_year_id: String(current.id) }))
+        setForm(f => ({ ...f, academic_year_id: f.academic_year_id || String(current.id) }))
       }
     }).catch(() => toast.error('Failed to load setup data'))
 
@@ -110,15 +113,59 @@ export default function StudentForm() {
         })
         setUseContactForStudentWhatsApp(!s.student_phone || s.student_phone === s.contact)
         setUseContactForGuardianWhatsApp(!s.guardian_phone || s.guardian_phone === s.contact)
+        setDirty(false)
         setInitialLoading(false)
       }).catch(() => {
         toast.error('Failed to load student data')
         setInitialLoading(false)
       })
     }
-  }, [id])
+  }, [id, isEdit])
+
+  useEffect(() => {
+    if (isEdit) return
+    const raw = localStorage.getItem(draftKey)
+    if (!raw) return
+    try {
+      const draft = JSON.parse(raw)
+      if (draft?.form && window.confirm('Restore the unsaved student admission draft?')) {
+        setForm(f => ({ ...f, ...draft.form }))
+        setDraftSavedAt(draft.savedAt || null)
+        setDirty(true)
+      }
+    } catch {
+      localStorage.removeItem(draftKey)
+    }
+  }, [draftKey, isEdit])
+
+  useEffect(() => {
+    if (initialLoading || !dirty) return undefined
+    const timer = window.setTimeout(() => {
+      const savedAt = new Date().toISOString()
+      localStorage.setItem(draftKey, JSON.stringify({ form, savedAt }))
+      setDraftSavedAt(savedAt)
+    }, 600)
+    return () => window.clearTimeout(timer)
+  }, [dirty, draftKey, form, initialLoading])
+
+  useEffect(() => {
+    if (!dirty) return undefined
+    const handler = event => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [dirty])
+
+  const leaveForm = () => {
+    if (!dirty || window.confirm('You have unsaved student details. Leave this form and lose the current changes?')) {
+      navigate('/students')
+    }
+  }
 
   const setField = field => e => {
+    setDirty(true)
     setForm(f => ({ ...f, [field]: e.target.value }))
     setErrors(prev => ({ ...prev, [field]: undefined }))
   }
@@ -174,6 +221,8 @@ export default function StudentForm() {
         await studentAPI.create(payload)
         toast.success('Student added successfully')
       }
+      localStorage.removeItem(draftKey)
+      setDirty(false)
       navigate('/students')
     } catch (err) {
       toast.error(extractError(err))
@@ -197,9 +246,35 @@ export default function StudentForm() {
     <div style={{ maxWidth: '800px' }}>
       <PageHeader
         title={isEdit ? 'Edit Student' : 'Add New Student'}
-        subtitle={isEdit ? 'Update student information' : 'Fill in the details to register a new student'}
-        back={() => navigate('/students')}
+        subtitle={isEdit ? 'Update student information' : 'Autosaved while you type so admissions do not vanish after one bad click'}
+        back={leaveForm}
       />
+
+      <div className="card" style={{ padding: '11px 14px', marginBottom: '14px', display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: '12.5px', fontWeight: 800, color: dirty ? 'var(--warning-700)' : 'var(--success-700)' }}>
+            {dirty ? 'Unsaved changes' : 'No unsaved changes'}
+          </div>
+          <div style={{ fontSize: '11.5px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+            {draftSavedAt ? `Draft saved ${new Date(draftSavedAt).toLocaleTimeString()}` : 'Draft recovery is active for this form'}
+          </div>
+        </div>
+        {!isEdit && dirty && (
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              if (window.confirm('Clear the current admission draft?')) {
+                localStorage.removeItem(draftKey)
+                setForm(EMPTY_FORM)
+                setDirty(false)
+                setDraftSavedAt(null)
+              }
+            }}
+          >
+            Clear draft
+          </button>
+        )}
+      </div>
 
       {/* Personal Information */}
       <SectionCard title="Personal Information" subtitle="Name, date of birth and identity">
@@ -228,6 +303,7 @@ export default function StudentForm() {
             value={form.aadhar_last4}
             onChange={e => {
               const val = e.target.value.replace(/\D/g, '').slice(0, 4)
+              setDirty(true)
               setForm(f => ({ ...f, aadhar_last4: val }))
               setErrors(prev => ({ ...prev, aadhar_last4: undefined }))
             }}
@@ -287,6 +363,7 @@ export default function StudentForm() {
             value={form.contact}
             onChange={e => {
               const val = e.target.value.replace(/\D/g, '').slice(0, 10)
+              setDirty(true)
               setForm(f => ({
                 ...f,
                 contact: val,
@@ -335,6 +412,7 @@ export default function StudentForm() {
                 checked={useContactForStudentWhatsApp}
                 onChange={e => {
                   const checked = e.target.checked
+                  setDirty(true)
                   setUseContactForStudentWhatsApp(checked)
                   if (checked) {
                     setForm(f => ({ ...f, student_phone: f.contact }))
@@ -349,6 +427,7 @@ export default function StudentForm() {
               value={form.student_phone}
               onChange={e => {
                 const val = e.target.value.replace(/\D/g, '').slice(0, 10)
+                setDirty(true)
                 setForm(f => ({ ...f, student_phone: val }))
                 setErrors(prev => ({ ...prev, student_phone: undefined }))
               }}
@@ -371,6 +450,7 @@ export default function StudentForm() {
                 checked={useContactForGuardianWhatsApp}
                 onChange={e => {
                   const checked = e.target.checked
+                  setDirty(true)
                   setUseContactForGuardianWhatsApp(checked)
                   if (checked) {
                     setForm(f => ({ ...f, guardian_phone: f.contact }))
@@ -385,6 +465,7 @@ export default function StudentForm() {
               value={form.guardian_phone}
               onChange={e => {
                 const val = e.target.value.replace(/\D/g, '').slice(0, 10)
+                setDirty(true)
                 setForm(f => ({ ...f, guardian_phone: val }))
                 setErrors(prev => ({ ...prev, guardian_phone: undefined }))
               }}
@@ -426,7 +507,7 @@ export default function StudentForm() {
         <button onClick={handleSubmit} disabled={loading} className="btn btn-primary btn-lg" style={{ flex: 1, minWidth: '140px' }}>
           {loading ? <><span className="spinner" style={{ width: '15px', height: '15px' }} /> Saving...</> : isEdit ? 'Save Changes' : 'Add Student'}
         </button>
-        <button onClick={() => navigate('/students')} className="btn btn-secondary btn-lg" style={{ flex: 1, minWidth: '100px' }}>
+        <button onClick={leaveForm} className="btn btn-secondary btn-lg" style={{ flex: 1, minWidth: '100px' }}>
           Cancel
         </button>
       </div>

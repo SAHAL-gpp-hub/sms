@@ -30,6 +30,35 @@ class FeeStructureCreate(BaseModel):
             raise ValueError("Fee amount must be greater than 0")
         return v
 
+class FeePlanItem(BaseModel):
+    fee_head_id: int
+    amount: Decimal
+    due_date: Optional[date] = None
+
+    @field_validator("amount")
+    @classmethod
+    def validate_amount(cls, v):
+        if v <= 0:
+            raise ValueError("Fee amount must be greater than 0")
+        return v
+
+class FeePlanRequest(BaseModel):
+    class_id: int
+    academic_year_id: int
+    items: list[FeePlanItem]
+
+class FeePlanPreview(BaseModel):
+    class_id: int
+    academic_year_id: int
+    affected_students: int
+    item_count: int
+    total_per_student: Decimal
+    existing_items: int
+    warnings: list[str] = []
+
+class FeePlanApplyResult(FeePlanPreview):
+    assigned: int
+
 class FeeStructureOut(BaseModel):
     id: int
     class_id: int

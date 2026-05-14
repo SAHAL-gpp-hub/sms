@@ -9,11 +9,12 @@ access control.
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from typing import Optional
 
 from app.core.database import get_db
-from app.models.base_models import Student, Class, AcademicYear, Attendance, Exam
+from app.models.base_models import ProfileCorrectionRequest, Student, Class, AcademicYear, Attendance, Exam
 from app.routers.auth import CurrentUser, require_role
 from app.services import fee_service, attendance_service, marks_service, report_card_service
 from app.services.calendar_service import count_working_days_for_month
@@ -21,6 +22,18 @@ from app.core.config import settings
 from app.pdf.marksheet_pdf import render_marksheet_pdf
 
 router = APIRouter(prefix="/api/v1/portal", tags=["Portal"])
+
+CORRECTION_FIELDS = {
+    "name_en", "name_gu", "dob", "contact", "address",
+    "father_name", "mother_name", "guardian_email", "guardian_phone",
+}
+
+
+class CorrectionRequestCreate(BaseModel):
+    student_id: Optional[int] = None
+    field_name: str
+    requested_value: str = Field(min_length=1, max_length=500)
+    reason: Optional[str] = Field(default=None, max_length=500)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -64,6 +77,8 @@ def get_my_profile(
     student = db.query(Student).filter_by(id=sid).first()
     if not student:
         raise HTTPException(404, "Student record not found")
+    cls = db.query(Class).filter_by(id=student.class_id).first() if student.class_id else None
+    class_label = f"Class {cls.name} — {cls.division}" if cls else None
     return {
         "id":               student.id,
         "student_id":       student.student_id,
@@ -73,6 +88,7 @@ def get_my_profile(
         "dob":              str(student.dob) if student.dob else None,
         "gender":           student.gender,
         "class_id":         student.class_id,
+        "class_label":      class_label,
         "roll_number":      student.roll_number,
         "father_name":      student.father_name,
         "mother_name":      student.mother_name,
@@ -247,6 +263,40 @@ def get_my_marksheet(
         exam_id=exam_id,
         pdf_path=f"/api/v1/portal/me/marksheet/{exam_id}?student_id={sid}",
     )
+
+
+@router.post("/correction-requests")
+def create_correction_request(
+    data: CorrectionRequestCreate,
+    user: CurrentUser = Depends(require_role("student", "parent")),
+    db: Session = Depends(get_db),
+):
+    if data.field_name not in CORRECTION_FIELDS:
+        raise HTTPException(422, "This profile field cannot be changed from the portal")
+    sid = _resolve_student_id(user, data.student_id)
+    student = db.query(Student).filter_by(id=sid).first()
+    if not student:
+        raise HTTPException(404, "Student record not found")
+    current_value = getattr(student, data.field_name, None)
+    req = ProfileCorrectionRequest(
+        student_id=sid,
+        requested_by_user_id=user.id,
+        field_name=data.field_name,
+        current_value=str(current_value) if current_value is not None else None,
+        requested_value=data.requested_value.strip(),
+        reason=data.reason.strip() if data.reason else None,
+    )
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+    return {
+        "id": req.id,
+        "status": req.status,
+        "field_name": req.field_name,
+        "current_value": req.current_value,
+        "requested_value": req.requested_value,
+        "created_at": req.created_at,
+    }
     db.commit()
 
     return Response(
@@ -272,6 +322,10 @@ def get_my_children(
     children = db.query(Student).filter(
         Student.id.in_(user.linked_student_ids)
     ).all()
+    class_lookup = {
+        c.id: f"Class {c.name} — {c.division}"
+        for c in db.query(Class).filter(Class.id.in_([s.class_id for s in children if s.class_id])).all()
+    }
 
     return [
         {
@@ -280,6 +334,7 @@ def get_my_children(
             "name_en":    s.name_en,
             "name_gu":    s.name_gu,
             "class_id":   s.class_id,
+            "class_label": class_lookup.get(s.class_id),
             "roll_number":s.roll_number,
             "status":     s.status,
         }

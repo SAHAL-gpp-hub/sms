@@ -9,6 +9,14 @@ const EMPTY_FORM = {
   email: '',
   password: '',
   confirmPassword: '',
+  schoolName: '',
+  schoolPhone: '',
+  schoolAddress: '',
+  yearLabel: '2026-27',
+  yearStart: '2026-06-01',
+  yearEnd: '2027-05-31',
+  standards: '1,2,3,4,5,6,7,8,9,10',
+  divisions: 'A',
 }
 
 export default function Register() {
@@ -47,8 +55,16 @@ export default function Register() {
         email: form.email,
         password: form.password,
         role: 'admin',
+        school_name: form.schoolName,
+        school_phone: form.schoolPhone || null,
+        school_address: form.schoolAddress || null,
+        academic_year_label: form.yearLabel,
+        academic_year_start_date: form.yearStart,
+        academic_year_end_date: form.yearEnd,
+        standards: form.standards.split(',').map(s => s.trim()).filter(Boolean),
+        divisions: form.divisions.split(',').map(s => s.trim()).filter(Boolean),
       })
-      toast.success('Admin account created. You can sign in now.')
+      toast.success('School setup created. You can sign in now.')
       navigate('/login')
     } catch (err) {
       toast.error(extractError(err))
@@ -65,16 +81,16 @@ export default function Register() {
       padding: '24px',
       background: 'linear-gradient(135deg, #fff7ed 0%, #f8fafc 100%)',
     }}>
-      <div className="card" style={{ width: '100%', maxWidth: '460px', padding: '24px' }}>
+      <div className="card" style={{ width: '100%', maxWidth: '780px', padding: '24px' }}>
         <div style={{ marginBottom: '20px' }}>
           <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--brand-600)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
             First-Run Setup
           </div>
           <h1 style={{ margin: '8px 0 4px', fontSize: '28px', lineHeight: 1.1, color: 'var(--text-primary)' }}>
-            Create the first admin
+            Set up your school
           </h1>
           <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '14px' }}>
-            This screen works only while backend registration is temporarily enabled.
+            Create the school profile, first academic year, initial classes, and administrator account in one pass.
           </p>
         </div>
 
@@ -90,10 +106,47 @@ export default function Register() {
             fontSize: '13px',
             lineHeight: 1.6,
           }}>
-            Registration is disabled on the backend. Set `REGISTRATION_ENABLED=true` in `.env`, create the admin account, then turn it off again.
+            First-run setup is currently closed. Ask the deployment owner to enable initial setup for this installation.
           </div>
         ) : (
-          <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '14px' }}>
+          <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '18px' }}>
+            <div style={{ display: 'grid', gap: '12px', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+              <div>
+                <label className="label">School Name</label>
+                <input className="input" value={form.schoolName} onChange={setField('schoolName')} placeholder="Iqra English Medium School" />
+              </div>
+              <div>
+                <label className="label">School Phone</label>
+                <input className="input" value={form.schoolPhone} onChange={setField('schoolPhone')} placeholder="9876543210" />
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label className="label">School Address</label>
+                <input className="input" value={form.schoolAddress} onChange={setField('schoolAddress')} placeholder="Campus address" />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gap: '12px', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+              <div>
+                <label className="label">Academic Year</label>
+                <input className="input" value={form.yearLabel} onChange={setField('yearLabel')} placeholder="2026-27" />
+              </div>
+              <div>
+                <label className="label">Start Date</label>
+                <input type="date" className="input" value={form.yearStart} onChange={setField('yearStart')} />
+              </div>
+              <div>
+                <label className="label">End Date</label>
+                <input type="date" className="input" value={form.yearEnd} onChange={setField('yearEnd')} />
+              </div>
+              <div>
+                <label className="label">Standards</label>
+                <input className="input" value={form.standards} onChange={setField('standards')} placeholder="1,2,3,4,5" />
+              </div>
+              <div>
+                <label className="label">Divisions</label>
+                <input className="input" value={form.divisions} onChange={setField('divisions')} placeholder="A,B" />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gap: '12px', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
             <div>
               <label className="label">Full Name</label>
               <input className="input" value={form.name} onChange={setField('name')} placeholder="School administrator" />
@@ -110,8 +163,9 @@ export default function Register() {
               <label className="label">Confirm Password</label>
               <input type="password" className="input" value={form.confirmPassword} onChange={setField('confirmPassword')} placeholder="Repeat password" />
             </div>
+            </div>
             <button type="submit" className="btn btn-primary btn-lg" disabled={loading}>
-              {loading ? 'Creating account...' : 'Create Admin Account'}
+              {loading ? 'Creating setup...' : 'Create School Setup'}
             </button>
           </form>
         )}

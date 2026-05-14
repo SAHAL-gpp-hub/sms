@@ -191,14 +191,22 @@ def assign_fees_to_class(
         .all()
     )
 
+    existing_pairs = {
+        (student_id, fee_structure_id)
+        for student_id, fee_structure_id in (
+            db.query(StudentFee.student_id, StudentFee.fee_structure_id)
+            .filter(StudentFee.academic_year_id == academic_year_id)
+            .filter(StudentFee.student_id.in_([student.id for student in students]))
+            .filter(StudentFee.fee_structure_id.in_([fs.id for fs in structures]))
+            .all()
+        )
+    } if students and structures else set()
+
     assigned = 0
     for student in students:
         for fs in structures:
-            exists = db.query(StudentFee).filter_by(
-                student_id=student.id,
-                fee_structure_id=fs.id,
-            ).first()
-            if not exists:
+            pair = (student.id, fs.id)
+            if pair not in existing_pairs:
                 db.add(StudentFee(
                     student_id=student.id,
                     fee_structure_id=fs.id,
@@ -208,6 +216,7 @@ def assign_fees_to_class(
                     # after promotion changes the student's academic_year_id.
                     academic_year_id=academic_year_id,
                 ))
+                existing_pairs.add(pair)
                 assigned += 1
 
     db.commit()

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { studentAuthAPI, extractError } from '../services/api'
@@ -348,6 +348,7 @@ export default function ActivateAccount() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [inviteMode, setInviteMode] = useState(false)
   const [resendAt, setResendAt] = useState(stored.resendAt || null)
   const [secondsLeft, setSecondsLeft] = useState(0)
 
@@ -377,7 +378,34 @@ export default function ActivateAccount() {
     if (step === 'password' && !activationToken) navigate('/activate-account/verify', { replace: true })
   }, [step, activationId, activationToken, navigate])
 
-  const persist = next => {
+  useEffect(() => {
+    const inviteToken = new URLSearchParams(location.search).get('invite')
+    if (!inviteToken || activationId || loading) return
+    setInviteMode(true)
+    setLoading(true)
+    studentAuthAPI.acceptInvite(inviteToken)
+      .then(res => {
+        const next = {
+          activationId: res.data.activation_id,
+          resendAt: res.data.resend_available_at,
+        }
+        setActivationId(next.activationId)
+        setResendAt(next.resendAt)
+        saveState({
+          accountType,
+          identifier,
+          email,
+          activationToken,
+          ...next,
+        })
+        toast.success('Activation code sent. Check the invited email inbox.')
+        navigate('/activate-account/verify', { replace: true })
+      })
+      .catch(err => toast.error(extractError(err)))
+      .finally(() => setLoading(false))
+  }, [accountType, activationId, activationToken, email, identifier, loading, location.search, navigate])
+
+  const persist = useCallback(next => {
     const state = {
       accountType,
       identifier,
@@ -388,7 +416,7 @@ export default function ActivateAccount() {
       ...next,
     }
     saveState(state)
-  }
+  }, [accountType, activationId, activationToken, email, identifier, resendAt])
 
   const start = async e => {
     e.preventDefault()
@@ -493,13 +521,20 @@ export default function ActivateAccount() {
       </h1>
       <p className="activation-subtitle">
         {step === 'start'
-          ? 'Use the email provided during admission to activate portal access.'
+          ? (inviteMode ? 'Checking your secure invite link.' : 'Use the email provided during admission to activate portal access.')
           : step === 'verify'
             ? 'Enter the 6-digit code sent to your email.'
             : 'Create a secure password for future logins.'}
       </p>
 
-      {step === 'start' && (
+      {step === 'start' && inviteMode && loading && (
+        <div className="activation-form">
+          <button className="activation-button" disabled>Opening secure invite...</button>
+          <Link className="activation-secondary" to="/login">Back to Login</Link>
+        </div>
+      )}
+
+      {step === 'start' && !inviteMode && (
         <form className="activation-form" onSubmit={start}>
           <div className="activation-segment">
             <button type="button" className={accountType === 'student' ? 'active' : ''} onClick={() => setAccountType('student')}>Student</button>

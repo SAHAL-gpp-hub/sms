@@ -1,4 +1,3 @@
-from weasyprint import HTML, CSS
 from jinja2 import Environment, FileSystemLoader
 from sqlalchemy.orm import Session
 from app.models.base_models import Student, Class, AcademicYear, Exam
@@ -7,6 +6,11 @@ from datetime import date
 import os
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__))
+
+
+def _html_renderer():
+    from weasyprint import HTML
+    return HTML
 
 def render_marksheet_pdf(
     db: Session,
@@ -49,5 +53,5 @@ def render_marksheet_pdf(
     )
 
     # Generate PDF
-    pdf_bytes = HTML(string=html_content).write_pdf()
+    pdf_bytes = _html_renderer()(string=html_content).write_pdf()
     return pdf_bytes

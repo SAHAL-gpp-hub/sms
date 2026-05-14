@@ -206,14 +206,14 @@ def get_exam_configs(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_role("admin", "teacher")),
 ):
-    exam = db.query(Exam).filter_by(id=exam_id).first()
-    if not exam:
-        raise HTTPException(status_code=404, detail="Exam not found")
-    ensure_class_access(current_user, exam.class_id)
     """
     Returns all ExamSubjectConfig rows for this exam.
     Subjects NOT in this list use their subject-level defaults.
     """
+    exam = db.query(Exam).filter_by(id=exam_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    ensure_class_access(current_user, exam.class_id)
     return marks_service.get_exam_subject_configs(db, exam_id)
 
 
@@ -275,14 +275,12 @@ def get_marks(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_role("admin", "teacher")),
 ):
-    ensure_class_access(current_user, class_id)
     """
     Returns {students: [...], subjects: [...]}.
-    Each subject now includes:
-      - max_theory / max_practical   : EFFECTIVE values for this exam
-      - default_max_theory/practical : original subject defaults
-      - has_custom_config            : whether an override is active
+    Each subject includes effective max marks, subject defaults, and whether
+    an exam-specific override is active.
     """
+    ensure_class_access(current_user, class_id)
     allowed_subject_ids = None
     if current_user.role == "teacher":
         allowed_subject_ids = [

@@ -273,6 +273,90 @@ function UsersTab() {
   )
 }
 
+function CorrectionRequestsTab() {
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState('')
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await adminAPI.listCorrectionRequests({ status: 'pending' })
+      setRows(res.data || [])
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const resolve = async (row, status) => {
+    const verb = status === 'approved' ? 'approve and apply' : 'reject'
+    if (!window.confirm(`${verb} correction for ${row.student_name}?`)) return
+    setBusy(`${row.id}-${status}`)
+    try {
+      await adminAPI.resolveCorrectionRequest(row.id, { status })
+      toast.success(status === 'approved' ? 'Correction applied' : 'Correction rejected')
+      load()
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setBusy('')
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div>
+          <div className="card-title">Profile Correction Requests</div>
+          <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>Parent and student requests waiting for admin review</div>
+        </div>
+        <button className="btn btn-secondary btn-sm" onClick={load}>Refresh</button>
+      </div>
+      {loading ? (
+        <table className="data-table"><TableSkeleton rows={5} cols={6} /></table>
+      ) : rows.length === 0 ? (
+        <EmptyState title="No pending corrections" description="Parent and student profile requests will appear here." />
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table className="data-table" style={{ minWidth: 760 }}>
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Field</th>
+                <th>Current</th>
+                <th>Requested</th>
+                <th>Reason</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(row => (
+                <tr key={row.id}>
+                  <td style={{ fontWeight: 700 }}>{row.student_name}</td>
+                  <td>{row.field_name}</td>
+                  <td style={{ color: 'var(--text-tertiary)' }}>{row.current_value || '—'}</td>
+                  <td style={{ fontWeight: 700 }}>{row.requested_value}</td>
+                  <td>{row.reason || '—'}</td>
+                  <td>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <button className="btn btn-success btn-sm" disabled={busy === `${row.id}-approved`} onClick={() => resolve(row, 'approved')}>Approve</button>
+                      <button className="btn btn-secondary btn-sm" disabled={busy === `${row.id}-rejected`} onClick={() => resolve(row, 'rejected')}>Reject</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // TAB 2 — Teacher Class Assignments
 // ══════════════════════════════════════════════════════════════════════════════
@@ -575,7 +659,7 @@ function PortalLinkingTab() {
           const hasEmail = accountType === 'student' ? student.has_student_email : student.has_guardian_email
           if (alreadyLinked || !hasEmail) continue
           try {
-            await adminAPI.resendActivation(student.id, accountType)
+            await adminAPI.createActivationInvite(student.id, accountType)
             sent += 1
           } catch (err) {
             errors.push(`${student.student_id} ${accountType}: ${extractError(err)}`)
@@ -583,7 +667,7 @@ function PortalLinkingTab() {
         }
       }
       setBulkResult({ sent, errors })
-      toast.success(`Activation emails queued: ${sent}`)
+      toast.success(`Invite links queued: ${sent}`)
       fetchAll()
       fetchLinkStatus()
     } catch (err) {
@@ -599,14 +683,14 @@ function PortalLinkingTab() {
     try {
       let sent = 0
       if (!student.has_student_account && student.has_student_email) {
-        await adminAPI.resendActivation(studentId, 'student')
+        await adminAPI.createActivationInvite(studentId, 'student')
         sent += 1
       }
       if (!student.has_parent_account && student.has_guardian_email) {
-        await adminAPI.resendActivation(studentId, 'parent')
+        await adminAPI.createActivationInvite(studentId, 'parent')
         sent += 1
       }
-      toast.success(sent ? `Activation email${sent !== 1 ? 's' : ''} queued` : 'No activation-ready email found')
+      toast.success(sent ? `Invite link${sent !== 1 ? 's' : ''} queued` : 'No activation-ready email found')
       fetchAll()
       fetchLinkStatus()
     } catch (err) {
@@ -687,12 +771,12 @@ function PortalLinkingTab() {
                   style={{ width: '100%' }}
                 >
                   {bulkGenerating
-                    ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Queueing activation emails…</>
-                    : `Send Activation Emails (${linkStatus.unlinked_students.length} students affected)`
+                    ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Queueing invite links…</>
+                    : `Send Invite Links (${linkStatus.unlinked_students.length} students affected)`
                   }
                 </button>
                 <div style={{ fontSize: '11.5px', color: 'var(--text-tertiary)', marginTop: '6px', lineHeight: 1.5 }}>
-                  Queues OTP emails for activation-ready student and parent contacts. Accounts are created only after OTP verification.
+                  Queues secure invite links for activation-ready student and parent contacts. The invite opens the portal, then OTP verifies the email before account creation.
                 </div>
               </div>
             )}
@@ -720,7 +804,7 @@ function PortalLinkingTab() {
                   Generation complete
                 </div>
                 <div style={{ color: 'var(--text-secondary)' }}>
-                  Activation emails queued: <strong>{bulkResult.sent}</strong>
+                  Invite links queued: <strong>{bulkResult.sent}</strong>
                 </div>
                 {bulkResult.errors?.length > 0 && (
                   <div style={{ marginTop: '6px', color: 'var(--danger-600)', fontSize: '12px' }}>
@@ -803,7 +887,7 @@ function PortalLinkingTab() {
                             >
                               {generatingFor === s.id
                                 ? <span className="spinner" style={{ width: '11px', height: '11px' }} />
-                                : 'Send OTP'
+                                : 'Send invite'
                               }
                             </button>
                           </td>
@@ -820,7 +904,7 @@ function PortalLinkingTab() {
 
       {/* Explainer */}
       <div style={{ padding: '14px 16px', background: 'var(--brand-50)', border: '1px solid var(--brand-200)', borderRadius: '10px', marginBottom: '16px', fontSize: '13.5px', color: 'var(--brand-700)', lineHeight: 1.6 }}>
-        <strong>How portal activation works:</strong> Student and parent accounts are created only after OTP verification. Manual linking remains available for audited emergency repair.
+        <strong>How portal activation works:</strong> Admins send invite links first. The invite opens activation directly, then OTP verifies the inbox before the student or parent creates a password. Manual linking remains available for audited emergency repair.
       </div>
 
       {/* Link form */}
@@ -884,7 +968,7 @@ function PortalLinkingTab() {
           <EmptyState
             icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>}
             title="No portal accounts yet"
-            description="Send activation emails above, or create emergency accounts in the Users tab"
+            description="Send invite links above, or create emergency accounts in the Users tab"
           />
         ) : (
           <div style={{ overflowX: 'auto' }}>
@@ -951,6 +1035,7 @@ export default function UserManagement() {
     { value: 'users',       label: 'Users',              icon: TAB_ICONS.users },
     { value: 'assignments', label: 'Teacher Assignments', icon: TAB_ICONS.assignments },
     { value: 'portal',      label: 'Portal Linking',      icon: TAB_ICONS.portal },
+    { value: 'corrections', label: 'Corrections',          icon: TAB_ICONS.portal },
   ]
 
   return (
@@ -966,6 +1051,7 @@ export default function UserManagement() {
       {tab === 'users'       && <UsersTab />}
       {tab === 'assignments' && <TeacherAssignmentsTab />}
       {tab === 'portal'      && <PortalLinkingTab />}
+      {tab === 'corrections' && <CorrectionRequestsTab />}
     </div>
   )
 }

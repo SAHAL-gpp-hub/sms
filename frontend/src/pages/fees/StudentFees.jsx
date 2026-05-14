@@ -1,5 +1,5 @@
 // StudentFees.jsx — Fully responsive
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { feeAPI, formatINR, extractError } from '../../services/api'
@@ -192,7 +192,7 @@ export default function StudentFees() {
   const [loading, setLoading]     = useState(true)
   const [payTarget, setPayTarget] = useState(null)
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true)
     try {
       const [l, p] = await Promise.all([feeAPI.getLedger(id), feeAPI.getPayments(id)])
@@ -203,9 +203,9 @@ export default function StudentFees() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [id])
 
-  useEffect(() => { fetchData() }, [id])
+  useEffect(() => { fetchData() }, [fetchData])
 
   if (loading) return <LoadingPage />
   if (!ledger) return (

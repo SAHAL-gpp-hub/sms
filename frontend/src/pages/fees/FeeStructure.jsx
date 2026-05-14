@@ -30,6 +30,7 @@ export default function FeeStructure() {
   const [seeding, setSeeding]           = useState(false)
   const [adding, setAdding]             = useState(false)
   const [assigning, setAssigning]       = useState(false)
+  const [previewingPlan, setPreviewingPlan] = useState(false)
   const [loadingStructures, setLoadingStructures] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting]         = useState(false)
@@ -77,18 +78,62 @@ export default function FeeStructure() {
     if (!selectedYear)  { toast.error('Please select an academic year'); return }
     setAdding(true)
     try {
-      await feeAPI.createFeeStructure({
-        class_id: parseInt(selectedClass), fee_head_id: parseInt(form.fee_head_id),
-        amount: parseFloat(form.amount), due_date: form.due_date || null,
+      const payload = {
+        class_id: parseInt(selectedClass),
         academic_year_id: parseInt(selectedYear),
-      })
+        items: [{
+          fee_head_id: parseInt(form.fee_head_id),
+          amount: parseFloat(form.amount),
+          due_date: form.due_date || null,
+        }],
+      }
+      setPreviewingPlan(true)
+      const previewRes = await feeAPI.previewFeePlan(payload)
+      const preview = previewRes.data
+      const yearLabel = years.find(y => String(y.id) === selectedYear)?.label || 'Selected year'
+      const confirmed = window.confirm(
+        `Apply this fee plan to ${preview.affected_students || 0} student(s) in ${selectedClassName ? `Class ${selectedClassName.name} ${selectedClassName.division}` : 'the selected class'} for ${yearLabel}?\n\n` +
+        `Duplicates: ${preview.duplicate_assignments || 0}\nWarnings: ${(preview.warnings || []).length ? preview.warnings.join(', ') : 'None'}`
+      )
+      if (!confirmed) return
+      await feeAPI.applyFeePlan(payload)
+      toast.success(`Fee plan applied to ${preview.affected_students || 0} student record(s)`)
+      setPreviewingPlan(false)
       setForm({ fee_head_id: '', amount: '', due_date: '' })
       const r = await feeAPI.getFeeStructures({ class_id: selectedClass, academic_year_id: selectedYear })
       setStructures(r.data)
-      toast.success('Fee added to structure')
     } catch (err) {
       toast.error(extractError(err))
     } finally {
+      setPreviewingPlan(false)
+    }
+  }
+
+  const handlePreviewOnly = async () => {
+    if (!form.fee_head_id) { toast.error('Please select a fee head'); return }
+    if (!form.amount || parseFloat(form.amount) <= 0) { toast.error('Amount must be > ₹0'); return }
+    if (!selectedClass || !selectedYear) { toast.error('Select class and academic year first'); return }
+    setPreviewingPlan(true)
+    try {
+      const res = await feeAPI.previewFeePlan({
+        class_id: parseInt(selectedClass),
+        academic_year_id: parseInt(selectedYear),
+        items: [{
+          fee_head_id: parseInt(form.fee_head_id),
+          amount: parseFloat(form.amount),
+          due_date: form.due_date || null,
+        }],
+      })
+      const preview = res.data
+      const feeHead = feeHeads.find(head => String(head.id) === form.fee_head_id)
+      toast.success(
+        `${feeHead?.name || 'Fee item'} is ready for ${preview.affected_students || 0} student(s). ` +
+        `${preview.duplicate_assignments || 0} duplicate assignment(s) will be skipped.`
+      )
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setPreviewingPlan(false)
       setAdding(false)
     }
   }
@@ -175,7 +220,7 @@ export default function FeeStructure() {
           <button className="btn btn-success" onClick={handleAssign} disabled={assigning} style={{ whiteSpace: 'nowrap' }}>
             {assigning
               ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Assigning…</>
-              : <><svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" style={{flexShrink:0}}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg> Assign to Students</>}
+              : <><svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" style={{flexShrink:0}}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg> Repair legacy assignments</>}
           </button>
         )}
       </FilterRow>
@@ -188,8 +233,13 @@ export default function FeeStructure() {
               <div className="card-title">Add Fee to Structure</div>
             </div>
             <div style={{ padding: '16px 18px' }}>
+              <InlineBanner
+                type="info"
+                title="Create and assign in one step"
+                message="New fee items now preview affected students before applying. Use the legacy assign action only if older fee records were never attached to students."
+              />
               {/* Responsive grid: stacks on mobile */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginTop: '12px', marginBottom: '12px' }}>
                 <div>
                   <label className="label">Fee Head</label>
                   <select className="input" value={form.fee_head_id} onChange={e => setForm(f => ({ ...f, fee_head_id: e.target.value }))}>
@@ -206,9 +256,14 @@ export default function FeeStructure() {
                   <input type="date" className="input" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} />
                 </div>
               </div>
-              <button className="btn btn-primary" onClick={handleAdd} disabled={adding} style={{ width: '100%' }}>
-                {adding ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Adding…</> : '+ Add Fee'}
-              </button>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <button className="btn btn-secondary" onClick={handlePreviewOnly} disabled={previewingPlan || adding} style={{ flex: 1, minWidth: '180px' }}>
+                  {previewingPlan && !adding ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Previewing…</> : 'Preview impact'}
+                </button>
+                <button className="btn btn-primary" onClick={handleAdd} disabled={adding || previewingPlan} style={{ flex: 1, minWidth: '220px' }}>
+                  {adding ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Applying…</> : 'Preview and apply fee plan'}
+                </button>
+              </div>
             </div>
           </div>
 

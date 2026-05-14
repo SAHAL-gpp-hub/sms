@@ -17,6 +17,7 @@ BUG FIX — Enrollment auto-creation:
 """
 
 from datetime import date
+import logging
 from typing import Optional
 
 from sqlalchemy import or_, text
@@ -33,6 +34,8 @@ from app.schemas.student import StudentCreate, StudentUpdate
 from fastapi import HTTPException
 from app.services.audit_service import log_data_change, model_snapshot
 
+logger = logging.getLogger("sms.students")
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # ID generation
@@ -48,10 +51,12 @@ def generate_student_id(db: Session, year: int) -> str:
     at the same time for the same year. The lock is released automatically
     when the surrounding transaction commits or rolls back.
     """
-    try:
-        db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": year})
-    except Exception:
-        pass
+    if db.bind.dialect.name == "postgresql":
+        try:
+            db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": year})
+        except Exception:
+            logger.exception("Failed to acquire student ID advisory lock for year %s", year)
+            raise
 
     rows = db.execute(
         text("SELECT student_id FROM students WHERE student_id LIKE :prefix"),

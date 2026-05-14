@@ -623,9 +623,9 @@ export default function Login() {
           <div className="form-container">
             {/* Header */}
             <div className="form-header">
-              <div className="form-eyebrow">Administrator Portal</div>
+              <div className="form-eyebrow">School Portal</div>
               <h2 className="form-title">Welcome back</h2>
-              <p className="form-subtitle">Sign in to manage your school</p>
+              <p className="form-subtitle">Admin, teacher, parent, and student access</p>
             </div>
 
             {/* Error */}
@@ -689,7 +689,6 @@ export default function Login() {
                           type="button"
                           className="field-action"
                           onClick={() => setShowPassword(s => !s)}
-                          tabIndex={-1}
                           aria-label={showPassword ? 'Hide password' : 'Show password'}
                         >
                           {showPassword ? (
@@ -709,6 +708,9 @@ export default function Login() {
                 ) : (
                   <div className="field-wrap">
                     <label className="field-label" htmlFor="otp">One-time code</label>
+                    <p style={{ margin: '0 0 8px', color: '#5f6f73', fontSize: '13px', lineHeight: 1.45 }}>
+                      Enter the 6-digit code sent to your configured admin 2FA destination. Codes expire quickly.
+                    </p>
                     <div className="field-input-wrap">
                       <input
                         id="otp"
@@ -722,6 +724,13 @@ export default function Login() {
                         autoComplete="one-time-code"
                       />
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => { setRequires2FA(false); setOtp(''); setChallengeId('') }}
+                      style={{ marginTop: '10px', border: 0, background: 'transparent', color: '#0d7377', fontWeight: 800, cursor: 'pointer', padding: 0 }}
+                    >
+                      Use a different email or password
+                    </button>
                   </div>
                 )}
               </div>
@@ -735,7 +744,7 @@ export default function Login() {
                   </>
                 ) : (
                   <>
-                    {requires2FA ? 'Verify OTP & Sign in' : 'Sign in to Dashboard'}
+                    {requires2FA ? 'Verify OTP & sign in' : 'Sign in to school portal'}
                     <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
@@ -746,7 +755,7 @@ export default function Login() {
 
             <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '13px' }}>
               <Link to="/activate-account" style={{ color: '#0d7377', fontWeight: 800, textDecoration: 'none', marginRight: '14px' }}>
-                Activate account
+                Parent/student activation
               </Link>
               <Link to="/register" style={{ color: '#c84b11', fontWeight: 700, textDecoration: 'none' }}>
                 First-time setup

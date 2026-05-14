@@ -1,8 +1,10 @@
 import axios from 'axios'
-import { getToken, clearToken } from './auth'
+import { getToken, clearToken, normalizeAuthUser, setAuthUser, setToken } from './auth'
+import { SESSION_EXPIRED_EVENT } from '../components/SessionExpiredModal'
 
 const api = axios.create({
   baseURL: '/api/v1',
+  withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 })
 
@@ -123,12 +125,34 @@ api.interceptors.response.use(
     logSlowRequest(res.config, 'API request')
     return res
   },
-  err => {
+  async err => {
     logSlowRequest(err.config, 'failed API request')
     const url = err.config?.url || ''
-    if (err.response && err.response.status === 401 && !url.startsWith('/student-auth')) {
+    const shouldHandleAuth =
+      err.response &&
+      err.response.status === 401 &&
+      !url.startsWith('/student-auth') &&
+      !url.startsWith('/auth/login') &&
+      !url.startsWith('/auth/verify-2fa') &&
+      !err.config?._skipAuthRecovery
+
+    if (shouldHandleAuth) {
+      try {
+        const refresh = await api.post('/auth/refresh', null, { _skipAuthRecovery: true })
+        if (refresh.data?.access_token) {
+          setToken(refresh.data.access_token)
+          setAuthUser(normalizeAuthUser(refresh.data))
+          err.config.headers.Authorization = `Bearer ${refresh.data.access_token}`
+          err.config._skipAuthRecovery = true
+          return api(err.config)
+        }
+      } catch {
+        // Fall through to a user-visible session recovery modal.
+      }
       clearToken()
-      window.location.href = '/login'
+      window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, {
+        detail: { message: 'Your session expired. Log in again, then you will return to this screen.' },
+      }))
     }
     return Promise.reject(err)
   }
@@ -177,12 +201,14 @@ export const authAPI = {
   registerStatus: () => api.get('/auth/register-status'),
   me:       ()     => api.get('/auth/me'),
   logout:   ()     => api.post('/auth/logout'),
+  refresh:  ()     => api.post('/auth/refresh'),
   verify2FA: (challengeId, otp) => api.post('/auth/verify-2fa', { challenge_id: challengeId, otp }),
 }
 
 export const studentAuthAPI = {
   startActivation: (data) => api.post('/student-auth/start-activation', data),
   resendOtp:      (activationId) => api.post('/student-auth/resend-otp', { activation_id: activationId }),
+  acceptInvite:   (inviteToken) => api.post('/student-auth/accept-invite', { invite_token: inviteToken }),
   verifyOtp:      (activationId, otp) => api.post('/student-auth/verify-otp', { activation_id: activationId, otp }),
   completeRegistration: (activationToken, password) =>
     api.post('/student-auth/complete-registration', { activation_token: activationToken, password }),
@@ -238,6 +264,8 @@ export const feeAPI = {
   getFeeStructures:   (params) => api.get('/fees/structure', { params }),
   getFeeStructure:    (id)     => api.get(`/fees/structure/${id}`),
   createFeeStructure: (data)   => api.post('/fees/structure', data),
+  previewFeePlan:     (data)   => api.post('/fees/structure/preview', data),
+  applyFeePlan:       (data)   => api.post('/fees/structure/apply', data),
   deleteFeeStructure: (id)     => api.delete(`/fees/structure/${id}`),
   assignFees: (classId, academicYearId) =>
     api.post(`/fees/assign/${classId}`, null, {
@@ -354,6 +382,17 @@ export const yearendAPI = {
     openSignedPdf(`/yearend/tc-pdf-token/${studentId}`, `/yearend/tc-pdf/${studentId}`, { reason, conduct }),
 }
 
+export const jobsAPI = {
+  get: (id) => api.get(`/jobs/${id}`),
+  createYearEndPromotion: (data) => api.post('/jobs/yearend-promotion', data),
+  openJobSocket: (id) => {
+    const token = getToken()
+    if (!token) return null
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    return new WebSocket(`${protocol}//${window.location.host}/ws/jobs/${id}?token=${encodeURIComponent(token)}`)
+  },
+}
+
 // ── Enrollments ───────────────────────────────────────────────────────────────
 export const enrollmentsAPI = {
   list: (params) => api.get('/enrollments/', { params }),
@@ -408,9 +447,15 @@ export const adminAPI = {
     api.post(`/admin/portal/generate/${studentId}`, null, { params }),
   resendActivation: (studentId, accountType) =>
     api.post(`/admin/portal/resend-activation/${studentId}`, { account_type: accountType }),
+  createActivationInvite: (studentId, accountType) =>
+    api.post(`/admin/portal/invite/${studentId}`, { account_type: accountType }),
 
   getOtpFailures: (params = {}) =>
     api.get('/admin/notifications/otp-failures', { params }),
+  listCorrectionRequests: (params = {}) =>
+    api.get('/admin/correction-requests', { params }),
+  resolveCorrectionRequest: (id, data) =>
+    api.patch(`/admin/correction-requests/${id}`, data),
 }
 
 // ── Portal ────────────────────────────────────────────────────────────────────
@@ -431,6 +476,7 @@ export const portalAPI = {
   getChildResults:    (sid) => api.get(`/portal/me/children/${sid}/results`),
   getChildFees:       (sid) => api.get(`/portal/me/children/${sid}/fees`),
   getChildAttendance: (sid) => api.get(`/portal/me/children/${sid}/attendance`),
+  createCorrectionRequest: (data) => api.post('/portal/correction-requests', data),
 }
 
 // ── Online Payments ──────────────────────────────────────────────────────────
@@ -438,11 +484,17 @@ export const paymentAPI = {
   createOrder: (data) => api.post('/payments/create-order', data),
   verify:      (data) => api.post('/payments/verify', data),
   history:     (studentId) => api.get(`/payments/history/${studentId}`),
+  orderStatus: (orderId) => api.get(`/payments/order-status/${orderId}`),
 }
 
 // ── Notifications ────────────────────────────────────────────────────────────
 export const notificationAPI = {
   list: (params = {}) => api.get('/notifications', { params }),
+  previewFeeReminders: (academicYearId) =>
+    api.post('/notifications/preview/fee-reminders', null, {
+      params: academicYearId ? { academic_year_id: academicYearId } : {},
+    }),
+  previewLowAttendance: (data = {}) => api.post('/notifications/preview/low-attendance', data),
   triggerFeeReminders: (academicYearId) =>
     api.post('/notifications/trigger/fee-reminders', null, {
       params: academicYearId ? { academic_year_id: academicYearId } : {},

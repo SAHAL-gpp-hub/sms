@@ -6,7 +6,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.base_models import Attendance, Class, Exam, FeePayment, Student, StudentFee
+from app.models.base_models import Attendance, Class, Exam, FeePayment, StudentFee
 from app.routers.auth import CurrentUser, require_role
 from app.services import attendance_service, marks_service
 
@@ -28,8 +28,7 @@ def fee_collection_trend(
             func.coalesce(func.sum(FeePayment.amount_paid), 0).label("collected"),
         )
         .join(StudentFee, FeePayment.student_fee_id == StudentFee.id)
-        .join(Student, StudentFee.student_id == Student.id)
-        .filter(Student.academic_year_id == academic_year_id)
+        .filter(StudentFee.academic_year_id == academic_year_id)
         .filter(FeePayment.payment_date >= func.current_date() - func.make_interval(0, months))
         .group_by(month_key)
         .order_by(month_key)
@@ -41,9 +40,8 @@ def fee_collection_trend(
             func.coalesce(func.sum(StudentFee.net_amount), 0).label("net_due"),
             func.coalesce(func.sum(FeePayment.amount_paid), 0).label("collected"),
         )
-        .join(Student, StudentFee.student_id == Student.id)
         .outerjoin(FeePayment, FeePayment.student_fee_id == StudentFee.id)
-        .filter(Student.academic_year_id == academic_year_id)
+        .filter(StudentFee.academic_year_id == academic_year_id)
         .first()
     )
     net_due = float(totals.net_due or 0)

@@ -35,7 +35,11 @@ export default function StudentImportPanel() {
   const importSummary = batchesQuery.data?.summary || {}
   const recentBatches = batchesQuery.data?.items || []
   const readyRows = preview?.summary?.ready_rows || 0
-  const previewRows = useMemo(() => (preview?.rows || []).slice(0, 8), [preview])
+  const previewRows = useMemo(() => preview?.rows || [], [preview])
+  const issueRows = useMemo(
+    () => (preview?.rows || []).filter(row => row.status !== 'ready' || row.issues?.length || row.warnings?.length),
+    [preview]
+  )
 
   const handleDownload = async (type) => {
     try {
@@ -61,6 +65,35 @@ export default function StudentImportPanel() {
     } finally {
       setPreviewing(false)
     }
+  }
+
+  const handleDownloadIssueReport = () => {
+    if (!issueRows.length) {
+      toast('No validation issues to download', { icon: 'ℹ️' })
+      return
+    }
+    const escape = value => `"${String(value ?? '').replace(/"/g, '""')}"`
+    const csv = [
+      ['row', 'student', 'external_id', 'class', 'status', 'action', 'issues', 'warnings'].map(escape).join(','),
+      ...issueRows.map(row => [
+        row.row_number,
+        row.name_en || '',
+        row.student_id || row.gr_number || '',
+        `${row.class_name || ''}${row.division ? `-${row.division}` : ''}`,
+        row.status || '',
+        row.action || '',
+        (row.issues || []).join('; '),
+        (row.warnings || []).join('; '),
+      ].map(escape).join(',')),
+    ].join('\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `student-import-issues-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
   }
 
   const handleImport = async () => {
@@ -161,6 +194,18 @@ export default function StudentImportPanel() {
                 <MetricCard label="Invalid" value={preview.summary.invalid_rows || 0} color="var(--danger-600)" />
               </div>
 
+              <div className="card" style={{ padding: '12px 14px', display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>Full validation preview</div>
+                  <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    Showing all {previewRows.length} row{previewRows.length !== 1 ? 's' : ''}. {issueRows.length} row{issueRows.length !== 1 ? 's need' : ' needs'} attention before import.
+                  </div>
+                </div>
+                <button className="btn btn-secondary btn-sm" onClick={handleDownloadIssueReport} disabled={issueRows.length === 0}>
+                  Download issue CSV
+                </button>
+              </div>
+
               {preview.summary.classes_to_create?.length > 0 && (
                 <div className="card" style={{ padding: '12px 14px', background: 'var(--warning-50)', border: '1px solid #fde68a' }}>
                   <div style={{ fontWeight: 700, color: 'var(--warning-700)', marginBottom: '6px' }}>Classes to create</div>
@@ -203,11 +248,6 @@ export default function StudentImportPanel() {
                     ))}
                   </tbody>
                 </table>
-                {(preview.rows?.length || 0) > previewRows.length && (
-                  <div style={{ padding: '10px 14px', fontSize: '12px', color: 'var(--text-tertiary)', borderTop: '1px solid var(--border-subtle)' }}>
-                    Showing first {previewRows.length} preview rows.
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -267,9 +307,9 @@ export default function StudentImportPanel() {
 
       <ConfirmModal
         open={!!rollbackTarget}
-        title="Roll back imported students"
-        message={`Batch #${rollbackTarget?.id} will mark imported students as Left and preserve the audit trail. Continue?`}
-        confirmLabel="Roll back import"
+        title="Mark imported students as Left"
+        message={`Batch #${rollbackTarget?.id} rollback will not delete records. It will mark the ${rollbackTarget?.imported_rows || 0} imported student(s) as Left, keep the batch audit trail, and leave skipped/error rows untouched. Continue?`}
+        confirmLabel="Mark as Left"
         confirmVariant="danger"
         onConfirm={handleRollback}
         onCancel={() => setRollbackTarget(null)}

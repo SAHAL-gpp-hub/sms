@@ -25,7 +25,8 @@ Edit `.env` and fill in **all three** values:
 | `DATABASE_URL`      | Connection string (pre-filled in `.env.example`) |
 | `SECRET_KEY`        | 64-char random hex string for JWT signing    |
 | `REGISTRATION_ENABLED` | Set `true` only during first-run setup    |
-| `DEFAULT_BRANCH_ID` | Default branch mapping for multi-branch base |
+| `DEFAULT_BRANCH_ID` | Optional default branch mapping for multi-branch base |
+| `CORS_ORIGINS`      | JSON list of frontend origins, for example `["http://localhost"]` |
 
 **Generate a secret key:**
 
@@ -101,6 +102,12 @@ The production override:
 ## 🔐 Security Notes
 
 - **Change `SECRET_KEY`** before any public deployment — the example value is not secret.
+- **Set `CORS_ORIGINS`** for every frontend origin that should call the API.
+  The backend defaults to an empty allow-list, so local API calls from a separate
+  frontend dev server will fail until this is configured.
+- The built-in response cache is process-local. Single-worker deployments are
+  fine; multi-worker or multi-replica deployments should use a shared cache if
+  cross-worker invalidation is required.
 - **Disable `REGISTRATION_ENABLED`** (set to `false` or omit) after creating the first admin.
   Leaving it enabled allows anyone on the network to create admin accounts.
 - **Enable HTTPS** before going to production — see `nginx.conf` for a commented-out

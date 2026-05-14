@@ -1,16 +1,19 @@
 // Attendance.jsx — Fully responsive with mobile-optimized status toggles
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import toast from 'react-hot-toast'
 import { setupAPI, attendanceAPI, extractError, openSignedPdf } from '../../services/api'
 import { getAuthUser } from '../../services/auth'
 import { PageHeader, FilterRow, Select, EmptyState, TableSkeleton, TabBar } from '../../components/UI'
 
 const STATUS_OPTIONS = [
+  { value: 'UNMARKED', label: 'Unmarked', short: '—', color: '#64748b', bg: '#f8fafc', border: '#cbd5e1' },
   { value: 'P',  label: 'Present', short: 'P',  color: '#16a34a', bg: '#dcfce7', border: '#bbf7d0' },
   { value: 'A',  label: 'Absent',  short: 'A',  color: '#dc2626', bg: '#fee2e2', border: '#fecaca' },
   { value: 'L',  label: 'Late',    short: 'L',  color: '#d97706', bg: '#fef3c7', border: '#fde68a' },
   { value: 'OL', label: 'Leave',   short: 'OL', color: '#2563eb', bg: '#dbeafe', border: '#bfdbfe' },
 ]
+
+const MARKABLE_STATUS_OPTIONS = STATUS_OPTIONS.filter(o => o.value !== 'UNMARKED')
 
 const MONTHS = ['January','February','March','April','May','June',
                 'July','August','September','October','November','December']
@@ -18,21 +21,22 @@ const MONTHS = ['January','February','March','April','May','June',
 function StatusToggle({ value, onChange }) {
   return (
     <div style={{ display: 'flex', gap: '4px', flexWrap: 'nowrap' }}>
-      {STATUS_OPTIONS.map(opt => (
+      {MARKABLE_STATUS_OPTIONS.map(opt => (
         <button
           key={opt.value}
           type="button"
           onClick={() => onChange(opt.value)}
           title={opt.label}
+          aria-pressed={value === opt.value}
           style={{
-            minWidth: '36px',
+            minWidth: '64px',
             minHeight: '36px',
             padding: '4px 8px',
             borderRadius: '7px',
             border: `1.5px solid ${value === opt.value ? opt.color : 'var(--border-default)'}`,
             background: value === opt.value ? opt.bg : 'var(--surface-0)',
             color: value === opt.value ? opt.color : 'var(--text-tertiary)',
-            fontSize: '11.5px',
+            fontSize: '12px',
             fontWeight: 700,
             cursor: 'pointer',
             transition: 'all 0.12s',
@@ -41,7 +45,8 @@ function StatusToggle({ value, onChange }) {
             transform: value === opt.value ? 'scale(1.08)' : 'scale(1)',
           }}
         >
-          {opt.short}
+          <span className="attendance-status-short">{opt.short}</span>
+          <span className="attendance-status-label">{opt.label}</span>
         </button>
       ))}
     </div>
@@ -54,12 +59,13 @@ function AttendanceSummaryBar({ statuses }) {
   const absent  = Object.values(statuses).filter(s => s === 'A').length
   const late    = Object.values(statuses).filter(s => s === 'L').length
   const onLeave = Object.values(statuses).filter(s => s === 'OL').length
+  const unmarked = Object.values(statuses).filter(s => !s || s === 'UNMARKED').length
   if (total === 0) return null
 
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: 'repeat(4, 1fr)',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
       gap: '8px',
       marginBottom: '14px',
     }}>
@@ -68,6 +74,7 @@ function AttendanceSummaryBar({ statuses }) {
         { label: 'Absent',  count: absent,  color: '#dc2626', bg: '#fff1f2', border: '#fecaca' },
         { label: 'Late',    count: late,    color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
         { label: 'Leave',   count: onLeave, color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
+        { label: 'Unmarked', count: unmarked, color: '#64748b', bg: '#f8fafc', border: '#cbd5e1' },
       ].map(s => (
         <div key={s.label} style={{
           background: s.bg,
@@ -85,9 +92,9 @@ function AttendanceSummaryBar({ statuses }) {
 }
 
 export default function Attendance() {
-  const authUser = getAuthUser()
+  const authUser = useMemo(() => getAuthUser(), [])
   const isTeacher = authUser?.role === 'teacher'
-  const classTeacherClassIds = authUser?.classTeacherClassIds || []
+  const classTeacherClassIds = useMemo(() => authUser?.classTeacherClassIds || [], [authUser])
   const [classes, setClasses]               = useState([])
   const [selectedClass, setSelectedClass]   = useState('')
   const [selectedDate, setSelectedDate]     = useState(new Date().toISOString().split('T')[0])
@@ -96,6 +103,7 @@ export default function Attendance() {
   const [loading, setLoading]               = useState(false)
   const [saving, setSaving]                 = useState(false)
   const [saved, setSaved]                   = useState(false)
+  const [dirty, setDirty]                   = useState(false)
   const [view, setView]                     = useState('daily')
   const [monthlySummary, setMonthlySummary] = useState([])
   const [loadingMonthly, setLoadingMonthly] = useState(false)
@@ -104,42 +112,24 @@ export default function Attendance() {
     month: new Date().getMonth() + 1,
   })
 
-  useEffect(() => {
-    setupAPI.getClasses().then(r => {
-      const allClasses = r.data || []
-      setClasses(
-        isTeacher
-          ? allClasses.filter(c => classTeacherClassIds.includes(c.id))
-          : allClasses
-      )
-    })
-  }, [])
-
-  useEffect(() => {
-    if (selectedClass && selectedDate && view === 'daily') fetchDailyAttendance()
-  }, [selectedClass, selectedDate])
-
-  useEffect(() => {
-    if (view === 'monthly' && selectedClass) fetchMonthlySummary()
-  }, [view, selectedClass, monthYear])
-
-  const fetchDailyAttendance = async () => {
+  const fetchDailyAttendance = useCallback(async () => {
     setLoading(true)
     setSaved(false)
+    setDirty(false)
     try {
       const r = await attendanceAPI.getDaily(selectedClass, selectedDate)
       setRoster(r.data)
       const map = {}
-      r.data.forEach(s => { map[s.student_id] = s.status || 'P' })
+      r.data.forEach(s => { map[s.student_id] = s.status || 'UNMARKED' })
       setStatuses(map)
     } catch (err) {
       toast.error(extractError(err))
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedClass, selectedDate])
 
-  const fetchMonthlySummary = async () => {
+  const fetchMonthlySummary = useCallback(async () => {
     if (!selectedClass) return
     setLoadingMonthly(true)
     try {
@@ -150,33 +140,85 @@ export default function Attendance() {
     } finally {
       setLoadingMonthly(false)
     }
-  }
+  }, [monthYear.month, monthYear.year, selectedClass])
+
+  useEffect(() => {
+    setupAPI.getClasses().then(r => {
+      const allClasses = r.data || []
+      setClasses(
+        isTeacher
+          ? allClasses.filter(c => classTeacherClassIds.includes(c.id))
+          : allClasses
+      )
+    })
+  }, [classTeacherClassIds, isTeacher])
+
+  useEffect(() => {
+    if (selectedClass && selectedDate && view === 'daily') fetchDailyAttendance()
+  }, [fetchDailyAttendance, selectedClass, selectedDate, view])
+
+  useEffect(() => {
+    if (view === 'monthly' && selectedClass) fetchMonthlySummary()
+  }, [fetchMonthlySummary, selectedClass, view])
+
+  useEffect(() => {
+    const onBeforeUnload = (event) => {
+      if (!dirty) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [dirty])
 
   const handleStatusChange = (studentId, status) => {
     setStatuses(prev => ({ ...prev, [studentId]: status }))
     setSaved(false)
+    setDirty(true)
   }
 
   const handleMarkAll = (status) => {
+    const label = STATUS_OPTIONS.find(o => o.value === status)?.label
+    if (!window.confirm(`Mark all ${roster.length} students as ${label}? This will replace the current marks on this screen.`)) return
     const map = {}
     roster.forEach(s => { map[s.student_id] = status })
     setStatuses(map)
     setSaved(false)
-    toast(`All marked as ${STATUS_OPTIONS.find(o => o.value === status)?.label}`)
+    setDirty(true)
+    toast(`All marked as ${label}`)
+  }
+
+  const handleMarkRemainingPresent = () => {
+    const unmarkedCount = roster.filter(s => !statuses[s.student_id] || statuses[s.student_id] === 'UNMARKED').length
+    if (unmarkedCount === 0) return
+    if (!window.confirm(`Mark the remaining ${unmarkedCount} unmarked student${unmarkedCount !== 1 ? 's' : ''} as Present?`)) return
+    const map = { ...statuses }
+    roster.forEach(s => {
+      if (!map[s.student_id] || map[s.student_id] === 'UNMARKED') map[s.student_id] = 'P'
+    })
+    setStatuses(map)
+    setSaved(false)
+    setDirty(true)
   }
 
   const handleSave = async () => {
     if (roster.length === 0) return
+    const unmarked = roster.filter(s => !statuses[s.student_id] || statuses[s.student_id] === 'UNMARKED')
+    if (unmarked.length > 0) {
+      toast.error(`${unmarked.length} student${unmarked.length !== 1 ? 's are' : ' is'} still unmarked`)
+      return
+    }
     setSaving(true)
     try {
       const entries = roster.map(s => ({
         student_id: s.student_id,
         class_id:   parseInt(selectedClass),
         date:       selectedDate,
-        status:     statuses[s.student_id] || 'P',
+        status:     statuses[s.student_id],
       }))
       await attendanceAPI.markBulk(entries)
       setSaved(true)
+      setDirty(false)
       toast.success(`Saved for ${entries.length} students`)
     } catch (err) {
       toast.error(extractError(err))
@@ -186,6 +228,12 @@ export default function Attendance() {
   }
 
   const classOptions = classes.map(c => ({ value: String(c.id), label: `Class ${c.name} — ${c.division}` }))
+  const currentYear = new Date().getFullYear()
+  const yearOptions = Array.from({ length: 7 }, (_, i) => currentYear - 3 + i)
+  const unmarkedCount = roster.filter(s => !statuses[s.student_id] || statuses[s.student_id] === 'UNMARKED').length
+  const canSave = roster.length > 0 && unmarkedCount === 0
+
+  const confirmDiscard = () => !dirty || window.confirm('You have unsaved attendance changes. Discard them?')
   const displayDate = selectedDate
     ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })
     : ''
@@ -201,7 +249,13 @@ export default function Attendance() {
       <FilterRow>
         <Select
           value={selectedClass}
-          onChange={e => { setSelectedClass(e.target.value); setRoster([]); setStatuses({}) }}
+          onChange={e => {
+            if (!confirmDiscard()) return
+            setSelectedClass(e.target.value)
+            setRoster([])
+            setStatuses({})
+            setDirty(false)
+          }}
           options={classOptions}
           placeholder="Select class…"
           style={{ flex: 1, minWidth: '160px' }}
@@ -212,7 +266,10 @@ export default function Attendance() {
             type="date"
             className="input"
             value={selectedDate}
-            onChange={e => setSelectedDate(e.target.value)}
+            onChange={e => {
+              if (!confirmDiscard()) return
+              setSelectedDate(e.target.value)
+            }}
             max={new Date().toISOString().split('T')[0]}
           />
         </div>
@@ -227,7 +284,7 @@ export default function Attendance() {
             <div style={{ minWidth: '90px' }}>
               <label className="label">Year</label>
               <select className="input" value={monthYear.year} onChange={e => setMonthYear(m => ({ ...m, year: parseInt(e.target.value) }))}>
-                {[2023, 2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+                {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
           </div>
@@ -239,7 +296,12 @@ export default function Attendance() {
               { value: 'monthly', label: 'Monthly' },
             ]}
             active={view}
-            onChange={v => { setView(v); setSaved(false) }}
+            onChange={v => {
+              if (!confirmDiscard()) return
+              setView(v)
+              setSaved(false)
+              setDirty(false)
+            }}
           />
         </div>
       </FilterRow>
@@ -262,7 +324,7 @@ export default function Attendance() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 {/* Mark all buttons */}
                 <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                  {STATUS_OPTIONS.map(opt => (
+                  {MARKABLE_STATUS_OPTIONS.map(opt => (
                     <button
                       key={opt.value}
                       onClick={() => handleMarkAll(opt.value)}
@@ -288,6 +350,11 @@ export default function Attendance() {
                   ))}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {unmarkedCount > 0 && (
+                    <button type="button" className="btn btn-secondary" onClick={handleMarkRemainingPresent}>
+                      Mark remaining present ({unmarkedCount})
+                    </button>
+                  )}
                   {saved && (
                     <span style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--success-600)', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
                       <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -296,7 +363,7 @@ export default function Attendance() {
                       Saved
                     </span>
                   )}
-                  <button className="btn btn-primary" onClick={handleSave} disabled={saving || roster.length === 0} style={{ whiteSpace: 'nowrap' }}>
+                  <button className="btn btn-primary" onClick={handleSave} disabled={saving || !canSave} style={{ whiteSpace: 'nowrap' }}>
                     {saving ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Saving…</> : 'Save'}
                   </button>
                 </div>
@@ -332,9 +399,12 @@ export default function Attendance() {
                         </td>
                         <td>
                           <StatusToggle
-                            value={statuses[student.student_id] || 'P'}
+                            value={statuses[student.student_id] || 'UNMARKED'}
                             onChange={status => handleStatusChange(student.student_id, status)}
                           />
+                          {(!statuses[student.student_id] || statuses[student.student_id] === 'UNMARKED') && (
+                            <div style={{ marginTop: '5px', fontSize: '11px', fontWeight: 700, color: '#64748b' }}>Unmarked</div>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -345,13 +415,43 @@ export default function Attendance() {
 
             {/* Save footer for long lists */}
             {roster.length > 5 && !loading && (
-              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'flex-end' }}>
-                <button className="btn btn-primary" onClick={handleSave} disabled={saving || roster.length === 0}>
+              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'flex-end', gap: '8px', flexWrap: 'wrap' }}>
+                {unmarkedCount > 0 && (
+                  <button type="button" className="btn btn-secondary" onClick={handleMarkRemainingPresent}>
+                    Mark remaining present ({unmarkedCount})
+                  </button>
+                )}
+                <button className="btn btn-primary" onClick={handleSave} disabled={saving || !canSave}>
                   {saving ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Saving…</> : 'Save Attendance'}
                 </button>
               </div>
             )}
           </div>
+          {roster.length > 0 && !loading && (
+            <div style={{
+              position: 'sticky',
+              bottom: 0,
+              zIndex: 20,
+              marginTop: '12px',
+              padding: '10px',
+              border: '1px solid var(--border-default)',
+              borderRadius: '12px',
+              background: 'rgba(255,255,255,0.96)',
+              boxShadow: '0 -8px 24px rgba(15,23,42,0.08)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '10px',
+              flexWrap: 'wrap',
+            }}>
+              <strong style={{ color: unmarkedCount ? 'var(--danger-600)' : 'var(--success-700)' }}>
+                {unmarkedCount ? `${unmarkedCount} unmarked` : 'Ready to save'}
+              </strong>
+              <button className="btn btn-primary" onClick={handleSave} disabled={saving || !canSave}>
+                {saving ? 'Saving…' : 'Save Attendance'}
+              </button>
+            </div>
+          )}
         </>
       )}
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { extractError, notificationAPI } from '../../services/api'
 
@@ -34,16 +34,17 @@ export default function Notifications() {
   const [filters, setFilters] = useState({ notification_type:'', status:'', channel:'' })
   const [testForm, setTestForm] = useState({ phone:'', channel:'whatsapp' })
   const [busy, setBusy] = useState('')
+  const [preview, setPreview] = useState(null)
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true)
     notificationAPI.list(Object.fromEntries(Object.entries(filters).filter(([,v]) => v)))
       .then(r => setRows(r.data || []))
       .catch(err => toast.error(extractError(err)))
       .finally(() => setLoading(false))
-  }
+  }, [filters])
 
-  useEffect(() => { load() }, [filters.notification_type, filters.status, filters.channel])
+  useEffect(() => { load() }, [load])
 
   const stats = useMemo(() => ({
     total: rows.length,
@@ -52,13 +53,37 @@ export default function Notifications() {
     queued: rows.filter(r => ['queued', 'pending', 'retry', 'sending'].includes(r.status)).length,
   }), [rows])
 
+  const previewBlast = async (kind) => {
+    try {
+      setBusy(`preview-${kind}`)
+      const res = kind === 'fees'
+        ? await notificationAPI.previewFeeReminders()
+        : await notificationAPI.previewLowAttendance({})
+      setPreview({ kind, ...res.data })
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setBusy('')
+    }
+  }
+
   const trigger = async (kind) => {
+    if (!preview || preview.kind !== kind) {
+      toast.error('Preview recipients before sending')
+      return
+    }
+    const confirmed = window.confirm(
+      `Send ${preview.recipient_count} ${preview.notification_type} notification${preview.recipient_count !== 1 ? 's' : ''}?` +
+      (preview.excluded_count ? `\n${preview.excluded_count} recipient${preview.excluded_count !== 1 ? 's are' : ' is'} excluded.` : '')
+    )
+    if (!confirmed) return
     try {
       setBusy(kind)
       const res = kind === 'fees'
         ? await notificationAPI.triggerFeeReminders()
         : await notificationAPI.triggerLowAttendance({})
       toast.success(`${res.data.queued || 0} notification${res.data.queued === 1 ? '' : 's'} queued`)
+      setPreview(null)
       load()
     } catch (err) {
       toast.error(extractError(err))
@@ -92,14 +117,53 @@ export default function Notifications() {
           </p>
         </div>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-          <button onClick={() => trigger('fees')} disabled={busy === 'fees'} style={buttonStyle('#0d7377')}>
-            {busy === 'fees' ? 'Queueing…' : 'Send Fee Reminders'}
+          <button onClick={() => previewBlast('fees')} disabled={busy === 'preview-fees'} style={buttonStyle('#0d7377')}>
+            {busy === 'preview-fees' ? 'Previewing…' : 'Preview Fee Reminders'}
           </button>
-          <button onClick={() => trigger('attendance')} disabled={busy === 'attendance'} style={buttonStyle('#334155')}>
-            {busy === 'attendance' ? 'Queueing…' : 'Low Attendance Alerts'}
+          <button onClick={() => previewBlast('attendance')} disabled={busy === 'preview-attendance'} style={buttonStyle('#334155')}>
+            {busy === 'preview-attendance' ? 'Previewing…' : 'Preview Attendance Alerts'}
           </button>
         </div>
       </div>
+
+      {preview && (
+        <div style={{ background:'white', border:'1px solid #cbd5e1', borderRadius:10, padding:14, marginBottom:14 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', gap:12, flexWrap:'wrap', alignItems:'flex-start' }}>
+            <div>
+              <div style={{ fontSize:12, fontWeight:900, color:'#0f172a', textTransform:'uppercase', letterSpacing:'0.05em' }}>Send Preview</div>
+              <div style={{ fontSize:14, color:'#334155', marginTop:4, fontWeight:700 }}>
+                {preview.recipient_count} recipient{preview.recipient_count !== 1 ? 's' : ''} · {preview.excluded_count} excluded
+              </div>
+              {preview.provider_warning && (
+                <div style={{ color:'#b45309', fontSize:12, marginTop:6, fontWeight:700 }}>{preview.provider_warning}</div>
+              )}
+              {preview.sample_message && (
+                <div style={{ color:'#64748b', fontSize:12, marginTop:8 }}>Sample: {preview.sample_message}</div>
+              )}
+            </div>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+              <button onClick={() => setPreview(null)} style={buttonStyle('#64748b')}>Cancel</button>
+              <button
+                onClick={() => trigger(preview.kind)}
+                disabled={busy === preview.kind || preview.recipient_count === 0 || !preview.provider_ready}
+                style={{ ...buttonStyle('#dc2626'), opacity: preview.recipient_count === 0 || !preview.provider_ready ? 0.55 : 1 }}
+              >
+                {busy === preview.kind ? 'Sending…' : `Send to ${preview.recipient_count}`}
+              </button>
+            </div>
+          </div>
+          {preview.recipients?.length > 0 && (
+            <div style={{ marginTop:12, maxHeight:180, overflow:'auto', borderTop:'1px solid #e2e8f0' }}>
+              {preview.recipients.slice(0, 20).map(r => (
+                <div key={`${r.student_id}-${r.phone}`} style={{ display:'flex', justifyContent:'space-between', gap:12, padding:'8px 0', borderBottom:'1px solid #f1f5f9', fontSize:12 }}>
+                  <strong>{r.student_name}</strong>
+                  <span style={{ color:'#64748b' }}>{r.phone}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:12, marginBottom:14 }}>
         <Stat label="Shown" value={stats.total} color="#0f172a" />

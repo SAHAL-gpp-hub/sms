@@ -6,8 +6,8 @@ FIXES:
     and local development ("localhost"). The Docker compose file sets
     DATABASE_URL explicitly, so the default only matters for bare `uvicorn`
     or pytest runs outside Docker.
-  - SECRET_KEY: still reads from env; the .env / docker-compose must set a
-    real 64-char hex secret before production use.
+  - SECRET_KEY: must be provided via env; the app fails during settings load
+    instead of falling back to an unsafe signing key.
   - Added DB_ECHO flag: set DB_ECHO=true in .env to see all SQL statements —
     essential for debugging "app not talking to DB" issues.
   - ACCESS_TOKEN_EXPIRE_MINUTES: 8 hours (480 min) is correct for a school
@@ -33,9 +33,12 @@ class Settings(BaseSettings):
     # MUST be overridden in production via .env or docker-compose environment:
     #   SECRET_KEY=<64 random hex chars>
     #   e.g.: python -c "import secrets; print(secrets.token_hex(32))"
-    SECRET_KEY: str = "change-this-in-production-use-a-64-char-random-hex-string"
+    SECRET_KEY: str
     ALGORITHM:  str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours — one full school day
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    REFRESH_COOKIE_NAME: str = "sms_refresh_token"
+    REFRESH_COOKIE_SECURE: bool = False
     LOGIN_2FA_OTP_EXPIRE_MINUTES: int = 10
     LOGIN_2FA_MAX_ATTEMPTS: int = 5
     LATE_COUNTS_AS_PRESENT: bool = True
@@ -52,7 +55,7 @@ class Settings(BaseSettings):
     # This domain does not need to be resolvable — it is stored in the DB
     # only and used as a unique identifier.  Override in .env for production.
     PORTAL_EMAIL_DOMAIN: str = "portal.sms.local"
-    DEFAULT_BRANCH_ID: int = 1
+    DEFAULT_BRANCH_ID: int | None = None
 
     # ── Student / parent self-activation ─────────────────────────────────
     ACTIVATION_TOKEN_EXPIRE_MINUTES: int = 15

@@ -110,6 +110,23 @@ export default function Defaulters() {
 
   const classOptions = classes.map(c => ({ value: String(c.id), label: `Class ${c.name} — ${c.division}` }))
   const yearOptions  = years.map(y => ({ value: String(y.id), label: y.label + (y.is_current ? ' (Current)' : '') }))
+  const selectedClassLabel = classFilter ? classOptions.find(c => c.value === classFilter)?.label : 'All Classes'
+  const selectedYearLabel = yearFilter ? yearOptions.find(y => y.value === yearFilter)?.label : 'All Years'
+  const exportParams = {
+    ...(classFilter ? { class_id: classFilter } : {}),
+    ...(yearFilter ? { academic_year_id: yearFilter } : {}),
+  }
+
+  const handleExportPdf = () => {
+    const confirmed = window.confirm(
+      `Exporting ${defaulters.length} defaulter${defaulters.length !== 1 ? 's' : ''}\n` +
+      `${selectedClassLabel || 'All Classes'} · ${selectedYearLabel || 'All Years'}\n` +
+      `Outstanding: ${formatINR(totalBalance)}`
+    )
+    if (!confirmed) return
+    openSignedPdf('/pdf/token/report/defaulters', '/pdf/report/defaulters', exportParams)
+      .catch(() => toast.error('Could not prepare defaulters PDF'))
+  }
 
   return (
     <div>
@@ -119,7 +136,7 @@ export default function Defaulters() {
         actions={
           defaulters.length > 0 && (
             <button
-              onClick={() => openSignedPdf('/pdf/token/report/defaulters', '/pdf/report/defaulters', yearFilter ? { academic_year_id: yearFilter } : {})}
+              onClick={handleExportPdf}
               className="btn btn-secondary"
               style={{ textDecoration: 'none', fontSize: '13px' }}
             >
@@ -139,6 +156,19 @@ export default function Defaulters() {
 
       {/* Summary cards */}
       {!loading && defaulters.length > 0 && (
+        <>
+        <div style={{
+          marginBottom: '10px',
+          padding: '10px 12px',
+          border: '1px solid var(--border-default)',
+          borderRadius: '10px',
+          background: 'var(--surface-0)',
+          color: 'var(--text-secondary)',
+          fontSize: '12.5px',
+          fontWeight: 600,
+        }}>
+          PDF export will include exactly: {selectedClassLabel || 'All Classes'} · {selectedYearLabel || 'All Years'} · {defaulters.length} defaulter{defaulters.length !== 1 ? 's' : ''}.
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginBottom: '14px' }}>
           {[
             { label: 'Defaulters',    value: defaulters.length,         color: 'var(--danger-600)',  bg: 'var(--danger-50)',   border: 'var(--danger-100)' },
@@ -152,6 +182,7 @@ export default function Defaulters() {
             </div>
           ))}
         </div>
+        </>
       )}
 
       {/* Mobile: cards */}

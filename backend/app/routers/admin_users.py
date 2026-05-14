@@ -1,27 +1,33 @@
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.security import get_password_hash
-from app.models.base_models import AcademicYear, Branch, Class, NotificationOutbox, Student, StudentActivationRequest, StudentStatusEnum, Subject, TeacherClassAssignment, User
+from app.models.base_models import AcademicYear, Branch, Class, CorrectionRequestStatusEnum, DataAuditActionEnum, NotificationOutbox, ProfileCorrectionRequest, Student, StudentActivationRequest, StudentStatusEnum, Subject, TeacherClassAssignment, User
 from app.routers.auth import CurrentUser, require_role
+from app.services.audit_service import log_data_change, model_snapshot
 from app.services import student_activation_service
 
 
 router = APIRouter(prefix="/api/v1/admin", tags=["Admin Users"])
 
 VALID_ROLES = {"admin", "teacher", "student", "parent"}
+CORRECTION_FIELDS = {
+    "name_en", "name_gu", "dob", "contact", "address",
+    "father_name", "mother_name", "guardian_email", "guardian_phone",
+}
 
 
 class AdminUserCreate(BaseModel):
     name: str
     email: EmailStr
-    password: str
+    password: str = Field(min_length=8)
     role: str
     is_active: bool = True
     branch_id: Optional[int] = None
@@ -60,11 +66,23 @@ class AdminUserOut(BaseModel):
     two_factor_channel: Optional[str] = None
     two_factor_destination: Optional[str] = None
 
+
+class CorrectionResolveRequest(BaseModel):
+    status: str
+    admin_note: Optional[str] = None
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        if value not in {"approved", "rejected"}:
+            raise ValueError("Status must be approved or rejected")
+        return value
+
     model_config = {"from_attributes": True}
 
 
 class PasswordResetRequest(BaseModel):
-    new_password: str
+    new_password: str = Field(min_length=8)
 
 
 class AdminTwoFactorUpdate(BaseModel):
@@ -141,6 +159,9 @@ def create_user(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_role("admin")),
 ):
+    if data.role == "admin":
+        raise HTTPException(status_code=403, detail="Use the bootstrap or a dedicated privilege workflow to create admins")
+
     user = User(
         name=data.name,
         email=data.email,
@@ -191,12 +212,21 @@ def update_user(
     user_id: int,
     data: AdminUserUpdate,
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(require_role("admin")),
+    current_user: CurrentUser = Depends(require_role("admin")),
 ):
     user = db.query(User).filter_by(id=user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    for key, value in data.model_dump(exclude_unset=True).items():
+    updates = data.model_dump(exclude_unset=True)
+    if "role" in updates and updates["role"] != user.role:
+        if user.role == "admin":
+            raise HTTPException(status_code=403, detail="Admin roles cannot be changed through this endpoint")
+        if updates["role"] == "admin":
+            raise HTTPException(status_code=403, detail="Use a dedicated privilege workflow to create admins")
+        if user.id == current_user.id:
+            raise HTTPException(status_code=403, detail="You cannot change your own role")
+
+    for key, value in updates.items():
         setattr(user, key, value)
     try:
         db.commit()
@@ -460,6 +490,15 @@ class AdminActivationResendRequest(BaseModel):
         return value
 
 
+class AdminActivationInviteResponse(BaseModel):
+    invite_id: str
+    account_type: str
+    destination: str
+    expires_at: datetime
+    invite_url: str
+    qr_payload: str
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # New endpoints
 # ─────────────────────────────────────────────────────────────────────────────
@@ -609,6 +648,28 @@ def resend_activation_for_student(
     )
 
 
+@router.post(
+    "/portal/invite/{student_id}",
+    response_model=AdminActivationInviteResponse,
+    summary="Create and send an invite-link activation for one student or parent",
+)
+def create_activation_invite_for_student(
+    student_id: int,
+    data: AdminActivationResendRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_role("admin")),
+):
+    student = db.query(Student).filter_by(id=student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    return student_activation_service.create_activation_invite(
+        db,
+        student,
+        data.account_type,
+        current_user.id,
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # OTP / Notification outbox debug
 # ─────────────────────────────────────────────────────────────────────────────
@@ -718,3 +779,98 @@ def create_branch(
     db.commit()
     db.refresh(branch)
     return branch
+
+
+@router.get("/correction-requests")
+def list_correction_requests(
+    status_filter: Optional[str] = Query("pending", alias="status"),
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
+    query = db.query(ProfileCorrectionRequest, Student).join(Student, Student.id == ProfileCorrectionRequest.student_id)
+    if status_filter:
+        query = query.filter(ProfileCorrectionRequest.status == status_filter)
+    rows = query.order_by(ProfileCorrectionRequest.created_at.desc()).limit(200).all()
+    return [
+        {
+            "id": req.id,
+            "student_id": req.student_id,
+            "student_name": student.name_en,
+            "field_name": req.field_name,
+            "current_value": req.current_value,
+            "requested_value": req.requested_value,
+            "reason": req.reason,
+            "status": req.status,
+            "admin_note": req.admin_note,
+            "created_at": req.created_at,
+            "resolved_at": req.resolved_at,
+        }
+        for req, student in rows
+    ]
+
+
+@router.patch("/correction-requests/{request_id}")
+def resolve_correction_request(
+    request_id: int,
+    data: CorrectionResolveRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_role("admin")),
+):
+    req = db.query(ProfileCorrectionRequest).filter_by(id=request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Correction request not found")
+    if req.status != CorrectionRequestStatusEnum.pending:
+        raise HTTPException(status_code=409, detail="Correction request is already resolved")
+    student = db.query(Student).filter_by(id=req.student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    old_req = {
+        "status": req.status,
+        "field_name": req.field_name,
+        "current_value": req.current_value,
+        "requested_value": req.requested_value,
+    }
+    if data.status == "approved":
+        if req.field_name not in CORRECTION_FIELDS:
+            raise HTTPException(status_code=422, detail="This field cannot be applied")
+        old_student = model_snapshot(student)
+        value = req.requested_value
+        if req.field_name == "dob":
+            try:
+                value = date.fromisoformat(req.requested_value)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail="Date of birth must use YYYY-MM-DD") from exc
+        setattr(student, req.field_name, value)
+        log_data_change(
+            db,
+            user_id=current_user.id,
+            action=DataAuditActionEnum.update,
+            table_name="students",
+            record_id=student.id,
+            old_value=old_student,
+            new_value=model_snapshot(student),
+        )
+        req.status = CorrectionRequestStatusEnum.approved
+    else:
+        req.status = CorrectionRequestStatusEnum.rejected
+
+    req.admin_note = data.admin_note
+    req.resolved_by_user_id = current_user.id
+    req.resolved_at = datetime.now(timezone.utc)
+    log_data_change(
+        db,
+        user_id=current_user.id,
+        action=DataAuditActionEnum.update,
+        table_name="profile_correction_requests",
+        record_id=req.id,
+        old_value=old_req,
+        new_value={
+            "status": req.status,
+            "admin_note": req.admin_note,
+            "resolved_by_user_id": req.resolved_by_user_id,
+        },
+    )
+    db.commit()
+    db.refresh(req)
+    return {"id": req.id, "status": req.status, "resolved_at": req.resolved_at}

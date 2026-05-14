@@ -1,12 +1,12 @@
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.routers.auth import Token, limiter
+from app.routers.auth import Token, create_refresh_session, limiter
 from app.services import student_activation_service
 
 router = APIRouter(prefix="/api/v1/student-auth", tags=["Student Activation"])
@@ -61,6 +61,10 @@ class CompleteRegistrationRequest(BaseModel):
     password: str
 
 
+class AcceptInviteRequest(BaseModel):
+    invite_token: str
+
+
 @router.post("/start-activation", response_model=ActivationStartResponse)
 @limiter.limit("5/minute")
 def start_activation(
@@ -73,6 +77,21 @@ def start_activation(
         data.identifier,
         str(data.email),
         data.account_type,
+        request.client.host if request.client else None,
+        request.headers.get("user-agent"),
+    )
+
+
+@router.post("/accept-invite", response_model=ActivationStartResponse)
+@limiter.limit("5/minute")
+def accept_invite(
+    request: Request,
+    data: AcceptInviteRequest,
+    db: Session = Depends(get_db),
+):
+    return student_activation_service.accept_activation_invite(
+        db,
+        data.invite_token,
         request.client.host if request.client else None,
         request.headers.get("user-agent"),
     )
@@ -102,11 +121,16 @@ def verify_otp(
 @limiter.limit("5/minute")
 def complete_registration(
     request: Request,
+    response: Response,
     data: CompleteRegistrationRequest,
     db: Session = Depends(get_db),
 ):
-    return student_activation_service.complete_registration(
+    token = student_activation_service.complete_registration(
         db,
         data.activation_token,
         data.password,
     )
+    if token.user_id:
+        create_refresh_session(db, response, token.user_id, request)
+        db.commit()
+    return token

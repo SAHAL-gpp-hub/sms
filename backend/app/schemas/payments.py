@@ -51,3 +51,15 @@ class OnlinePaymentOrderOut(BaseModel):
     receipt_number: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+class PaymentOrderStatusResponse(BaseModel):
+    razorpay_order_id: str
+    student_fee_id: int
+    status: str
+    amount: Decimal
+    currency: str
+    receipt_number: Optional[str] = None
+    failure_reason: Optional[str] = None
+    created_at: Optional[datetime] = None
+    paid_at: Optional[datetime] = None

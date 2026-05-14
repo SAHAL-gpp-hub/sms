@@ -36,3 +36,23 @@ class TestNotificationRequest(BaseModel):
 class TriggerLowAttendanceRequest(BaseModel):
     year: Optional[int] = None
     month: Optional[int] = None
+
+
+class NotificationPreviewRecipient(BaseModel):
+    student_id: int
+    student_name: str
+    phone: Optional[str] = None
+    channel: str = "whatsapp"
+    message_preview: str
+    excluded_reason: Optional[str] = None
+
+
+class NotificationPreviewOut(BaseModel):
+    notification_type: str
+    recipients: list[NotificationPreviewRecipient]
+    excluded: list[NotificationPreviewRecipient] = []
+    recipient_count: int
+    excluded_count: int
+    provider_ready: bool
+    provider_warning: Optional[str] = None
+    sample_message: Optional[str] = None

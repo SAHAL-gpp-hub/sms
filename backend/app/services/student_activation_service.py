@@ -16,7 +16,10 @@ from app.core.security import create_access_token, decode_access_token, get_pass
 from app.models.base_models import (
     AuditLog,
     AuditOperationEnum,
+    ActivationInviteStatusEnum,
+    NotificationOutbox,
     OTPVerification,
+    PortalActivationInvite,
     Student,
     StudentActivationRequest,
     StudentStatusEnum,
@@ -45,6 +48,14 @@ def fingerprint(value: str) -> str:
 def hash_otp(activation_id: str, otp: str) -> str:
     material = f"{activation_id}:{otp}".encode("utf-8")
     return hmac.new(settings.SECRET_KEY.encode("utf-8"), material, hashlib.sha256).hexdigest()
+
+
+def hash_invite_token(raw_token: str) -> str:
+    return hmac.new(
+        settings.SECRET_KEY.encode("utf-8"),
+        raw_token.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
 
 
 def generate_otp() -> str:
@@ -108,6 +119,10 @@ def _activation_allowed(student: Student, account_type: str) -> bool:
     if account_type == "student":
         return student.student_user_id is None
     return student.parent_user_id is None
+
+
+def _destination_for(student: Student, account_type: str) -> str | None:
+    return student.student_email if account_type == "student" else student.guardian_email
 
 
 def _latest_otp(db: Session, request_id: int) -> OTPVerification | None:
@@ -238,6 +253,100 @@ def start_activation(
         "expires_at": activation.expires_at,
         "resend_available_at": verification.resend_available_at,
     }
+
+
+def create_activation_invite(
+    db: Session,
+    student: Student,
+    account_type: str,
+    created_by_user_id: int | None,
+) -> dict:
+    if account_type not in {"student", "parent"}:
+        raise HTTPException(status_code=422, detail="Account type must be student or parent")
+    if not _activation_allowed(student, account_type):
+        raise HTTPException(status_code=409, detail=f"{account_type.title()} account is already activated.")
+    destination = _destination_for(student, account_type)
+    if not destination:
+        raise HTTPException(status_code=422, detail=f"{account_type.title()} email is missing for this student")
+
+    now = _utcnow()
+    raw_token = secrets.token_urlsafe(32)
+    invite = PortalActivationInvite(
+        invite_id=str(uuid.uuid4()),
+        token_hash=hash_invite_token(raw_token),
+        student_id=student.id,
+        account_type=account_type,
+        destination=normalize_email(destination),
+        created_by_user_id=created_by_user_id,
+        expires_at=now + timedelta(days=7),
+    )
+    db.add(invite)
+    portal_base = settings.PORTAL_PUBLIC_URL.rstrip("/")
+    if portal_base.endswith("/portal"):
+        portal_base = portal_base[:-7]
+    invite_url = f"{portal_base}/activate-account?invite={raw_token}"
+    db.add(NotificationOutbox(
+        provider="email",
+        destination=invite.destination,
+        subject="Activate your school portal account",
+        body=(
+            f"Hello {student.name_en},\n\n"
+            "Use this secure link to activate your school portal account:\n"
+            f"{invite_url}\n\n"
+            "The link expires in 7 days. If you did not expect this, contact the school office."
+        ),
+        payload={
+            "invite_id": invite.invite_id,
+            "account_type": account_type,
+            "student_id": student.student_id,
+            "invite_url": invite_url,
+        },
+    ))
+    db.commit()
+    return {
+        "invite_id": invite.invite_id,
+        "account_type": account_type,
+        "destination": invite.destination,
+        "expires_at": invite.expires_at,
+        "invite_url": invite_url,
+        "qr_payload": invite_url,
+    }
+
+
+def accept_activation_invite(
+    db: Session,
+    invite_token: str,
+    request_ip: str | None,
+    user_agent: str | None,
+) -> dict:
+    now = _utcnow()
+    invite = (
+        db.query(PortalActivationInvite)
+        .filter_by(token_hash=hash_invite_token(invite_token))
+        .with_for_update()
+        .first()
+    )
+    if not invite or invite.status != ActivationInviteStatusEnum.pending or _as_utc(invite.expires_at) <= now:
+        raise HTTPException(status_code=400, detail="Invite link is invalid or expired. Ask the school office to send a new one.")
+    student = db.query(Student).filter_by(id=invite.student_id).first()
+    if not student or student.status != StudentStatusEnum.Active:
+        raise HTTPException(status_code=404, detail="Student record is no longer active.")
+    if not _activation_allowed(student, invite.account_type):
+        invite.status = ActivationInviteStatusEnum.used
+        invite.used_at = now
+        db.commit()
+        raise HTTPException(status_code=409, detail="This account is already activated.")
+
+    invite.status = ActivationInviteStatusEnum.used
+    invite.used_at = now
+    return start_activation(
+        db,
+        student.student_id,
+        invite.destination,
+        invite.account_type,
+        request_ip,
+        user_agent,
+    )
 
 
 def resend_otp(db: Session, activation_id: str) -> dict:

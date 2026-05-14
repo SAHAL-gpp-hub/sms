@@ -125,7 +125,7 @@ function ReportCard({ icon, title, description, children, accentColor = 'var(--b
 }
 
 /* ---------- DownloadButton ---------- */
-function DownloadButton({ href, label, disabled, onClick }) {
+function DownloadButton({ label, disabled, onClick }) {
   const baseStyle = {
     width: '100%',
     justifyContent: 'center',
@@ -150,10 +150,10 @@ function DownloadButton({ href, label, disabled, onClick }) {
     )
   }
   return (
-    <a href={href} onClick={onClick} target="_blank" rel="noreferrer" className="btn btn-primary" style={baseStyle}>
+    <button type="button" onClick={onClick} className="btn btn-primary" style={baseStyle}>
       {Icons.Download}
       {label}
-    </a>
+    </button>
   )
 }
 

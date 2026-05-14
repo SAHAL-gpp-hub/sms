@@ -19,7 +19,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import toast from 'react-hot-toast'
-import { clearYearCache, marksAPI, setupAPI, yearendAPI, extractError } from '../../services/api'
+import { clearYearCache, jobsAPI, marksAPI, setupAPI, yearendAPI, extractError } from '../../services/api'
 import {
   PageHeader, TabBar, EmptyState, InlineBanner,
   ConfirmModal, Select,
@@ -576,19 +576,51 @@ function PromotionTab({ years, onRefresh }) {
     setResult(null)
   }
 
+  const waitForJob = (job) => new Promise(resolve => {
+    const finish = data => {
+      if (['completed', 'failed', 'cancelled'].includes(data.status)) resolve(data)
+      return ['completed', 'failed', 'cancelled'].includes(data.status)
+    }
+    if (finish(job)) return
+    const socket = jobsAPI.openJobSocket(job.id)
+    if (socket) {
+      socket.onmessage = event => {
+        const data = JSON.parse(event.data)
+        if (finish(data)) socket.close()
+      }
+      socket.onerror = () => socket.close()
+      socket.onclose = async () => {
+        const latest = await jobsAPI.get(job.id)
+        resolve(latest.data)
+      }
+      return
+    }
+    const timer = setInterval(async () => {
+      const latest = await jobsAPI.get(job.id)
+      if (finish(latest.data)) clearInterval(timer)
+    }, 2000)
+  })
+
   const handlePromote = async () => {
     if (!selectedClass || !selectedNewYear) return
     setPromoting(true)
     try {
-      const r = await yearendAPI.promoteClass(selectedClass, {
+      const r = await jobsAPI.createYearEndPromotion({
+        class_ids: [parseInt(selectedClass)],
         new_academic_year_id: parseInt(selectedNewYear),
         student_actions: studentActions,
         roll_strategy:   rollStrategy,
         force:           forcePromote,
       })
-      setResult({ type: 'success', data: r.data })
+      const job = await waitForJob(r.data)
+      const classResult = job.result?.classes?.[0]?.result || job
+      setResult({ type: job.status === 'failed' ? 'error' : 'success', data: classResult, job })
       setPhase('done')
-      toast.success(`Promotion complete — ${r.data.promoted} promoted`)
+      if (job.status === 'failed') {
+        toast.error(job.error || 'Promotion job failed')
+      } else {
+        toast.success(`Promotion job complete — ${job.progress}%`)
+      }
       onRefresh?.()
     } catch (err) {
       const msg = extractError(err)
@@ -634,55 +666,52 @@ function PromotionTab({ years, onRefresh }) {
   const handleRunAllClasses = async () => {
     const selectedRows = allClassRows.filter(row => row.included)
     if (!selectedRows.length || !selectedNewYear) return
+    if (selectedRows.some(row => row.action !== 'suggested')) {
+      toast.error('Bulk job mode only supports suggested actions. Use single-class review for manual overrides.')
+      return
+    }
 
     setRunningAll(true)
     setAllRunResult(null)
-    const failures = []
-    let done = 0
-
-    for (const row of selectedRows) {
-      updateAllClassRow(row.key, current => ({ ...current, status: 'running', error: '', results: [] }))
-      const rowResults = []
-      const rowFailures = []
-
-      for (const div of row.divisions) {
-        try {
-          const studentActionsForClass = {}
-          div.candidates.forEach(c => {
-            studentActionsForClass[c.student_id] = row.action === 'suggested'
-              ? c.suggested_action
-              : row.action
-          })
-          const r = await yearendAPI.promoteClass(div.classId, {
-            new_academic_year_id: parseInt(selectedNewYear),
-            student_actions: studentActionsForClass,
-            roll_strategy: rollStrategy,
-            force: forcePromote,
-          })
-          rowResults.push({ division: div.division, data: r.data })
-        } catch (err) {
-          const message = extractError(err)
-          rowFailures.push(`Div ${div.division}: ${message}`)
+    selectedRows.forEach(row => updateAllClassRow(row.key, current => ({ ...current, status: 'queued', error: '', results: [] })))
+    try {
+      const classIds = selectedRows.flatMap(row => row.divisions.map(div => div.classId))
+      const r = await jobsAPI.createYearEndPromotion({
+        class_ids: classIds,
+        new_academic_year_id: parseInt(selectedNewYear),
+        roll_strategy: rollStrategy,
+        force: forcePromote,
+      })
+      const job = await waitForJob(r.data)
+      const failures = []
+      let done = 0
+      const byClass = new Map((job.result?.classes || []).map(item => [item.class_id, item]))
+      selectedRows.forEach(row => {
+        const rowResults = []
+        const rowFailures = []
+        row.divisions.forEach(div => {
+          const item = byClass.get(div.classId)
+          if (!item) return
+          if (item.status === 'failed') rowFailures.push(`Div ${div.division}: ${item.error}`)
+          else rowResults.push({ division: div.division, data: item.result })
+        })
+        if (rowFailures.length) {
+          failures.push({ className: row.name, messages: rowFailures })
+          updateAllClassRow(row.key, current => ({ ...current, status: 'failed', error: rowFailures.join(' · '), results: rowResults }))
+        } else {
+          done += 1
+          updateAllClassRow(row.key, current => ({ ...current, status: 'done', results: rowResults }))
         }
-      }
-
-      if (rowFailures.length > 0) {
-        failures.push({ className: row.name, messages: rowFailures })
-        updateAllClassRow(row.key, current => ({
-          ...current,
-          status: 'failed',
-          error: rowFailures.join(' · '),
-          results: rowResults,
-        }))
-      } else {
-        done += 1
-        updateAllClassRow(row.key, current => ({ ...current, status: 'done', results: rowResults }))
-      }
+      })
+      setAllRunResult({ done, failed: failures.length, failures, total: selectedRows.length, jobId: job.id })
+      toast.success(`Promotion job finished — ${job.progress}%`)
+    } catch (err) {
+      toast.error(extractError(err))
+      setAllRunResult({ done: 0, failed: selectedRows.length, failures: [{ className: 'Promotion job', messages: [extractError(err)] }], total: selectedRows.length })
+    } finally {
+      setRunningAll(false)
+      onRefresh?.()
     }
-
-    setAllRunResult({ done, failed: failures.length, failures, total: selectedRows.length })
-    setRunningAll(false)
-    onRefresh?.()
   }
 
   // Target years = any year that isn't the source year

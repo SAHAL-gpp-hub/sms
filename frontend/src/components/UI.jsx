@@ -1,4 +1,5 @@
 // components/UI.jsx — Fully responsive shared UI primitives
+import { useEffect, useId, useRef } from 'react'
 
 // ── Skeleton Loader ───────────────────────────────────────────────────────
 export function Skeleton({ width, height = '14px', borderRadius = '6px', style = {} }) {
@@ -53,6 +54,44 @@ export function EmptyState({ icon, title, description, action }) {
 
 // ── Confirm Modal ─────────────────────────────────────────────────────────
 export function ConfirmModal({ open, title, message, confirmLabel = 'Confirm', confirmVariant = 'danger', onConfirm, onCancel, loading }) {
+  const titleId = useId()
+  const descId = useId()
+  const dialogRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return undefined
+    const previous = document.activeElement
+    const dialog = dialogRef.current
+    const focusable = dialog?.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])') || []
+    focusable[0]?.focus()
+
+    const onKeyDown = event => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onCancel?.()
+        return
+      }
+      if (event.key !== 'Tab' || focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', onKeyDown)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.body.style.overflow = ''
+      previous?.focus?.()
+    }
+  }, [onCancel, open])
+
   if (!open) return null
   return (
     <div style={{
@@ -73,7 +112,13 @@ export function ConfirmModal({ open, title, message, confirmLabel = 'Confirm', c
         }}
         onClick={onCancel}
       />
-      <div style={{
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descId}
+        style={{
         position: 'relative',
         background: 'var(--surface-0)',
         borderRadius: '16px 16px 0 0',
@@ -84,10 +129,10 @@ export function ConfirmModal({ open, title, message, confirmLabel = 'Confirm', c
         border: '1px solid var(--border-default)',
         borderBottom: 'none',
       }} className="confirm-modal-inner">
-        <h3 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '8px' }}>
+        <h3 id={titleId} style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '8px' }}>
           {title}
         </h3>
-        <p style={{ fontSize: '13.5px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+        <p id={descId} style={{ fontSize: '13.5px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
           {message}
         </p>
         <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '24px' }}>

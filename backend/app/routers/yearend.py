@@ -55,6 +55,7 @@ from app.services.enrollment_service import backfill_enrollments
 from app.pdf.report_pdf import render_tc_pdf
 
 router = APIRouter(prefix="/api/v1/yearend", tags=["Year-End"])
+public_router = APIRouter(prefix="/api/v1/yearend", tags=["Year-End"])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -109,7 +110,7 @@ class LockMarksRequest(BaseModel):
 # PUBLIC — no auth (browser direct downloads)
 # ─────────────────────────────────────────────────────────────────────────────
 
-@router.get("/tc-pdf/{student_id}")
+@public_router.get("/tc-pdf/{student_id}")
 def download_tc(
     student_id: int,
     reason:  str = Query(default="Parent's Request"),
@@ -159,7 +160,7 @@ def tc_pdf_token(
     return {"token": token, "expires_in": 60, "resource": f"tc:{student_id}"}
 
 
-@router.get("/current-year")
+@public_router.get("/current-year")
 def get_current_year(db: Session = Depends(get_db)):
     year = db.query(AcademicYear).filter_by(is_current=True).first()
     if not year:
@@ -174,7 +175,7 @@ def get_current_year(db: Session = Depends(get_db)):
     }
 
 
-@router.get("/years")
+@public_router.get("/years")
 def get_all_years(db: Session = Depends(get_db)):
     years = db.query(AcademicYear).order_by(AcademicYear.id.desc()).all()
     return [

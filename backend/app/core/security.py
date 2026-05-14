@@ -12,6 +12,7 @@ Dependencies already in requirements.txt:
 """
 
 from datetime import datetime, timedelta, timezone
+import uuid
 from typing import Any, Union
 
 from jose import JWTError, jwt
@@ -58,7 +59,6 @@ def create_access_token(
         jti:           JWT ID claim for token revocation support. A UUID is
                        generated automatically if not provided.
     """
-    import uuid
     if expires_delta is None:
         expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 

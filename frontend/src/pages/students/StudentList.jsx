@@ -9,7 +9,7 @@ import { PageHeader, SearchInput, Select, TableSkeleton, EmptyState, ConfirmModa
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import StudentImportPanel from './StudentImportPanel'
 
-function StudentCard({ student, cls, onDelete, onDownloadTC }) {
+function StudentCard({ student, cls, isAdmin, onDelete, onDownloadTC }) {
   return (
     <div style={{
       background: 'var(--surface-0)',
@@ -57,82 +57,90 @@ function StudentCard({ student, cls, onDelete, onDownloadTC }) {
 
       {/* Actions */}
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingTop: '4px', borderTop: '1px solid var(--border-subtle)' }}>
-        <Link
-          to={`/students/${student.id}/edit`}
-          style={{
-            flex: 1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '8px',
-            borderRadius: '8px',
-            fontSize: '12.5px',
-            fontWeight: 600,
-            color: 'var(--brand-600)',
-            background: 'var(--brand-50)',
-            border: '1px solid var(--brand-100)',
-            textDecoration: 'none',
-            touchAction: 'manipulation',
-          }}
-        >
-          Edit
-        </Link>
-        <Link
-          to={`/fees/student/${student.id}`}
-          style={{
-            flex: 1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '8px',
-            borderRadius: '8px',
-            fontSize: '12.5px',
-            fontWeight: 600,
-            color: 'var(--success-700)',
-            background: 'var(--success-50)',
-            border: '1px solid var(--success-100)',
-            textDecoration: 'none',
-            touchAction: 'manipulation',
-          }}
-        >
-          Fees
-        </Link>
-        <button
-          onClick={() => onDownloadTC(student.id)}
-          style={{
-            flex: 1,
-            padding: '8px',
-            borderRadius: '8px',
-            fontSize: '12.5px',
-            fontWeight: 600,
-            color: 'var(--text-secondary)',
-            background: 'var(--gray-100)',
-            border: '1px solid var(--border-default)',
-            cursor: 'pointer',
-            fontFamily: 'var(--font-sans)',
-            touchAction: 'manipulation',
-          }}
-        >
-          TC
-        </button>
-        <button
-          onClick={() => onDelete({ id: student.id, name: student.name_en })}
-          style={{
-            flex: 1,
-            padding: '8px',
-            borderRadius: '8px',
-            fontSize: '12.5px',
-            fontWeight: 600,
-            color: 'var(--danger-600)',
-            background: 'var(--danger-50)',
-            border: '1px solid var(--danger-100)',
-            cursor: 'pointer',
-            fontFamily: 'var(--font-sans)',
-            touchAction: 'manipulation',
-          }}
-        >
-          Remove
-        </button>
+        {isAdmin ? (
+          <>
+            <Link
+              to={`/students/${student.id}/edit`}
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '8px',
+                borderRadius: '8px',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                color: 'var(--brand-600)',
+                background: 'var(--brand-50)',
+                border: '1px solid var(--brand-100)',
+                textDecoration: 'none',
+                touchAction: 'manipulation',
+              }}
+            >
+              Edit
+            </Link>
+            <Link
+              to={`/fees/student/${student.id}`}
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '8px',
+                borderRadius: '8px',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                color: 'var(--success-700)',
+                background: 'var(--success-50)',
+                border: '1px solid var(--success-100)',
+                textDecoration: 'none',
+                touchAction: 'manipulation',
+              }}
+            >
+              Fees
+            </Link>
+            <button
+              onClick={() => onDownloadTC(student.id)}
+              style={{
+                flex: 1,
+                padding: '8px',
+                borderRadius: '8px',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                color: 'var(--text-secondary)',
+                background: 'var(--gray-100)',
+                border: '1px solid var(--border-default)',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-sans)',
+                touchAction: 'manipulation',
+              }}
+            >
+              TC
+            </button>
+            <button
+              onClick={() => onDelete({ id: student.id, name: student.name_en })}
+              style={{
+                flex: 1,
+                padding: '8px',
+                borderRadius: '8px',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                color: 'var(--danger-600)',
+                background: 'var(--danger-50)',
+                border: '1px solid var(--danger-100)',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-sans)',
+                touchAction: 'manipulation',
+              }}
+            >
+              Mark as Left
+            </button>
+          </>
+        ) : (
+          <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 700 }}>
+            View-only access. Ask an admin for edits, fees, TC, or status changes.
+          </span>
+        )}
       </div>
     </div>
   )
@@ -255,12 +263,14 @@ export default function StudentList() {
                   : <><svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><circle cx="12" cy="12" r="3" strokeWidth={2} /></svg> Setup</>}
               </button>
             )}
-            <Link to="/students/new" className="btn btn-primary" style={{ textDecoration: 'none' }}>
-              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-              </svg>
-              <span className="btn-add-label">Add Student</span>
-            </Link>
+            {isAdmin && (
+              <Link to="/students/new" className="btn btn-primary" style={{ textDecoration: 'none' }}>
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                </svg>
+                <span className="btn-add-label">Add Student</span>
+              </Link>
+            )}
           </>
         }
       />
@@ -321,7 +331,7 @@ export default function StudentList() {
                 action={
                   search || classFilter
                     ? <button className="btn btn-secondary btn-sm" onClick={() => { setSearch(''); setClassFilter('') }}>Clear filters</button>
-                    : <Link to="/students/new" className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>Add First Student</Link>
+                    : isAdmin ? <Link to="/students/new" className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>Add First Student</Link> : null
                 }
               />
             </div>
@@ -332,6 +342,7 @@ export default function StudentList() {
                   key={s.id}
                   student={s}
 	                  cls={classes.find(c => c.id === s.class_id)}
+                    isAdmin={isAdmin}
 	                  onDelete={setDeleteTarget}
 	                  onDownloadTC={handleDownloadTC}
 	                />
@@ -378,7 +389,7 @@ export default function StudentList() {
                         action={
                           search || classFilter
                             ? <button className="btn btn-secondary btn-sm" onClick={() => { setSearch(''); setClassFilter('') }}>Clear filters</button>
-                            : <Link to="/students/new" className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>Add First Student</Link>
+                    : isAdmin ? <Link to="/students/new" className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>Add First Student</Link> : null
                         }
                       />
                     </td>
@@ -410,10 +421,16 @@ export default function StudentList() {
                         <td><StatusBadge status={s.status} /></td>
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <Link to={`/students/${s.id}/edit`} style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--brand-600)', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', textDecoration: 'none' }}>Edit</Link>
-                            <Link to={`/fees/student/${s.id}`} style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--success-700)', background: 'var(--success-50)', border: '1px solid var(--success-100)', textDecoration: 'none' }}>Fees</Link>
-                            <button onClick={() => handleDownloadTC(s.id)} style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', background: 'var(--gray-100)', border: '1px solid var(--border-default)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>TC</button>
-                            <button onClick={() => setDeleteTarget({ id: s.id, name: s.name_en })} style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--danger-600)', background: 'var(--danger-50)', border: '1px solid var(--danger-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>Remove</button>
+                            {isAdmin ? (
+                              <>
+                                <Link to={`/students/${s.id}/edit`} style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--brand-600)', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', textDecoration: 'none' }}>Edit</Link>
+                                <Link to={`/fees/student/${s.id}`} style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--success-700)', background: 'var(--success-50)', border: '1px solid var(--success-100)', textDecoration: 'none' }}>Fees</Link>
+                                <button onClick={() => handleDownloadTC(s.id)} style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', background: 'var(--gray-100)', border: '1px solid var(--border-default)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>TC</button>
+                                <button onClick={() => setDeleteTarget({ id: s.id, name: s.name_en })} style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--danger-600)', background: 'var(--danger-50)', border: '1px solid var(--danger-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>Mark as Left</button>
+                              </>
+                            ) : (
+                              <span style={{ color: 'var(--text-tertiary)', fontSize: '12px', fontWeight: 700 }}>View only</span>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -438,8 +455,8 @@ export default function StudentList() {
 
       <ConfirmModal
         open={!!deleteTarget}
-        title="Remove Student"
-        message={`Are you sure you want to mark "${deleteTarget?.name}" as Left? This can be reversed by editing the student's status.`}
+        title="Mark Student as Left"
+        message={`Mark "${deleteTarget?.name}" as Left? This does not delete records, but the student will stop appearing as active. Review fees, attendance, and TC before continuing.`}
         confirmLabel="Mark as Left"
         confirmVariant="danger"
         onConfirm={handleDeleteConfirm}

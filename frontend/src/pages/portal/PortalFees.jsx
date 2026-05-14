@@ -1,5 +1,5 @@
 // frontend/src/pages/portal/PortalFees.jsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import toast from 'react-hot-toast'
 import { usePortalContext } from '../../layouts/portalContext'
 import { extractError, paymentAPI, portalAPI } from '../../services/api'
@@ -93,8 +93,10 @@ export default function PortalFees() {
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(false)
   const [payingId, setPayingId] = useState(null)
+  const [verifyingOrderId, setVerifyingOrderId] = useState('')
+  const [paymentHistory, setPaymentHistory] = useState([])
 
-  const reloadLedger = () => {
+  const reloadLedger = useCallback(() => {
     setLoading(true); setError(false); setLedger(null)
     const req = isParent && selectedChildId
       ? portalAPI.getChildFees(selectedChildId)
@@ -105,11 +107,40 @@ export default function PortalFees() {
     if (!req) { setLoading(false); return }
     req.then(r => { setLedger(r.data); setLoading(false) })
        .catch(() => { setError(true); setLoading(false) })
-  }
+  }, [isParent, selectedChildId])
 
   useEffect(() => {
     reloadLedger()
-  }, [isParent, selectedChildId])
+  }, [reloadLedger])
+
+  useEffect(() => {
+    const studentId = ledger?.student_id || selectedChildId
+    if (!studentId) return
+    paymentAPI.history(studentId)
+      .then(r => setPaymentHistory(r.data || []))
+      .catch(() => setPaymentHistory([]))
+  }, [ledger?.student_id, selectedChildId])
+
+  const pollOrderStatus = async (orderId) => {
+    setVerifyingOrderId(orderId)
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const { data } = await paymentAPI.orderStatus(orderId)
+      if (data.status === 'paid') {
+        toast.success(`Payment confirmed · ${data.receipt_number || 'receipt generated'}`)
+        reloadLedger()
+        setVerifyingOrderId('')
+        return data
+      }
+      if (data.status === 'failed' || data.status === 'expired') {
+        setVerifyingOrderId('')
+        throw new Error(data.failure_reason || `Payment ${data.status}`)
+      }
+      await new Promise(resolve => setTimeout(resolve, 1500))
+    }
+    setVerifyingOrderId('')
+    toast('Payment is still pending. Check payment history before retrying.')
+    return null
+  }
 
   const handlePayNow = async (studentFeeId, amount) => {
     try {
@@ -119,6 +150,7 @@ export default function PortalFees() {
         student_fee_id: studentFeeId,
         amount,
       })
+      setVerifyingOrderId(order.order_id)
 
       const options = {
         key: order.key_id,
@@ -135,21 +167,24 @@ export default function PortalFees() {
         theme: { color: '#0d7377' },
         handler: async (response) => {
           try {
-            const { data } = await paymentAPI.verify({
+            await paymentAPI.verify({
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
             })
-            toast.success(`Payment received · ${data.receipt_number}`)
-            reloadLedger()
+            await pollOrderStatus(response.razorpay_order_id)
           } catch (err) {
             toast.error(extractError(err))
           } finally {
             setPayingId(null)
+            setVerifyingOrderId('')
           }
         },
         modal: {
-          ondismiss: () => setPayingId(null),
+          ondismiss: () => {
+            setPayingId(null)
+            setVerifyingOrderId('')
+          },
         },
       }
 
@@ -189,7 +224,7 @@ export default function PortalFees() {
   const totalBalance = parseFloat(ledger.total_balance || 0)
   const collPct      = totalDue > 0 ? Math.min((totalPaid / totalDue) * 100, 100) : 0
   const hasBalance   = totalBalance > 0
-  const canPayOnline = isParent && Boolean(selectedChildId) && hasBalance
+  const canPayOnline = ((isParent && Boolean(selectedChildId)) || role === 'student') && hasBalance
 
   return (
     <>
@@ -238,6 +273,12 @@ export default function PortalFees() {
       </div>
 
       {/* Fee breakdown */}
+      {verifyingOrderId && (
+        <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', color:'#1d4ed8', borderRadius:'14px', padding:'12px 14px', marginBottom:'12px', fontSize:'13px', fontWeight:800 }}>
+          Verifying payment status. Do not pay again until this finishes.
+        </div>
+      )}
+
       <div style={{ background:'white', borderRadius:'16px', padding:'14px 16px', marginBottom:'12px', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
         <div style={{ fontSize:'10.5px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'2px' }}>
           Fee Breakdown · {(ledger.items || []).length} items
@@ -257,13 +298,40 @@ export default function PortalFees() {
         )}
       </div>
 
+      {paymentHistory.length > 0 && (
+        <div style={{ background:'white', borderRadius:'16px', padding:'14px 16px', marginBottom:'12px', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
+          <div style={{ fontSize:'10.5px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'8px' }}>
+            Payment History
+          </div>
+          {paymentHistory.slice(0, 5).map(order => (
+            <div key={order.id} style={{ display:'flex', justifyContent:'space-between', gap:'10px', padding:'9px 0', borderTop:'1px solid #f1f5f9' }}>
+              <div>
+                <div style={{ fontSize:'13px', fontWeight:800, color:'#0f172a' }}>{fmt(order.amount)}</div>
+                <div style={{ fontSize:'11.5px', color:'#64748b' }}>{order.receipt_number || order.razorpay_order_id}</div>
+              </div>
+              <span style={{
+                alignSelf:'center',
+                fontSize:'11px',
+                fontWeight:900,
+                borderRadius:'999px',
+                padding:'4px 9px',
+                color: order.status === 'paid' ? '#15803d' : order.status === 'failed' ? '#b91c1c' : '#92400e',
+                background: order.status === 'paid' ? '#dcfce7' : order.status === 'failed' ? '#fee2e2' : '#fef3c7',
+              }}>
+                {order.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {hasBalance && !canPayOnline && (
         <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'14px', padding:'13px 15px', display:'flex', alignItems:'flex-start', gap:'10px' }}>
           <svg width="18" height="18" fill="none" stroke="#64748b" viewBox="0 0 24 24" style={{flexShrink:0}} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
           <div>
-            <div style={{ fontSize:'13px', fontWeight:700, color:'#334155' }}>Online payment available for parent accounts</div>
+            <div style={{ fontSize:'13px', fontWeight:700, color:'#334155' }}>Online payment is unavailable for this account right now</div>
             <div style={{ fontSize:'12px', color:'#64748b', marginTop:'3px', lineHeight:1.5 }}>
-              Parents can pay outstanding fee items by UPI, card or net banking from this screen.
+              Select a linked student, then pay outstanding fee items by UPI, card or net banking from this screen.
             </div>
           </div>
         </div>

@@ -14,14 +14,17 @@ consistency and to respect the service-layer boundary.
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
+from decimal import Decimal
 
 from app.core.database import get_db
 from app.core.cache import response_cache
 from app.core.config import settings
 from app.models.base_models import AcademicYear
+from app.models.base_models import FeeStructure, Student, StudentStatusEnum
 from app.routers.auth import CurrentUser, ensure_student_access, require_role
 from app.schemas.fee import (
     FeeHeadCreate, FeeHeadOut,
+    FeePlanApplyResult, FeePlanPreview, FeePlanRequest,
     FeeStructureCreate, FeeStructureOut,
     PaymentCreate, PaymentOut,
     StudentLedger,
@@ -40,7 +43,10 @@ def _invalidate_fee_caches() -> None:
 # ---------------------------------------------------------------------------
 
 @router.get("/heads", response_model=list[FeeHeadOut])
-def get_fee_heads(db: Session = Depends(get_db)):
+def get_fee_heads(
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin", "teacher", "student", "parent")),
+):
     return fee_service.get_fee_heads(db)
 
 
@@ -74,12 +80,17 @@ def get_fee_structures(
     class_id:         Optional[int] = Query(None),
     academic_year_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin", "teacher", "student", "parent")),
 ):
     return fee_service.get_fee_structures(db, class_id, academic_year_id)
 
 
 @router.get("/structure/{fs_id}", response_model=FeeStructureOut)
-def get_fee_structure(fs_id: int, db: Session = Depends(get_db)):
+def get_fee_structure(
+    fs_id: int,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin", "teacher")),
+):
     fs = fee_service.get_fee_structure(db, fs_id)
     if not fs:
         raise HTTPException(status_code=404, detail="Fee structure not found")
@@ -96,6 +107,68 @@ def create_fee_structure(
         out = fee_service.create_fee_structure(db, data)
         _invalidate_fee_caches()
         return out
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _preview_fee_plan(db: Session, data: FeePlanRequest) -> dict:
+    affected = db.query(Student.id).filter(
+        Student.class_id == data.class_id,
+        Student.academic_year_id == data.academic_year_id,
+        Student.status == StudentStatusEnum.Active,
+    ).count()
+    fee_head_ids = [item.fee_head_id for item in data.items]
+    existing = 0
+    if fee_head_ids:
+        existing = db.query(FeeStructure.id).filter(
+            FeeStructure.class_id == data.class_id,
+            FeeStructure.academic_year_id == data.academic_year_id,
+            FeeStructure.fee_head_id.in_(fee_head_ids),
+        ).count()
+    warnings = []
+    if affected == 0:
+        warnings.append("No active students match this class and academic year.")
+    if existing:
+        warnings.append(f"{existing} fee item(s) already exist and will be updated.")
+    return {
+        "class_id": data.class_id,
+        "academic_year_id": data.academic_year_id,
+        "affected_students": affected,
+        "item_count": len(data.items),
+        "total_per_student": sum((item.amount for item in data.items), start=Decimal("0.00")),
+        "existing_items": existing,
+        "warnings": warnings,
+    }
+
+
+@router.post("/structure/preview", response_model=FeePlanPreview)
+def preview_fee_plan(
+    data: FeePlanRequest,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
+    return _preview_fee_plan(db, data)
+
+
+@router.post("/structure/apply", response_model=FeePlanApplyResult)
+def apply_fee_plan(
+    data: FeePlanRequest,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
+    preview = _preview_fee_plan(db, data)
+    try:
+        for item in data.items:
+            fee_service.create_fee_structure(db, FeeStructureCreate(
+                class_id=data.class_id,
+                fee_head_id=item.fee_head_id,
+                amount=item.amount,
+                due_date=item.due_date,
+                academic_year_id=data.academic_year_id,
+            ))
+        assigned = fee_service.assign_fees_to_class(db, data.class_id, data.academic_year_id)
+        _invalidate_fee_caches()
+        return {**preview, "assigned": assigned}
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

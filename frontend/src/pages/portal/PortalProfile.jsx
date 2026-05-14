@@ -1,5 +1,6 @@
 // frontend/src/pages/portal/PortalProfile.jsx
 import { useState, useEffect } from 'react'
+import toast from 'react-hot-toast'
 import { usePortalContext } from '../../layouts/portalContext'
 import { portalAPI } from '../../services/api'
 import { getAuthUser } from '../../services/auth'
@@ -51,7 +52,7 @@ function StudentProfileCard({ student, index, isActive, onClick }) {
       <div style={{ flex:1, minWidth:0 }}>
         <div style={{ fontSize:'13.5px', fontWeight:800, color: isActive ? color : '#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{student.name_en}</div>
         <div style={{ fontSize:'11px', color:'#64748b', fontWeight:600, marginTop:'1px' }}>
-          Std {student.class_id} · Roll {student.roll_number || '—'} · {student.student_id}
+          {student.class_label || 'Class not assigned'} · Roll {student.roll_number || '—'} · {student.student_id}
         </div>
       </div>
       {isActive && (
@@ -73,6 +74,8 @@ export default function PortalProfile() {
   // For student: load own profile directly; for parent: use context profile (already loaded)
   const [ownProfile,  setOwnProfile]  = useState(null)
   const [loadingOwn,  setLoadingOwn]  = useState(!isParent)
+  const [correction, setCorrection] = useState({ field_name:'contact', requested_value:'', reason:'' })
+  const [submittingCorrection, setSubmittingCorrection] = useState(false)
 
   useEffect(() => {
     if (isParent) return
@@ -95,6 +98,30 @@ export default function PortalProfile() {
     ? CHILD_COLORS[activeChildIndex % CHILD_COLORS.length]
     : '#0d7377'
   const inits = (profile?.name_en || authUser?.name || 'S').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase()
+
+  const submitCorrection = async (event) => {
+    event.preventDefault()
+    if (!profile?.id) return
+    if (!correction.requested_value.trim()) {
+      toast.error('Enter the corrected value')
+      return
+    }
+    try {
+      setSubmittingCorrection(true)
+      await portalAPI.createCorrectionRequest({
+        student_id: profile.id,
+        field_name: correction.field_name,
+        requested_value: correction.requested_value,
+        reason: correction.reason,
+      })
+      toast.success('Correction request sent to admin')
+      setCorrection(f => ({ ...f, requested_value:'', reason:'' }))
+    } catch {
+      toast.error('Could not submit correction request')
+    } finally {
+      setSubmittingCorrection(false)
+    }
+  }
 
   return (
     <>
@@ -187,7 +214,7 @@ export default function PortalProfile() {
           {!loading && profile && (
             <>
               <Section title="Academic Details">
-                <ProfileRow label="Class"      value={profile.class_id ? `Standard ${profile.class_id}` : null} />
+                <ProfileRow label="Class"      value={profile.class_label || null} />
                 <ProfileRow label="Roll No."   value={profile.roll_number ? String(profile.roll_number) : null} />
                 <ProfileRow label="GR Number"  value={profile.gr_number} />
                 <ProfileRow label="Student ID" value={profile.student_id} />
@@ -205,6 +232,43 @@ export default function PortalProfile() {
                 <ProfileRow label="Mother"   value={profile.mother_name} />
                 <ProfileRow label="Contact"  value={profile.contact} />
                 <ProfileRow label="Address"  value={profile.address} />
+              </Section>
+
+              <Section title="Request Correction">
+                <form onSubmit={submitCorrection} style={{ display:'grid', gap:'10px' }}>
+                  <div style={{ display:'grid', gridTemplateColumns:'minmax(120px, 180px) 1fr', gap:'8px' }}>
+                    <select
+                      value={correction.field_name}
+                      onChange={e => setCorrection(f => ({ ...f, field_name:e.target.value }))}
+                      style={{ height:38, border:'1px solid #cbd5e1', borderRadius:10, padding:'0 10px', fontWeight:800 }}
+                    >
+                      <option value="contact">Contact</option>
+                      <option value="address">Address</option>
+                      <option value="guardian_email">Guardian email</option>
+                      <option value="guardian_phone">Guardian phone</option>
+                      <option value="name_en">Student name</option>
+                      <option value="father_name">Father name</option>
+                      <option value="mother_name">Mother name</option>
+                      <option value="dob">Date of birth</option>
+                    </select>
+                    <input
+                      value={correction.requested_value}
+                      onChange={e => setCorrection(f => ({ ...f, requested_value:e.target.value }))}
+                      placeholder="Correct value"
+                      style={{ height:38, border:'1px solid #cbd5e1', borderRadius:10, padding:'0 10px', fontWeight:700 }}
+                    />
+                  </div>
+                  <textarea
+                    value={correction.reason}
+                    onChange={e => setCorrection(f => ({ ...f, reason:e.target.value }))}
+                    placeholder="Optional note for admin"
+                    rows={3}
+                    style={{ border:'1px solid #cbd5e1', borderRadius:10, padding:'10px', fontWeight:700, resize:'vertical' }}
+                  />
+                  <button type="submit" disabled={submittingCorrection} style={{ height:40, border:0, borderRadius:10, background:'#0d7377', color:'white', fontWeight:900 }}>
+                    {submittingCorrection ? 'Sending…' : 'Send correction request'}
+                  </button>
+                </form>
               </Section>
             </>
           )}

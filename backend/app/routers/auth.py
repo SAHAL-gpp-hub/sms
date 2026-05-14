@@ -14,17 +14,18 @@ Endpoints:
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 import hmac
 import secrets
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -35,7 +36,7 @@ from app.core.security import (
     get_password_hash,
     verify_password,
 )
-from app.models.base_models import AdminLoginOTPChallenge, Student, TeacherClassAssignment, TokenBlocklist, User
+from app.models.base_models import AcademicYear, AdminLoginOTPChallenge, AuthRefreshSession, Branch, Class, Student, TeacherClassAssignment, TokenBlocklist, User, YearStatusEnum
 from app.services.notification_service import notification_service
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
@@ -68,8 +69,16 @@ class Token(BaseModel):
 class UserRegister(BaseModel):
     name:     str
     email:    EmailStr
-    password: str
+    password: str = Field(min_length=8)
     role:     str = "admin"
+    school_name: str | None = None
+    school_address: str | None = None
+    school_phone: str | None = None
+    academic_year_label: str | None = None
+    academic_year_start_date: date | None = None
+    academic_year_end_date: date | None = None
+    standards: list[str] = []
+    divisions: list[str] = []
 
 
 class UserOut(BaseModel):
@@ -200,6 +209,80 @@ def _as_utc(value: datetime | None) -> datetime | None:
 def _hash_login_otp(challenge_id: str, otp: str) -> str:
     material = f"{challenge_id}:{otp}".encode("utf-8")
     return hmac.new(settings.SECRET_KEY.encode("utf-8"), material, hashlib.sha256).hexdigest()
+
+
+def _hash_refresh_token(raw_token: str) -> str:
+    return hmac.new(
+        settings.SECRET_KEY.encode("utf-8"),
+        raw_token.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _set_refresh_cookie(response: Response, raw_token: str, expires_at: datetime) -> None:
+    max_age = max(0, int((_as_utc(expires_at) - _utcnow()).total_seconds()))
+    response.set_cookie(
+        settings.REFRESH_COOKIE_NAME,
+        raw_token,
+        max_age=max_age,
+        expires=max_age,
+        httponly=True,
+        secure=settings.REFRESH_COOKIE_SECURE,
+        samesite="lax",
+        path="/api/v1/auth",
+    )
+
+
+def clear_refresh_cookie(response: Response) -> None:
+    response.delete_cookie(settings.REFRESH_COOKIE_NAME, path="/api/v1/auth")
+
+
+def create_refresh_session(
+    db: Session,
+    response: Response,
+    user_id: int,
+    request: Request | None = None,
+    family_id: str | None = None,
+    replaced_session: AuthRefreshSession | None = None,
+) -> AuthRefreshSession:
+    raw_token = secrets.token_urlsafe(48)
+    expires_at = _utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    session = AuthRefreshSession(
+        user_id=user_id,
+        token_hash=_hash_refresh_token(raw_token),
+        family_id=family_id or str(uuid.uuid4()),
+        user_agent=((request.headers.get("user-agent") if request else None) or "")[:255] or None,
+        ip_address=(request.client.host if request and request.client else None),
+        expires_at=expires_at,
+    )
+    db.add(session)
+    db.flush()
+    if replaced_session:
+        replaced_session.revoked_at = _utcnow()
+        replaced_session.replaced_by_session_id = session.id
+    _set_refresh_cookie(response, raw_token, expires_at)
+    return session
+
+
+def issue_access_payload(db: Session, user: User) -> Token:
+    current_user = build_current_user(db, user)
+    token = create_access_token(
+        subject=user.id,
+        role=user.role,
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    return Token(
+        requires_2fa=False,
+        access_token=token,
+        user_id=user.id,
+        user_name=user.name,
+        role=user.role,
+        assigned_class_ids=current_user.assigned_class_ids,
+        class_teacher_class_ids=current_user.class_teacher_class_ids,
+        subject_assignments=current_user.subject_assignments,
+        linked_student_id=current_user.linked_student_id,
+        linked_student_ids=current_user.linked_student_ids,
+    )
 
 
 def _create_admin_2fa_challenge(db: Session, user: User) -> LoginChallengeResponse:
@@ -366,6 +449,7 @@ def ensure_student_access(db: Session, current_user: CurrentUser, student_id: in
 @limiter.limit("10/minute")  # STEP 4.5: Brute-force protection
 def login(
     request: Request,
+    response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
@@ -382,9 +466,6 @@ def login(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    db.query(TokenBlocklist).filter(TokenBlocklist.expires_at < datetime.now(timezone.utc)).delete()
-    db.commit()
-
     if user.role == "admin" and user.two_factor_enabled:
         challenge = _create_admin_2fa_challenge(db, user)
         return LoginResponse(
@@ -394,15 +475,13 @@ def login(
             channel=challenge.channel,
         )
 
-    token = create_access_token(
-        subject=user.id,
-        role=user.role,
-        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
-    )
+    token_payload = issue_access_payload(db, user)
+    create_refresh_session(db, response, user.id, request)
+    db.commit()
     current_user = build_current_user(db, user)
     return LoginResponse(
         requires_2fa=False,
-        access_token=token,
+        access_token=token_payload.access_token,
         user_id=user.id,
         user_name=user.name,
         role=user.role,
@@ -418,6 +497,7 @@ def login(
 @limiter.limit("10/minute")
 def verify_login_2fa(
     request: Request,
+    response: Response,
     data: Verify2FARequest,
     db: Session = Depends(get_db),
 ):
@@ -443,28 +523,10 @@ def verify_login_2fa(
         raise HTTPException(status_code=404, detail="User not found")
 
     challenge.verified_at = now
+    token_payload = issue_access_payload(db, user)
+    create_refresh_session(db, response, user.id, request)
     db.commit()
-    db.query(TokenBlocklist).filter(TokenBlocklist.expires_at < now).delete()
-    db.commit()
-
-    token = create_access_token(
-        subject=user.id,
-        role=user.role,
-        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
-    )
-    current_user = build_current_user(db, user)
-    return Token(
-        requires_2fa=False,
-        access_token=token,
-        user_id=user.id,
-        user_name=user.name,
-        role=user.role,
-        assigned_class_ids=current_user.assigned_class_ids,
-        class_teacher_class_ids=current_user.class_teacher_class_ids,
-        subject_assignments=current_user.subject_assignments,
-        linked_student_id=current_user.linked_student_id,
-        linked_student_ids=current_user.linked_student_ids,
-    )
+    return token_payload
 
 
 @router.post(
@@ -496,6 +558,9 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
             detail="Only admin role can be created via this bootstrap endpoint.",
         )
 
+    if db.bind.dialect.name == "postgresql":
+        db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": 41001})
+
     if db.query(User.id).first() is not None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -520,6 +585,39 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
         is_active=True,
     )
     db.add(user)
+    branch = None
+    if data.school_name:
+        branch = Branch(
+            name=data.school_name.strip(),
+            address=data.school_address,
+            phone=data.school_phone,
+            is_active=True,
+        )
+        db.add(branch)
+        db.flush()
+        user.branch_id = branch.id
+
+    if data.academic_year_label and data.academic_year_start_date and data.academic_year_end_date:
+        academic_year = AcademicYear(
+            label=data.academic_year_label,
+            start_date=data.academic_year_start_date,
+            end_date=data.academic_year_end_date,
+            is_current=True,
+            status=YearStatusEnum.active,
+            branch_id=branch.id if branch else None,
+        )
+        db.add(academic_year)
+        db.flush()
+        standards = [s.strip() for s in data.standards if s.strip()] or ["1"]
+        divisions = [d.strip().upper() for d in data.divisions if d.strip()] or ["A"]
+        for standard in standards:
+            for division in divisions:
+                db.add(Class(
+                    name=standard,
+                    division=division,
+                    academic_year_id=academic_year.id,
+                    branch_id=branch.id if branch else None,
+                ))
     db.commit()
     db.refresh(user)
     return user
@@ -533,8 +631,50 @@ def register_status(db: Session = Depends(get_db)):
     }
 
 
+@router.post("/refresh", response_model=Token, summary="Rotate the HttpOnly refresh token and issue a new access token")
+def refresh_session(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    raw_token = request.cookies.get(settings.REFRESH_COOKIE_NAME)
+    if not raw_token:
+        clear_refresh_cookie(response)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh session missing")
+
+    now = _utcnow()
+    token_hash = _hash_refresh_token(raw_token)
+    session = (
+        db.query(AuthRefreshSession)
+        .filter_by(token_hash=token_hash)
+        .with_for_update()
+        .first()
+    )
+    if not session or session.revoked_at is not None or _as_utc(session.expires_at) <= now:
+        if session:
+            db.query(AuthRefreshSession).filter_by(family_id=session.family_id).update({"revoked_at": now})
+            db.commit()
+        clear_refresh_cookie(response)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh session expired")
+
+    user = db.query(User).filter_by(id=session.user_id, is_active=True).first()
+    if not user:
+        session.revoked_at = now
+        db.commit()
+        clear_refresh_cookie(response)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User session no longer valid")
+
+    session.last_used_at = now
+    payload = issue_access_payload(db, user)
+    create_refresh_session(db, response, user.id, request, family_id=session.family_id, replaced_session=session)
+    db.commit()
+    return payload
+
+
 @router.post("/logout", summary="Revoke the current access token")
 def logout(
+    response: Response,
+    request: Request,
     token: str = Depends(oauth2_scheme),
     db:    Session = Depends(get_db),
 ):
@@ -566,7 +706,13 @@ def logout(
 
     if not db.query(TokenBlocklist).filter_by(jti=jti).first():
         db.add(TokenBlocklist(jti=jti, expires_at=expires_at))
-        db.commit()
+    raw_refresh = request.cookies.get(settings.REFRESH_COOKIE_NAME)
+    if raw_refresh:
+        refresh = db.query(AuthRefreshSession).filter_by(token_hash=_hash_refresh_token(raw_refresh)).first()
+        if refresh and refresh.revoked_at is None:
+            refresh.revoked_at = datetime.now(timezone.utc)
+    db.commit()
+    clear_refresh_cookie(response)
 
     return {"message": "Successfully logged out"}
 

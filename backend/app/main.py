@@ -13,20 +13,23 @@ import asyncio
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager, suppress
+from datetime import datetime, timezone
 from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.core.database import Base, check_db_connection, engine, get_db
+from app.core.database import Base, SessionLocal, check_db_connection, engine, get_db
 from app.core.config import settings
 from app.models.base_models import *  # noqa — registers all models with Base
+from app.models.base_models import OperationJob, TokenBlocklist, User
+from app.core.security import decode_access_token
 from app.routers import (
     audit_logs,
     admin_users,
@@ -36,6 +39,7 @@ from app.routers import (
     enrollments,   # NEW
     fees,
     imports,
+    jobs,
     marks,
     notifications,
     pdf,
@@ -66,6 +70,25 @@ def run_startup_migrations() -> None:
     command.upgrade(alembic_cfg, "head")
 
 
+async def cleanup_expired_token_blocklist(stop_event: asyncio.Event) -> None:
+    while not stop_event.is_set():
+        try:
+            with SessionLocal() as db:
+                deleted = (
+                    db.query(TokenBlocklist)
+                    .filter(TokenBlocklist.expires_at < datetime.now(timezone.utc))
+                    .delete()
+                )
+                db.commit()
+                if deleted:
+                    logger.info("Cleaned up %s expired token blocklist rows.", deleted)
+        except Exception:
+            logger.exception("Expired token blocklist cleanup failed.")
+
+        with suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(stop_event.wait(), timeout=3600)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if not settings.SECRET_KEY or "change-this" in settings.SECRET_KEY:
@@ -93,11 +116,24 @@ async def lifespan(app: FastAPI):
         logger.info("Skipping startup database initialization because the database dependency is overridden.")
     app.state.notification_stop_event = asyncio.Event()
     app.state.notification_worker_task = None
+    app.state.token_cleanup_stop_event = asyncio.Event()
+    app.state.token_cleanup_task = None
+    if should_run_db_initialization:
+        app.state.token_cleanup_task = asyncio.create_task(
+            cleanup_expired_token_blocklist(app.state.token_cleanup_stop_event)
+        )
     if settings.NOTIFICATION_WORKER_ENABLED:
         app.state.notification_worker_task = asyncio.create_task(
             run_notification_worker(app.state.notification_stop_event)
         )
     yield
+    if getattr(app.state, "token_cleanup_stop_event", None):
+        app.state.token_cleanup_stop_event.set()
+    cleanup_task = getattr(app.state, "token_cleanup_task", None)
+    if cleanup_task:
+        cleanup_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await cleanup_task
     if getattr(app.state, "notification_stop_event", None):
         app.state.notification_stop_event.set()
     task = getattr(app.state, "notification_worker_task", None)
@@ -153,7 +189,7 @@ async def request_timing_middleware(request: Request, call_next):
 app.include_router(auth.router)
 app.include_router(student_auth.router)
 app.include_router(pdf.router)
-app.include_router(yearend.router)   # TC PDF download is public inside this router
+app.include_router(yearend.public_router)
 app.include_router(payments.public_router)
 
 # ── Protected routes (JWT Bearer token required) ──────────────────────────────
@@ -163,6 +199,7 @@ app.include_router(students.router,     dependencies=_auth)
 app.include_router(setup.router,        dependencies=_auth)
 app.include_router(fees.router,         dependencies=_auth)
 app.include_router(imports.router,      dependencies=_auth)
+app.include_router(jobs.router,         dependencies=_auth)
 app.include_router(marks.router,        dependencies=_auth)
 app.include_router(attendance.router,   dependencies=_auth)
 app.include_router(analytics.router,    dependencies=_auth)
@@ -173,6 +210,7 @@ app.include_router(notifications.router, dependencies=_auth)
 app.include_router(enrollments.router,  dependencies=_auth)   # NEW
 app.include_router(report_cards.router, dependencies=_auth)
 app.include_router(audit_logs.router, dependencies=_auth)
+app.include_router(yearend.router,      dependencies=_auth)
 
 
 @app.get("/")
@@ -208,3 +246,41 @@ def latency_metrics(_: object = Depends(require_role("admin"))):
             "avg_ms": round(sum(values) / len(values), 2),
         }
     return payload
+
+
+@app.websocket("/ws/jobs/{job_id}")
+async def job_status_socket(websocket: WebSocket, job_id: int, token: str):
+    try:
+        payload = decode_access_token(token)
+        if payload.get("purpose") not in (None, "access"):
+            raise ValueError("Invalid token purpose")
+        user_id = int(payload.get("sub"))
+    except Exception:
+        await websocket.close(code=1008)
+        return
+
+    await websocket.accept()
+    try:
+        while True:
+            with SessionLocal() as db:
+                user = db.query(User).filter_by(id=user_id, is_active=True).first()
+                job = db.query(OperationJob).filter_by(id=job_id).first()
+                if not user or not job:
+                    await websocket.send_json({"status": "not_found"})
+                    await websocket.close(code=1008)
+                    return
+                await websocket.send_json({
+                    "id": job.id,
+                    "job_type": job.job_type,
+                    "status": str(job.status.value if hasattr(job.status, "value") else job.status),
+                    "progress": job.progress,
+                    "result": job.result,
+                    "error": job.error,
+                    "updated_at": job.updated_at.isoformat() if job.updated_at else None,
+                })
+                if str(job.status.value if hasattr(job.status, "value") else job.status) in {"completed", "failed", "cancelled"}:
+                    await websocket.close(code=1000)
+                    return
+            await asyncio.sleep(2)
+    except WebSocketDisconnect:
+        return
