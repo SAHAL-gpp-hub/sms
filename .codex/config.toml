@@ -10,3 +10,18 @@ approval_mode = "approve"
 
 [mcp_servers.code-review-graph.tools.query_graph_tool]
 approval_mode = "approve"
+
+[mcp_servers.code-review-graph.tools.detect_changes_tool]
+approval_mode = "approve"
+
+[mcp_servers.code-review-graph.tools.get_architecture_overview_tool]
+approval_mode = "approve"
+
+[mcp_servers.code-review-graph.tools.build_or_update_graph_tool]
+approval_mode = "approve"
+
+[mcp_servers.code-review-graph.tools.get_affected_flows_tool]
+approval_mode = "approve"
+
+[mcp_servers.code-review-graph.tools.get_review_context_tool]
+approval_mode = "approve"

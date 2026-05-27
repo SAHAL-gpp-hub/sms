@@ -1,4 +1,5 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+import secrets
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -8,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.config import settings
-from app.core.security import get_password_hash
+from app.core.security import create_access_token, get_password_hash
 from app.models.base_models import AcademicYear, Branch, Class, CorrectionRequestStatusEnum, DataAuditActionEnum, NotificationOutbox, ProfileCorrectionRequest, Student, StudentActivationRequest, StudentStatusEnum, Subject, TeacherClassAssignment, User
 from app.routers.auth import CurrentUser, require_role
 from app.services.audit_service import log_data_change, model_snapshot
@@ -27,10 +28,11 @@ CORRECTION_FIELDS = {
 class AdminUserCreate(BaseModel):
     name: str
     email: EmailStr
-    password: str = Field(min_length=8)
+    password: Optional[str] = Field(default=None, min_length=8)
     role: str
     is_active: bool = True
     branch_id: Optional[int] = None
+    send_invite: bool = False
 
     @field_validator("role")
     @classmethod
@@ -65,6 +67,97 @@ class AdminUserOut(BaseModel):
     two_factor_enabled: bool = False
     two_factor_channel: Optional[str] = None
     two_factor_destination: Optional[str] = None
+    invitation_url: Optional[str] = None
+    invite_status: Optional[str] = None
+    last_invite_sent_at: Optional[datetime] = None
+    can_resend_invite: bool = False
+
+    model_config = {"from_attributes": True}
+
+
+class StaffInviteResponse(BaseModel):
+    user_id: int
+    email: str
+    invitation_url: str
+    queued: bool = True
+    expires_in_days: int = 7
+
+
+class StaffInviteFailure(BaseModel):
+    user_id: int
+    email: str
+    error: str
+
+
+class BulkStaffInviteResponse(BaseModel):
+    queued: int
+    skipped_active: int
+    failed: int
+    failures: list[StaffInviteFailure]
+
+
+def _public_base_url() -> str:
+    return settings.PORTAL_PUBLIC_URL.rstrip("/")
+
+
+def _build_staff_invite_url(user: User) -> str:
+    token = create_access_token(
+        subject=user.id,
+        role=user.role,
+        expires_delta=timedelta(days=7),
+        extra_claims={
+            "purpose": "staff_registration",
+            "email": user.email,
+        },
+    )
+    return f"{_public_base_url()}/complete-registration?token={token}"
+
+
+def _queue_staff_invite_email(db: Session, user: User, invite_url: str) -> None:
+    db.add(NotificationOutbox(
+        provider="email",
+        destination=user.email,
+        subject="Complete your teacher account registration",
+        body=(
+            f"Hello {user.name},\n\n"
+            "Your school teacher account has been created. Use this secure link to set your password:\n"
+            f"{invite_url}\n\n"
+            "This link expires in 7 days. If you did not expect this, contact the school office."
+        ),
+        payload={
+            "purpose": "staff_registration",
+            "user_id": user.id,
+            "role": user.role,
+            "invite_url": invite_url,
+        },
+    ))
+
+
+def _latest_staff_invite(db: Session, user_id: int) -> NotificationOutbox | None:
+    return (
+        db.query(NotificationOutbox)
+        .filter(NotificationOutbox.payload["purpose"].as_string() == "staff_registration")
+        .filter(NotificationOutbox.payload["user_id"].as_integer() == user_id)
+        .order_by(NotificationOutbox.created_at.desc(), NotificationOutbox.id.desc())
+        .first()
+    )
+
+
+def _user_out(db: Session, user: User, invitation_url: str | None = None) -> AdminUserOut:
+    out = AdminUserOut.model_validate(user)
+    out.invitation_url = invitation_url
+    if user.role == "teacher":
+        latest_invite = _latest_staff_invite(db, user.id)
+        out.invite_status = "active" if user.is_active else "pending"
+        out.last_invite_sent_at = latest_invite.created_at if latest_invite else None
+        out.can_resend_invite = not user.is_active
+    return out
+
+
+def _queue_staff_invite_for_user(db: Session, user: User) -> str:
+    invite_url = _build_staff_invite_url(user)
+    _queue_staff_invite_email(db, user, invite_url)
+    return invite_url
 
 
 class CorrectionResolveRequest(BaseModel):
@@ -161,23 +254,32 @@ def create_user(
 ):
     if data.role == "admin":
         raise HTTPException(status_code=403, detail="Use the bootstrap or a dedicated privilege workflow to create admins")
+    if data.send_invite and data.role != "teacher":
+        raise HTTPException(status_code=422, detail="Registration links are available for teacher accounts.")
+    if not data.send_invite and not data.password:
+        raise HTTPException(status_code=422, detail="Password is required unless a registration link is sent.")
 
     user = User(
         name=data.name,
         email=data.email,
-        password_hash=get_password_hash(data.password),
+        password_hash=get_password_hash(data.password or secrets.token_urlsafe(32)),
         role=data.role,
-        is_active=data.is_active,
+        is_active=False if data.send_invite else data.is_active,
         branch_id=data.branch_id if data.branch_id is not None else settings.DEFAULT_BRANCH_ID,
     )
     db.add(user)
+    invite_url = None
     try:
+        db.flush()
+        if data.send_invite:
+            invite_url = _build_staff_invite_url(user)
+            _queue_staff_invite_email(db, user, invite_url)
         db.commit()
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail="User email already exists") from exc
     db.refresh(user)
-    return user
+    return _user_out(db, user, invite_url)
 
 
 @router.get("/users", response_model=list[AdminUserOut])
@@ -192,7 +294,7 @@ def list_users(
         query = query.filter(User.role == role)
     if is_active is not None:
         query = query.filter(User.is_active == is_active)
-    return query.order_by(User.name).all()
+    return [_user_out(db, user) for user in query.order_by(User.name).all()]
 
 
 @router.get("/users/{user_id}", response_model=AdminUserOut)
@@ -204,7 +306,7 @@ def get_user(
     user = db.query(User).filter_by(id=user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return user
+    return _user_out(db, user)
 
 
 @router.put("/users/{user_id}", response_model=AdminUserOut)
@@ -234,7 +336,53 @@ def update_user(
         db.rollback()
         raise HTTPException(status_code=409, detail="User email already exists") from exc
     db.refresh(user)
-    return user
+    return _user_out(db, user)
+
+
+@router.post("/users/{user_id}/resend-invite", response_model=StaffInviteResponse)
+def resend_staff_invite(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
+    user = db.query(User).filter_by(id=user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.role != "teacher":
+        raise HTTPException(status_code=422, detail="Registration links can only be resent for teachers")
+    if user.is_active:
+        raise HTTPException(status_code=409, detail="Teacher account is already active")
+    invite_url = _queue_staff_invite_for_user(db, user)
+    db.commit()
+    return StaffInviteResponse(user_id=user.id, email=user.email, invitation_url=invite_url)
+
+
+@router.post("/teachers/resend-pending-invites", response_model=BulkStaffInviteResponse)
+def resend_pending_staff_invites(
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
+    teachers = db.query(User).filter_by(role="teacher").order_by(User.name).all()
+    queued = 0
+    skipped_active = 0
+    failures: list[StaffInviteFailure] = []
+    for teacher in teachers:
+        if teacher.is_active:
+            skipped_active += 1
+            continue
+        try:
+            _queue_staff_invite_for_user(db, teacher)
+            queued += 1
+        except Exception as exc:  # noqa: BLE001 - collect per-teacher failures for the admin response
+            failures.append(StaffInviteFailure(user_id=teacher.id, email=teacher.email, error=str(exc)))
+    if queued:
+        db.commit()
+    return BulkStaffInviteResponse(
+        queued=queued,
+        skipped_active=skipped_active,
+        failed=len(failures),
+        failures=failures,
+    )
 
 
 @router.put("/users/{user_id}/2fa", response_model=AdminUserOut)

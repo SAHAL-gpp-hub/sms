@@ -71,7 +71,8 @@ class FeeStructureOut(BaseModel):
 
 class StudentFeeOut(BaseModel):
     id: int
-    student_id: int
+    enrollment_id: int
+    student_id: Optional[int] = None
     fee_structure_id: int
     concession: Decimal
     net_amount: Decimal
@@ -111,6 +112,9 @@ class StudentLedgerItem(BaseModel):
     paid_amount: Decimal
     balance: Decimal
     student_fee_id: int
+    enrollment_id: int
+    academic_year_id: Optional[int] = None
+    invoice_type: str = "regular"
 
 class StudentLedger(BaseModel):
     student_id: int

@@ -1,15 +1,15 @@
 from calendar import monthrange
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.base_models import AcademicYear, Attendance, Class, FeePayment, NotificationLog, Student, StudentFee, StudentStatusEnum
+from app.models.base_models import AcademicYear, Attendance, Class, FeePayment, NotificationLog, NotificationOutbox, Student, StudentFee, StudentStatusEnum
 from app.routers.auth import CurrentUser, require_role
 from app.schemas.notifications import (
     NotificationLogOut,
@@ -242,3 +242,22 @@ def send_test_notification(
     )
     db.commit()
     return {"queued": True, "notification_id": log.id}
+
+
+@router.post("/retry/{outbox_id}")
+def retry_notification(
+    outbox_id: int,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
+    item = db.query(NotificationOutbox).filter_by(id=outbox_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    if item.status not in ("failed", "retry"):
+        raise HTTPException(status_code=422, detail="Only failed notifications can be retried")
+    item.status = "pending"
+    item.attempts = 0
+    item.next_attempt_at = datetime.now(timezone.utc)
+    item.last_error = None
+    db.commit()
+    return {"message": "Notification queued for retry", "id": outbox_id}

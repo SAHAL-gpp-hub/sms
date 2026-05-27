@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import { extractError, marksAPI, openSignedPdf, reportCardsAPI, setupAPI } from '../../services/api'
 import { getAuthUser } from '../../services/auth'
 import { PageHeader, Select } from '../../components/UI'
+import { useAcademicYear } from '../../contexts/academicYearContext'
 
 /* ---------- Inline SVG icon set (replaces emojis) ---------- */
 const Icons = {
@@ -192,8 +193,8 @@ const MONTHS = [
 export default function Reports() {
   const authUser = getAuthUser()
   const isAdmin = authUser?.role === 'admin'
+  const { selectedYearId, selectedYear, years } = useAcademicYear()
   const [classes, setClasses] = useState([])
-  const [years, setYears] = useState([])
   const [resultExams, setResultExams] = useState([])
   const [marksheetExams, setMarksheetExams] = useState([])
   const [reportCards, setReportCards] = useState([])
@@ -210,29 +211,31 @@ export default function Reports() {
   const [msClass, setMsClass] = useState('')
 
   useEffect(() => {
-    setupAPI.getClasses().then(r => setClasses(r.data))
-    setupAPI.getAcademicYears().then(r => {
-      setYears(r.data)
-      const curr = r.data.find(y => y.is_current)
-      if (curr) setDefYear(String(curr.id))
-    })
-  }, [])
+    setDefYear(selectedYearId || '')
+    setResultClass('')
+    setMsClass('')
+    if (!selectedYearId) {
+      setClasses([])
+      return
+    }
+    setupAPI.getClasses(selectedYearId).then(r => setClasses(r.data))
+  }, [selectedYearId])
 
   useEffect(() => {
     if (resultClass) {
-      marksAPI.getExams({ class_id: resultClass }).then(r => setResultExams(r.data))
+      marksAPI.getExams({ class_id: resultClass, academic_year_id: selectedYearId }).then(r => setResultExams(r.data))
     } else {
       setResultExams([])
     }
-  }, [resultClass])
+  }, [resultClass, selectedYearId])
 
   useEffect(() => {
     if (msClass) {
-      marksAPI.getExams({ class_id: msClass }).then(r => setMarksheetExams(r.data))
+      marksAPI.getExams({ class_id: msClass, academic_year_id: selectedYearId }).then(r => setMarksheetExams(r.data))
     } else {
       setMarksheetExams([])
     }
-  }, [msClass])
+  }, [msClass, selectedYearId])
 
   useEffect(() => {
     if (!msClass || !msExam) {
@@ -284,7 +287,7 @@ export default function Reports() {
     <div style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
       <PageHeader
         title="Reports"
-        subtitle="Generate and download PDF reports for fees, attendance, and academic results"
+        subtitle={`Generate and download reports for ${selectedYear?.label || 'the selected academic year'}`}
       />
 
       <div
@@ -309,6 +312,7 @@ export default function Reports() {
               onChange={e => setDefYear(e.target.value)}
               options={yearOptions}
               placeholder="All years"
+              disabled
             />
             <DownloadButton
               href="#"

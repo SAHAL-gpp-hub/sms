@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { feeAPI, formatINR, extractError } from '../../services/api'
+import { feeAPI, formatINR, extractPaymentError } from '../../services/api'
 import { PageHeader, EmptyState, LoadingPage } from '../../components/UI'
 
 const PAYMENT_MODES = ['Cash', 'Cheque', 'DD', 'UPI']
@@ -64,6 +64,7 @@ function PaymentModal({ item, onClose, onSuccess }) {
   const [form, setForm] = useState(() => buildPaymentForm(item))
 
   const [saving, setSaving] = useState(false)
+  const [successReceipt, setSuccessReceipt] = useState(null)
 
   const itemId = item?.student_fee_id
   const itemBalance = item?.balance
@@ -72,10 +73,13 @@ function PaymentModal({ item, onClose, onSuccess }) {
   useEffect(() => {
     if (itemId) {
       setForm(buildPaymentForm({ balance: itemBalance }))
+      setSuccessReceipt(null)
+      setSaving(false)
     }
   }, [itemId, itemBalance])
 
   const handleSubmit = async () => {
+    if (saving || successReceipt) return
 
     const amt = parseFloat(form.amount_paid)
 
@@ -107,7 +111,7 @@ function PaymentModal({ item, onClose, onSuccess }) {
 
     try {
 
-      await feeAPI.recordPayment({
+      const result = await feeAPI.recordPayment({
         student_fee_id: item.student_fee_id,
         amount_paid: amt,
         mode: form.mode,
@@ -115,16 +119,31 @@ function PaymentModal({ item, onClose, onSuccess }) {
         collected_by: form.collected_by || null,
 
       })
+      setSuccessReceipt(result.data?.receipt_number || 'Recorded')
       toast.success(`Payment of ${formatINR(amt)} recorded`)
-      onSuccess()
     } catch (err) {
-      toast.error(extractError(err))
-    } finally {
+      toast.error(extractPaymentError(err).message)
       setSaving(false)
+      return
+    } finally {
+      if (!successReceipt) setSaving(false)
     }
   }
 
   if (!item) return null
+  if (successReceipt) return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)' }} />
+      <div style={{ position: 'relative', background: 'var(--surface-0)', borderRadius: '16px 16px 0 0', padding: 24, width: '100%', maxWidth: 480, boxShadow: 'var(--shadow-xl)', textAlign: 'center' }} className="payment-modal-inner">
+        <div style={{ fontSize: 44, color: 'var(--success-600)', fontWeight: 900, lineHeight: 1 }}>✓</div>
+        <div style={{ fontSize: 18, fontWeight: 900, color: '#15803d', marginTop: 10 }}>Payment Recorded</div>
+        <div style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '8px 0 20px' }}>Receipt: {successReceipt}</div>
+        <button className="btn btn-primary btn-lg" style={{ width: '100%' }} onClick={() => { onSuccess(); onClose() }}>
+          Done
+        </button>
+      </div>
+    </div>
+  )
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>

@@ -1,5 +1,5 @@
 // components/UI.jsx — Fully responsive shared UI primitives
-import { useEffect, useId, useRef } from 'react'
+import { cloneElement, isValidElement, useEffect, useId, useRef } from 'react'
 
 // ── Skeleton Loader ───────────────────────────────────────────────────────
 export function Skeleton({ width, height = '14px', borderRadius = '6px', style = {} }) {
@@ -48,6 +48,82 @@ export function EmptyState({ icon, title, description, action }) {
       <div className="empty-state-title">{title}</div>
       {description && <div className="empty-state-desc">{description}</div>}
       {action && <div style={{ marginTop: '12px' }}>{action}</div>}
+    </div>
+  )
+}
+
+const SCREEN_STATE_META = {
+  loading: {
+    title: 'Loading',
+    description: 'Fetching the latest school records.',
+  },
+  empty: {
+    title: 'Nothing here yet',
+    description: 'Records will appear here when they are available.',
+  },
+  error: {
+    title: 'Could not load this screen',
+    description: 'Please try again. If this keeps happening, contact the admin.',
+  },
+  'no-permission': {
+    title: 'No permission for this workflow',
+    description: 'Your account is not assigned to this class or action.',
+  },
+  'no-year': {
+    title: 'Select an academic year',
+    description: 'Choose an academic year before loading records.',
+  },
+  'no-class': {
+    title: 'Select a class',
+    description: 'Choose a class before editing records.',
+  },
+  locked: {
+    title: 'Read-only year',
+    description: 'This academic year is closed, so records can be viewed but not changed.',
+  },
+}
+
+export function ScreenState({ type = 'empty', icon, title, description, action }) {
+  const meta = SCREEN_STATE_META[type] || SCREEN_STATE_META.empty
+  const defaultIcon = type === 'loading'
+    ? <span className="spinner" style={{ width: 22, height: 22 }} />
+    : (
+      <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M12 9v4m0 4h.01M5.07 19h13.86a2 2 0 001.73-3L13.73 4a2 2 0 00-3.46 0L3.34 16a2 2 0 001.73 3z" />
+      </svg>
+    )
+  return (
+    <EmptyState
+      icon={icon || defaultIcon}
+      title={title || meta.title}
+      description={description || meta.description}
+      action={action}
+    />
+  )
+}
+
+export function ReadonlyBanner({ reason, yearLabel }) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: '10px',
+      padding: '12px 14px',
+      borderRadius: '10px',
+      border: '1px solid var(--warning-200)',
+      background: 'var(--warning-50)',
+      color: 'var(--warning-700)',
+      marginBottom: '14px',
+    }}>
+      <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ flexShrink: 0, marginTop: 1 }}>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11V7a4 4 0 10-8 0v4m14 0V7a4 4 0 00-7.465-2M5 11h14v10H5z" />
+      </svg>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: '13px', fontWeight: 800 }}>Read-only mode{yearLabel ? ` · ${yearLabel}` : ''}</div>
+        <div style={{ fontSize: '12.5px', lineHeight: 1.5, marginTop: 2 }}>
+          {reason || 'This academic year is closed. You can review records, but editing is disabled.'}
+        </div>
+      </div>
     </div>
   )
 }
@@ -179,6 +255,7 @@ export function PageHeader({ title, subtitle, actions, back }) {
         {back && (
           <button
             onClick={back}
+            aria-label="Go back"
             style={{
               width: '36px',
               height: '36px',
@@ -293,16 +370,30 @@ export function Select({ label, value, onChange, options, placeholder, required,
 
 // ── Field ────────────────────────────────────────────────────────────────
 export function Field({ label, required, error, hint, children }) {
+  const fieldId = useId()
+  const errorId = `${fieldId}-error`
+  const hintId = `${fieldId}-hint`
+  const describedBy = [
+    error ? errorId : null,
+    hint && !error ? hintId : null,
+  ].filter(Boolean).join(' ') || undefined
+  const enhancedChildren = isValidElement(children)
+    ? cloneElement(children, {
+        'aria-invalid': error ? 'true' : undefined,
+        'aria-describedby': describedBy,
+      })
+    : children
   return (
     <div>
       {label && (
         <label className="label">
-          {label} {required && <span style={{ color: 'var(--danger-500)' }}>*</span>}
+          {label} {required && <span aria-hidden="true" style={{ color: 'var(--danger-500)' }}>*</span>}
+          {required && <span className="sr-only"> required</span>}
         </label>
       )}
-      {children}
+      {enhancedChildren}
       {error && (
-        <div style={{ fontSize: '12px', color: 'var(--danger-600)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <div id={errorId} role="alert" aria-live="polite" style={{ fontSize: '12px', color: 'var(--danger-600)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
           <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <circle cx="12" cy="12" r="10" strokeWidth={2} />
             <path strokeLinecap="round" strokeWidth={2} d="M12 8v4m0 4h.01" />
@@ -311,7 +402,7 @@ export function Field({ label, required, error, hint, children }) {
         </div>
       )}
       {hint && !error && (
-        <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '4px' }}>{hint}</div>
+        <div id={hintId} style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '4px' }}>{hint}</div>
       )}
     </div>
   )

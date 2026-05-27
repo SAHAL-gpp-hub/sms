@@ -9,6 +9,7 @@ import {
   PageHeader, FilterRow, Select, EmptyState,
   TableSkeleton, ConfirmModal, InlineBanner,
 } from '../../components/UI'
+import { useAcademicYear } from '../../contexts/academicYearContext'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -49,7 +50,7 @@ function groupByStandard(classes) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ClassManagement() {
-  const [years, setYears]               = useState([])
+  const { selectedYearId, selectedYear: selectedYearMeta, years, isClosedYear } = useAcademicYear()
   const [selectedYear, setSelectedYear] = useState('')
   const [classes, setClasses]           = useState([])
   const [loading, setLoading]           = useState(false)
@@ -67,15 +68,9 @@ export default function ClassManagement() {
   const [bulkDivision, setBulkDivision] = useState('A')
   const [bulkSelected, setBulkSelected] = useState(new Set(STANDARD_NAMES))
 
-  // Load years on mount
   useEffect(() => {
-    setupAPI.getAcademicYears().then(r => {
-      const ys = r.data || []
-      setYears(ys)
-      const curr = ys.find(y => y.is_current)
-      if (curr) setSelectedYear(String(curr.id))
-    }).catch(() => toast.error('Failed to load academic years'))
-  }, [])
+    setSelectedYear(selectedYearId || '')
+  }, [selectedYearId])
 
   // Load classes when year changes
   const fetchClasses = useCallback(async () => {
@@ -206,7 +201,7 @@ export default function ClassManagement() {
     <div style={{ maxWidth: '900px' }}>
       <PageHeader
         title="Class Management"
-        subtitle="Create standards and divisions for each academic year"
+        subtitle={`Create standards and divisions for ${selectedYearMeta?.label || 'the selected academic year'}`}
       />
 
       {/* Year selector */}
@@ -216,6 +211,7 @@ export default function ClassManagement() {
           onChange={e => setSelectedYear(e.target.value)}
           options={yearOptions}
           placeholder="Select academic year…"
+          disabled
           style={{ flex: 1, minWidth: '200px' }}
           label="Academic Year"
         />
@@ -224,6 +220,7 @@ export default function ClassManagement() {
             <button
               className="btn btn-secondary"
               onClick={() => setShowBulk(true)}
+              disabled={isClosedYear}
               title="Create all GSEB standards at once"
             >
               Bulk Create
@@ -334,7 +331,7 @@ export default function ClassManagement() {
                 className="btn btn-primary"
                 style={{ width: '100%' }}
                 onClick={handleCreate}
-                disabled={creating || !selectedYear}
+                disabled={creating || !selectedYear || isClosedYear}
               >
                 {creating
                   ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Creating…</>
@@ -653,7 +650,7 @@ export default function ClassManagement() {
                 className="btn btn-primary btn-lg"
                 style={{ flex: 1 }}
                 onClick={handleBulkCreate}
-                disabled={bulkCreating || bulkSelected.size === 0}
+                disabled={bulkCreating || bulkSelected.size === 0 || isClosedYear}
               >
                 {bulkCreating
                   ? <><span className="spinner" style={{ width: '15px', height: '15px' }} /> Creating…</>

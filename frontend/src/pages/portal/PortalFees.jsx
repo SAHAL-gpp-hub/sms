@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import toast from 'react-hot-toast'
 import { usePortalContext } from '../../layouts/portalContext'
-import { extractError, paymentAPI, portalAPI } from '../../services/api'
+import { extractPaymentError, paymentAPI, portalAPI } from '../../services/api'
 
 const fmt = (n) =>
   new Intl.NumberFormat('en-IN', { style:'currency', currency:'INR', minimumFractionDigits:0 }).format(Number(n) || 0)
@@ -44,7 +44,7 @@ function FeeItem({ item, canPay, payingId, onPay }) {
         <div>
           <div style={{ fontSize:'14px', fontWeight:700, color:'#0f172a' }}>{item.fee_head_name}</div>
           <div style={{ fontSize:'11.5px', color:'#64748b', marginTop:'2px', fontWeight:600 }}>
-            {item.frequency} · Billed: {fmt(total)}
+            {item.frequency} · {item.invoice_type === 'arrear' ? 'Arrear' : 'Current year'} · Billed: {fmt(total)}
           </div>
         </div>
         <div style={{ textAlign:'right', flexShrink:0 }}>
@@ -174,7 +174,7 @@ export default function PortalFees() {
             })
             await pollOrderStatus(response.razorpay_order_id)
           } catch (err) {
-            toast.error(extractError(err))
+            toast.error(extractPaymentError(err).message)
           } finally {
             setPayingId(null)
             setVerifyingOrderId('')
@@ -195,7 +195,7 @@ export default function PortalFees() {
       })
       checkout.open()
     } catch (err) {
-      toast.error(extractError(err))
+      toast.error(extractPaymentError(err).message)
       setPayingId(null)
     }
   }
@@ -225,6 +225,29 @@ export default function PortalFees() {
   const collPct      = totalDue > 0 ? Math.min((totalPaid / totalDue) * 100, 100) : 0
   const hasBalance   = totalBalance > 0
   const canPayOnline = ((isParent && Boolean(selectedChildId)) || role === 'student') && hasBalance
+  const currentItems = (ledger.items || []).filter(item => item.invoice_type !== 'arrear')
+  const arrearItems = (ledger.items || []).filter(item => item.invoice_type === 'arrear')
+
+  const renderFeeSection = (title, items, empty) => (
+    <div style={{ background:'white', borderRadius:'16px', padding:'14px 16px', marginBottom:'12px', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
+      <div style={{ fontSize:'10.5px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'2px' }}>
+        {title} · {items.length} item{items.length === 1 ? '' : 's'}
+      </div>
+      {items.length === 0 ? (
+        <div style={{ textAlign:'center', padding:'20px 0', color:'#94a3b8', fontSize:'13px' }}>{empty}</div>
+      ) : (
+        items.map((item, i) => (
+          <FeeItem
+            key={`${title}-${item.student_fee_id || i}`}
+            item={item}
+            canPay={canPayOnline}
+            payingId={payingId}
+            onPay={handlePayNow}
+          />
+        ))
+      )}
+    </div>
+  )
 
   return (
     <>
@@ -279,24 +302,8 @@ export default function PortalFees() {
         </div>
       )}
 
-      <div style={{ background:'white', borderRadius:'16px', padding:'14px 16px', marginBottom:'12px', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
-        <div style={{ fontSize:'10.5px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'2px' }}>
-          Fee Breakdown · {(ledger.items || []).length} items
-        </div>
-        {(ledger.items || []).length === 0 ? (
-          <div style={{ textAlign:'center', padding:'20px 0', color:'#94a3b8', fontSize:'13px' }}>No fees assigned yet</div>
-        ) : (
-          (ledger.items || []).map((item, i) => (
-            <FeeItem
-              key={i}
-              item={item}
-              canPay={canPayOnline}
-              payingId={payingId}
-              onPay={handlePayNow}
-            />
-          ))
-        )}
-      </div>
+      {renderFeeSection('Current Year Fees', currentItems, 'No current-year fees assigned yet')}
+      {renderFeeSection('Arrears From Previous Years', arrearItems, 'No previous-year arrears')}
 
       {paymentHistory.length > 0 && (
         <div style={{ background:'white', borderRadius:'16px', padding:'14px 16px', marginBottom:'12px', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>

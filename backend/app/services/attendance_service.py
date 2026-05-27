@@ -14,37 +14,68 @@ from datetime import date, timedelta
 from calendar import monthrange
 from typing import Optional
 
-from sqlalchemy import func
+from sqlalchemy import and_, case, func
 from sqlalchemy.orm import Session
 
 from app.models.base_models import (
-    Attendance, AcademicYear, Class, Enrollment, FeePayment, FeeStructure,
-    Student, StudentFee, StudentStatusEnum,
+    Attendance, AcademicYear, Class, Enrollment, EnrollmentStatusEnum,
+    FeePayment, FeeStructure, Student, StudentFee, StudentStatusEnum,
 )
 from app.schemas.attendance import AttendanceEntry
 from app.services.calendar_service import count_working_days, count_working_days_for_month
 from app.core.config import settings
 
 
+ACTIVE_ENROLLMENT_STATUSES = (
+    EnrollmentStatusEnum.active,
+    EnrollmentStatusEnum.retained,
+    EnrollmentStatusEnum.provisional,
+)
+
+
+def _resolve_enrollment_for_attendance(db: Session, entry: AttendanceEntry) -> Enrollment:
+    if entry.enrollment_id is not None:
+        enrollment = db.query(Enrollment).filter_by(id=entry.enrollment_id).first()
+        if not enrollment:
+            raise ValueError(f"Enrollment {entry.enrollment_id} not found")
+        return enrollment
+    if entry.student_id is None or entry.class_id is None:
+        raise ValueError("Provide enrollment_id, or both student_id and class_id")
+    cls = db.query(Class).filter_by(id=entry.class_id).first()
+    if not cls:
+        raise ValueError(f"Class {entry.class_id} not found")
+    enrollment = db.query(Enrollment).filter_by(
+        student_id=entry.student_id,
+        class_id=entry.class_id,
+        academic_year_id=cls.academic_year_id,
+    ).first()
+    if not enrollment:
+        raise ValueError(f"Student {entry.student_id} is not enrolled in class {entry.class_id}")
+    return enrollment
+
+
 def mark_attendance_bulk(db: Session, entries: list[AttendanceEntry]):
     for entry in entries:
-        cls = db.query(Class).filter_by(id=entry.class_id).first()
+        enrollment = _resolve_enrollment_for_attendance(db, entry)
+        cls = db.query(Class).filter_by(id=enrollment.class_id).first()
         if not cls:
-            raise ValueError(f"Class {entry.class_id} not found")
+            raise ValueError(f"Class {enrollment.class_id} not found")
         year = db.query(AcademicYear).filter_by(id=cls.academic_year_id).first()
         if year and not (year.start_date <= entry.date <= year.end_date):
             raise ValueError(f"{entry.date} is outside academic year {year.label}")
         existing = db.query(Attendance).filter_by(
-            student_id=entry.student_id,
-            class_id=entry.class_id,
+            enrollment_id=enrollment.id,
             date=entry.date,
         ).first()
         if existing:
             existing.status = entry.status
+            existing.student_id = enrollment.student_id
+            existing.class_id = enrollment.class_id
         else:
             db.add(Attendance(
-                student_id=entry.student_id,
-                class_id=entry.class_id,
+                enrollment_id=enrollment.id,
+                student_id=enrollment.student_id,
+                class_id=enrollment.class_id,
                 date=entry.date,
                 status=entry.status,
             ))
@@ -53,25 +84,34 @@ def mark_attendance_bulk(db: Session, entries: list[AttendanceEntry]):
 
 
 def get_attendance_for_date(db: Session, class_id: int, query_date: date):
-    students = (
-        db.query(Student)
-        .filter_by(class_id=class_id)
-        .filter(Student.status == StudentStatusEnum.Active)
+    cls = db.query(Class).filter_by(id=class_id).first()
+    academic_year_id = cls.academic_year_id if cls else None
+    enrollments = (
+        db.query(Enrollment)
+        .filter(Enrollment.class_id == class_id)
+        .filter(Enrollment.academic_year_id == academic_year_id if academic_year_id else True)
+        .filter(Enrollment.status.in_(ACTIVE_ENROLLMENT_STATUSES))
         .all()
     )
-    attendance = db.query(Attendance).filter_by(
-        class_id=class_id, date=query_date
+    student_map = {
+        s.id: s
+        for s in db.query(Student).filter(Student.id.in_([e.student_id for e in enrollments])).all()
+    } if enrollments else {}
+    attendance = db.query(Attendance).filter(
+        Attendance.enrollment_id.in_([e.id for e in enrollments]) if enrollments else False,
+        Attendance.date == query_date,
     ).all()
-    att_map = {a.student_id: a.status for a in attendance}
+    att_map = {a.enrollment_id: a.status for a in attendance}
 
     return [
         {
-            "student_id":   s.id,
-            "student_name": s.name_en,
-            "roll_number":  s.roll_number,
-            "status":       att_map.get(s.id, "P"),
+            "enrollment_id": e.id,
+            "student_id":   e.student_id,
+            "student_name": student_map[e.student_id].name_en if e.student_id in student_map else "",
+            "roll_number":  e.roll_number,
+            "status":       att_map.get(e.id, "UNMARKED"),
         }
-        for s in sorted(students, key=lambda x: x.roll_number or 9999)
+        for e in sorted(enrollments, key=lambda x: int(x.roll_number) if str(x.roll_number or "").isdigit() else 9999)
     ]
 
 
@@ -95,7 +135,7 @@ def get_monthly_summary(db: Session, class_id: int, year: int, month: int) -> li
             .filter(
                 Enrollment.class_id == class_id,
                 Enrollment.academic_year_id == academic_year_id,
-                Enrollment.status.in_(["active", "retained", "provisional"]),
+                Enrollment.status.in_(ACTIVE_ENROLLMENT_STATUSES),
                 Enrollment.enrolled_on <= month_end,
             )
             .all()
@@ -115,16 +155,19 @@ def get_monthly_summary(db: Session, class_id: int, year: int, month: int) -> li
         enrollment_by_student = {}
         student_ids = [s.id for s in students]
 
+    enrollment_ids = [e.id for e in enrollments]
     all_records = db.query(Attendance).filter(
-        Attendance.class_id == class_id,
         Attendance.date     >= month_start,
         Attendance.date     <= month_end,
-        Attendance.student_id.in_(student_ids) if student_ids else False,
+        Attendance.enrollment_id.in_(enrollment_ids) if enrollment_ids else False,
     ).all()
 
+    enrollment_by_id = {e.id: e for e in enrollments}
     att_by_student: dict[int, dict] = {}
     for rec in all_records:
-        att_by_student.setdefault(rec.student_id, {})[rec.date] = rec.status
+        enrollment = enrollment_by_id.get(rec.enrollment_id)
+        if enrollment:
+            att_by_student.setdefault(enrollment.student_id, {})[rec.date] = rec.status
 
     results = []
     for student in students:
@@ -141,7 +184,8 @@ def get_monthly_summary(db: Session, class_id: int, year: int, month: int) -> li
         results.append({
             "student_id":         student.id,
             "student_name":       student.name_en,
-            "roll_number":        student.roll_number,
+            "enrollment_id":      enrollment.id if enrollment else None,
+            "roll_number":        enrollment.roll_number if enrollment else student.roll_number,
             "total_working_days": working_days,
             "days_present":       present,
             "days_absent":        absent,
@@ -154,32 +198,137 @@ def get_monthly_summary(db: Session, class_id: int, year: int, month: int) -> li
     return results
 
 
-def get_dashboard_stats(db: Session) -> dict:
+def get_monthly_summary_bulk(db: Session, academic_year_id: int, year: int, month: int) -> list[dict]:
+    """
+    Return monthly attendance summaries for every active student in an academic
+    year with one grouped attendance query instead of one query per class.
+    """
+    _, days_in_month = monthrange(year, month)
+    month_start = date(year, month, 1)
+    month_end = date(year, month, days_in_month)
+
+    classes = db.query(Class).filter(Class.academic_year_id == academic_year_id).all()
+    class_by_id = {cls.id: cls for cls in classes}
+    working_days_by_class = {
+        cls.id: count_working_days_for_month(db, academic_year_id, year, month)
+        for cls in classes
+    }
+    if not class_by_id:
+        return []
+
+    present_case = case((Attendance.status == "P", 1), else_=0)
+    absent_case = case((Attendance.status == "A", 1), else_=0)
+    late_case = case((Attendance.status == "L", 1), else_=0)
+
+    rows = (
+        db.query(
+            Enrollment.id.label("enrollment_id"),
+            Enrollment.student_id.label("student_id"),
+            Student.name_en.label("student_name"),
+            Enrollment.roll_number.label("roll_number"),
+            Enrollment.class_id.label("class_id"),
+            func.coalesce(func.sum(present_case), 0).label("present"),
+            func.coalesce(func.sum(absent_case), 0).label("absent"),
+            func.coalesce(func.sum(late_case), 0).label("late"),
+        )
+        .join(Student, Student.id == Enrollment.student_id)
+        .outerjoin(
+            Attendance,
+            and_(
+                Attendance.enrollment_id == Enrollment.id,
+                Attendance.date >= month_start,
+                Attendance.date <= month_end,
+            ),
+        )
+        .filter(
+            Enrollment.academic_year_id == academic_year_id,
+            Enrollment.class_id.in_(class_by_id.keys()),
+            Enrollment.status.in_(ACTIVE_ENROLLMENT_STATUSES),
+        )
+        .group_by(Enrollment.id, Enrollment.student_id, Student.name_en, Enrollment.roll_number, Enrollment.class_id)
+        .all()
+    )
+
+    results = []
+    for row in rows:
+        working_days = working_days_by_class.get(row.class_id, 0)
+        present = int(row.present or 0)
+        absent = int(row.absent or 0)
+        late = int(row.late or 0)
+        effective_present = present + (late if settings.LATE_COUNTS_AS_PRESENT else 0)
+        percentage = round((effective_present / working_days * 100), 1) if working_days > 0 else 0
+        cls = class_by_id.get(row.class_id)
+        results.append({
+            "student_id": row.student_id,
+            "enrollment_id": row.enrollment_id,
+            "student_name": row.student_name,
+            "roll_number": row.roll_number,
+            "class_id": row.class_id,
+            "class_name": f"{cls.name}{f'-{cls.division}' if cls and cls.division else ''}" if cls else "",
+            "total_working_days": working_days,
+            "days_present": present,
+            "days_absent": absent,
+            "days_late": late,
+            "percentage": percentage,
+            "low_attendance": percentage < 75,
+        })
+
+    results.sort(key=lambda x: (x["class_name"], x["roll_number"] or 9999, x["student_name"]))
+    return results
+
+
+def get_dashboard_stats(db: Session, academic_year_id: Optional[int] = None) -> dict:
     from decimal import Decimal
 
-    total_students = db.query(Student).filter(
-        Student.status == StudentStatusEnum.Active
-    ).count()
+    current_year = (
+        db.query(AcademicYear).filter_by(id=academic_year_id).first()
+        if academic_year_id
+        else db.query(AcademicYear).filter_by(is_current=True).first()
+    )
+    current_year_id = current_year.id if current_year else None
 
-    current_year = db.query(AcademicYear).filter_by(is_current=True).first()
+    total_students = db.query(Enrollment).filter(
+        Enrollment.academic_year_id == current_year_id if current_year_id else True,
+        Enrollment.status.in_(ACTIVE_ENROLLMENT_STATUSES),
+    ).count()
 
     today       = date.today()
     month_start = date(today.year, today.month, 1)
 
-    fees_this_month = db.query(func.sum(FeePayment.amount_paid)).filter(
+    fees_this_month_query = db.query(func.sum(FeePayment.amount_paid)).join(StudentFee, StudentFee.id == FeePayment.student_fee_id)
+    if current_year_id:
+        fees_this_month_query = fees_this_month_query.join(Enrollment, Enrollment.id == StudentFee.enrollment_id).filter(
+            Enrollment.academic_year_id == current_year_id
+        )
+    fees_this_month = fees_this_month_query.filter(
         FeePayment.payment_date >= month_start,
         FeePayment.payment_date <= today,
     ).scalar() or Decimal("0")
 
     fees_this_year = Decimal("0")
     if current_year:
-        fees_this_year = db.query(func.sum(FeePayment.amount_paid)).filter(
+        fees_this_year = db.query(func.sum(FeePayment.amount_paid)).join(
+            StudentFee, StudentFee.id == FeePayment.student_fee_id
+        ).join(
+            Enrollment, Enrollment.id == StudentFee.enrollment_id
+        ).filter(
+            Enrollment.academic_year_id == current_year_id,
             FeePayment.payment_date >= current_year.start_date,
             FeePayment.payment_date <= today,
         ).scalar() or Decimal("0")
 
-    total_due         = db.query(func.sum(StudentFee.net_amount)).scalar() or Decimal("0")
-    total_paid        = db.query(func.sum(FeePayment.amount_paid)).scalar() or Decimal("0")
+    fee_query = db.query(func.sum(StudentFee.net_amount))
+    if current_year_id:
+        fee_query = fee_query.join(Enrollment, Enrollment.id == StudentFee.enrollment_id).filter(
+            Enrollment.academic_year_id == current_year_id
+        )
+    total_due = fee_query.scalar() or Decimal("0")
+    total_paid_query = db.query(func.sum(FeePayment.amount_paid)).join(StudentFee, StudentFee.id == FeePayment.student_fee_id)
+    if current_year_id:
+        total_paid_query = total_paid_query.join(Enrollment, Enrollment.id == StudentFee.enrollment_id).filter(
+            Enrollment.academic_year_id == current_year_id
+        )
+    total_paid = total_paid_query.scalar() or Decimal("0")
     total_outstanding = total_due - total_paid
 
     defaulter_rows = (
@@ -190,21 +339,23 @@ def get_dashboard_stats(db: Session) -> dict:
                 - func.coalesce(func.sum(FeePayment.amount_paid), 0)
             ).label("balance"),
         )
-        .join(StudentFee, StudentFee.student_id == Student.id, isouter=True)
+        .join(Enrollment, Enrollment.student_id == Student.id)
+        .join(StudentFee, StudentFee.enrollment_id == Enrollment.id, isouter=True)
         .join(FeeStructure, StudentFee.fee_structure_id == FeeStructure.id, isouter=True)
         .outerjoin(FeePayment, FeePayment.student_fee_id == StudentFee.id)
-        .filter(Student.status == StudentStatusEnum.Active)
+        .filter(Enrollment.academic_year_id == current_year_id if current_year_id else True)
+        .filter(Enrollment.status.in_(ACTIVE_ENROLLMENT_STATUSES))
         .group_by(Student.id)
         .all()
     )
     defaulter_count = sum(1 for row in defaulter_rows if Decimal(str(row.balance)) > 0)
 
-    recent_payments = (
-        db.query(FeePayment)
-        .order_by(FeePayment.payment_date.desc())
-        .limit(5)
-        .all()
-    )
+    recent_payment_query = db.query(FeePayment).join(StudentFee, StudentFee.id == FeePayment.student_fee_id)
+    if current_year_id:
+        recent_payment_query = recent_payment_query.join(Enrollment, Enrollment.id == StudentFee.enrollment_id).filter(
+            Enrollment.academic_year_id == current_year_id
+        )
+    recent_payments = recent_payment_query.order_by(FeePayment.payment_date.desc()).limit(5).all()
     recent_students = (
         db.query(Student)
         .filter(Student.status == StudentStatusEnum.Active)
@@ -213,9 +364,10 @@ def get_dashboard_stats(db: Session) -> dict:
         .all()
     )
     class_counts = (
-        db.query(Class.name, func.count(Student.id))
-        .join(Student, Student.class_id == Class.id)
-        .filter(Student.status == StudentStatusEnum.Active)
+        db.query(Class.name, func.count(Enrollment.id))
+        .join(Enrollment, Enrollment.class_id == Class.id)
+        .filter(Enrollment.academic_year_id == current_year_id if current_year_id else True)
+        .filter(Enrollment.status.in_(ACTIVE_ENROLLMENT_STATUSES))
         .group_by(Class.name)
         .all()
     )

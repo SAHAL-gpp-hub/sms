@@ -8,6 +8,8 @@ import { getRole } from '../../services/auth'
 import { PageHeader, SearchInput, Select, TableSkeleton, EmptyState, ConfirmModal, StatusBadge, FilterRow } from '../../components/UI'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import StudentImportPanel from './StudentImportPanel'
+import OnboardingEmptyState from '../../components/OnboardingEmptyState'
+import { useAcademicYear } from '../../contexts/academicYearContext'
 
 function StudentCard({ student, cls, isAdmin, onDelete, onDownloadTC }) {
   return (
@@ -133,7 +135,7 @@ function StudentCard({ student, cls, isAdmin, onDelete, onDownloadTC }) {
                 touchAction: 'manipulation',
               }}
             >
-              Mark as Left
+              Withdraw
             </button>
           </>
         ) : (
@@ -149,7 +151,9 @@ function StudentCard({ student, cls, isAdmin, onDelete, onDownloadTC }) {
 export default function StudentList() {
   const PAGE_SIZE = 50
   const queryClient = useQueryClient()
-  const isAdmin = getRole() === 'admin'
+  const role = getRole()
+  const isAdmin = role === 'admin'
+  const { selectedYearId, selectedYear, refreshKey } = useAcademicYear()
   const [search, setSearch] = useState('')
   const [classFilter, setClassFilter] = useState('')
   const [page, setPage] = useState(1)
@@ -176,17 +180,19 @@ export default function StudentList() {
   }, [debouncedSearch, classFilter])
 
   const classesQuery = useQuery({
-    queryKey: ['classes'],
+    queryKey: ['classes', selectedYearId, refreshKey],
+    enabled: Boolean(selectedYearId),
     queryFn: async () => {
-      const r = await setupAPI.getClasses()
+      const r = await setupAPI.getClasses(selectedYearId)
       return r.data || []
     },
   })
 
   const studentsQuery = useQuery({
-    queryKey: ['students', debouncedSearch, classFilter, page],
+    queryKey: ['students', selectedYearId, debouncedSearch, classFilter, page, refreshKey],
+    enabled: Boolean(selectedYearId),
     queryFn: async () => {
-      const params = { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }
+      const params = { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE, academic_year_id: selectedYearId }
       if (debouncedSearch) params.search = debouncedSearch
       if (classFilter) params.class_id = classFilter
       const r = await studentAPI.list(params)
@@ -237,7 +243,7 @@ export default function StudentList() {
     setDeleting(true)
     try {
       await studentAPI.delete(deleteTarget.id)
-      toast.success(`${deleteTarget.name} marked as Left`)
+      toast.success(`${deleteTarget.name} withdrawn from active enrollment`)
       setDeleteTarget(null)
       await queryClient.invalidateQueries({ queryKey: ['students'] })
     } catch (err) {
@@ -252,8 +258,10 @@ export default function StudentList() {
   return (
     <div>
       <PageHeader
-        title="Students"
-        subtitle={loading ? 'Loading...' : `${totalStudents} active student${totalStudents !== 1 ? 's' : ''}${classFilter ? ' in selected class' : ''}`}
+        title={isAdmin ? 'Students' : 'My Classes'}
+        subtitle={loading
+          ? 'Loading...'
+          : `${totalStudents} active student${totalStudents !== 1 ? 's' : ''}${classFilter ? ' in selected class' : ''}${selectedYear?.label ? ` · ${selectedYear.label}` : ''}`}
         actions={
           <>
             {classes.length === 0 && (
@@ -324,16 +332,12 @@ export default function StudentList() {
             </div>
           ) : students.length === 0 ? (
             <div className="card">
-              <EmptyState
+              {search || classFilter ? <EmptyState
                 icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>}
-                title={search || classFilter ? 'No students match' : 'No students yet'}
-                description={search || classFilter ? 'Try clearing filters' : 'Add your first student'}
-                action={
-                  search || classFilter
-                    ? <button className="btn btn-secondary btn-sm" onClick={() => { setSearch(''); setClassFilter('') }}>Clear filters</button>
-                    : isAdmin ? <Link to="/students/new" className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>Add First Student</Link> : null
-                }
-              />
+                title="No students match"
+                description="Try clearing filters"
+                action={<button className="btn btn-secondary btn-sm" onClick={() => { setSearch(''); setClassFilter('') }}>Clear filters</button>}
+              /> : <OnboardingEmptyState type={classes.length === 0 ? 'noClasses' : 'noStudents'} />}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -382,16 +386,12 @@ export default function StudentList() {
                 <tbody>
                   <tr>
                     <td colSpan={7} style={{ padding: 0, border: 'none' }}>
-                      <EmptyState
+                      {search || classFilter ? <EmptyState
                         icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>}
-                        title={search || classFilter ? 'No students match your filters' : 'No students yet'}
-                        description={search || classFilter ? 'Try clearing your search or filters' : 'Add your first student to get started'}
-                        action={
-                          search || classFilter
-                            ? <button className="btn btn-secondary btn-sm" onClick={() => { setSearch(''); setClassFilter('') }}>Clear filters</button>
-                    : isAdmin ? <Link to="/students/new" className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>Add First Student</Link> : null
-                        }
-                      />
+                        title="No students match your filters"
+                        description="Try clearing your search or filters"
+                        action={<button className="btn btn-secondary btn-sm" onClick={() => { setSearch(''); setClassFilter('') }}>Clear filters</button>}
+                      /> : <OnboardingEmptyState type={classes.length === 0 ? 'noClasses' : 'noStudents'} />}
                     </td>
                   </tr>
                 </tbody>
@@ -426,7 +426,7 @@ export default function StudentList() {
                                 <Link to={`/students/${s.id}/edit`} style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--brand-600)', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', textDecoration: 'none' }}>Edit</Link>
                                 <Link to={`/fees/student/${s.id}`} style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--success-700)', background: 'var(--success-50)', border: '1px solid var(--success-100)', textDecoration: 'none' }}>Fees</Link>
                                 <button onClick={() => handleDownloadTC(s.id)} style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', background: 'var(--gray-100)', border: '1px solid var(--border-default)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>TC</button>
-                                <button onClick={() => setDeleteTarget({ id: s.id, name: s.name_en })} style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--danger-600)', background: 'var(--danger-50)', border: '1px solid var(--danger-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>Mark as Left</button>
+                                <button onClick={() => setDeleteTarget({ id: s.id, name: s.name_en })} style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--danger-600)', background: 'var(--danger-50)', border: '1px solid var(--danger-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>Withdraw</button>
                               </>
                             ) : (
                               <span style={{ color: 'var(--text-tertiary)', fontSize: '12px', fontWeight: 700 }}>View only</span>
@@ -455,9 +455,9 @@ export default function StudentList() {
 
       <ConfirmModal
         open={!!deleteTarget}
-        title="Mark Student as Left"
-        message={`Mark "${deleteTarget?.name}" as Left? This does not delete records, but the student will stop appearing as active. Review fees, attendance, and TC before continuing.`}
-        confirmLabel="Mark as Left"
+        title="Withdraw Student"
+        message={`Withdraw "${deleteTarget?.name}" from active enrollment? Their records are fully preserved, and you can reactivate them later by editing their status.`}
+        confirmLabel="Withdraw Student"
         confirmVariant="danger"
         onConfirm={handleDeleteConfirm}
         onCancel={() => setDeleteTarget(null)}
@@ -481,6 +481,17 @@ export default function StudentList() {
             <h3 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '16px' }}>
               Transfer Certificate
             </h3>
+            <div style={{ padding: '12px 16px', background: 'var(--gray-50)', borderRadius: 10, marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Generating TC for
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--text-primary)', marginTop: 2 }}>
+                {students.find(s => s.id === tcTarget)?.name_en || 'Student'}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                {students.find(s => s.id === tcTarget)?.student_id || ''}
+              </div>
+            </div>
             <div style={{ display: 'grid', gap: '14px' }}>
               <div>
                 <label className="label">Reason</label>

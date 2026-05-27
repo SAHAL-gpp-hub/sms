@@ -20,7 +20,7 @@ from app.core.database import get_db
 from app.core.cache import response_cache
 from app.core.config import settings
 from app.models.base_models import AcademicYear
-from app.models.base_models import FeeStructure, Student, StudentStatusEnum
+from app.models.base_models import Enrollment, EnrollmentStatusEnum, FeeStructure
 from app.routers.auth import CurrentUser, ensure_student_access, require_role
 from app.schemas.fee import (
     FeeHeadCreate, FeeHeadOut,
@@ -112,10 +112,14 @@ def create_fee_structure(
 
 
 def _preview_fee_plan(db: Session, data: FeePlanRequest) -> dict:
-    affected = db.query(Student.id).filter(
-        Student.class_id == data.class_id,
-        Student.academic_year_id == data.academic_year_id,
-        Student.status == StudentStatusEnum.Active,
+    affected = db.query(Enrollment.id).filter(
+        Enrollment.class_id == data.class_id,
+        Enrollment.academic_year_id == data.academic_year_id,
+        Enrollment.status.in_([
+            EnrollmentStatusEnum.active,
+            EnrollmentStatusEnum.retained,
+            EnrollmentStatusEnum.provisional,
+        ]),
     ).count()
     fee_head_ids = [item.fee_head_id for item in data.items]
     existing = 0

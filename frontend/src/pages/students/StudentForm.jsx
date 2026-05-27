@@ -2,8 +2,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { studentAPI, setupAPI, extractError } from '../../services/api'
-import { PageHeader, Field } from '../../components/UI'
+import { enrollmentsAPI, studentAPI, setupAPI, extractError } from '../../services/api'
+import { PageHeader, Field, StatusBadge, TableSkeleton, ScreenState } from '../../components/UI'
 
 const CATEGORIES = ['GEN', 'OBC', 'SC', 'ST', 'EWS']
 const GENDERS = [
@@ -48,6 +48,48 @@ function SectionCard({ title, subtitle, children }) {
   )
 }
 
+function formatDraftAge(savedAt) {
+  if (!savedAt) return ''
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(savedAt).getTime()) / 60000))
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`
+  const hours = Math.round(minutes / 60)
+  return `${hours} hour${hours === 1 ? '' : 's'} ago`
+}
+
+function DraftRecoveryBanner({ draft, onRestore, onDiscard }) {
+  if (!draft?.savedAt) return null
+  return (
+    <div style={{
+      padding: '12px 16px',
+      background: '#fffbeb',
+      border: '1px solid #fde68a',
+      borderRadius: 10,
+      marginBottom: 16,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+      flexWrap: 'wrap',
+    }}>
+      <div>
+        <div style={{ fontWeight: 800, color: '#b45309' }}>
+          Unsaved draft found - {formatDraftAge(draft.savedAt)}
+        </div>
+        {draft.studentNamePreview && (
+          <div style={{ fontSize: 12.5, color: '#78350f', marginTop: 2 }}>
+            Student: {draft.studentNamePreview}
+          </div>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn btn-primary btn-sm" onClick={onRestore}>Restore Draft</button>
+        <button className="btn btn-ghost btn-sm" onClick={onDiscard}>Start Fresh</button>
+      </div>
+    </div>
+  )
+}
+
 const EMPTY_FORM = {
   name_en: '', name_gu: '', dob: '', gender: 'M',
   class_id: '', roll_number: '', gr_number: '',
@@ -74,6 +116,10 @@ export default function StudentForm() {
   const [form, setForm]                 = useState(EMPTY_FORM)
   const [dirty, setDirty]               = useState(false)
   const [draftSavedAt, setDraftSavedAt] = useState(null)
+  const [pendingDraft, setPendingDraft] = useState(null)
+  const [enrollmentHistory, setEnrollmentHistory] = useState([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
+  const [formStep, setFormStep] = useState('quick')
   const [useContactForStudentWhatsApp, setUseContactForStudentWhatsApp] = useState(true)
   const [useContactForGuardianWhatsApp, setUseContactForGuardianWhatsApp] = useState(true)
 
@@ -119,6 +165,11 @@ export default function StudentForm() {
         toast.error('Failed to load student data')
         setInitialLoading(false)
       })
+      setLoadingHistory(true)
+      enrollmentsAPI.getHistory(id)
+        .then(r => setEnrollmentHistory(r.data || []))
+        .catch(() => setEnrollmentHistory([]))
+        .finally(() => setLoadingHistory(false))
     }
   }, [id, isEdit])
 
@@ -128,10 +179,11 @@ export default function StudentForm() {
     if (!raw) return
     try {
       const draft = JSON.parse(raw)
-      if (draft?.form && window.confirm('Restore the unsaved student admission draft?')) {
-        setForm(f => ({ ...f, ...draft.form }))
-        setDraftSavedAt(draft.savedAt || null)
-        setDirty(true)
+      if (draft?.form) {
+        setPendingDraft({
+          ...draft,
+          studentNamePreview: draft.studentNamePreview || draft.form.name_en,
+        })
       }
     } catch {
       localStorage.removeItem(draftKey)
@@ -142,7 +194,7 @@ export default function StudentForm() {
     if (initialLoading || !dirty) return undefined
     const timer = window.setTimeout(() => {
       const savedAt = new Date().toISOString()
-      localStorage.setItem(draftKey, JSON.stringify({ form, savedAt }))
+      localStorage.setItem(draftKey, JSON.stringify({ form, savedAt, studentNamePreview: form.name_en }))
       setDraftSavedAt(savedAt)
     }, 600)
     return () => window.clearTimeout(timer)
@@ -159,9 +211,7 @@ export default function StudentForm() {
   }, [dirty])
 
   const leaveForm = () => {
-    if (!dirty || window.confirm('You have unsaved student details. Leave this form and lose the current changes?')) {
-      navigate('/students')
-    }
+    navigate('/students')
   }
 
   const setField = field => e => {
@@ -192,7 +242,7 @@ export default function StudentForm() {
     return Object.keys(e).length === 0
   }
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (nextAction = 'list') => {
     if (!validate()) { toast.error('Please fix the errors below'); return }
     setLoading(true)
     try {
@@ -218,8 +268,22 @@ export default function StudentForm() {
         await studentAPI.update(id, payload)
         toast.success('Student updated successfully')
       } else {
-        await studentAPI.create(payload)
+        const created = await studentAPI.create(payload)
         toast.success('Student added successfully')
+        if (nextAction === 'add-another') {
+          localStorage.removeItem(draftKey)
+          setForm({ ...EMPTY_FORM, academic_year_id: form.academic_year_id, class_id: form.class_id, admission_date: form.admission_date })
+          setFormStep('quick')
+          setDirty(false)
+          setDraftSavedAt(null)
+          return
+        }
+        if (nextAction === 'continue' && created.data?.id) {
+          localStorage.removeItem(draftKey)
+          setDirty(false)
+          navigate(`/students/${created.data.id}/edit`)
+          return
+        }
       }
       localStorage.removeItem(draftKey)
       setDirty(false)
@@ -246,9 +310,50 @@ export default function StudentForm() {
     <div style={{ maxWidth: '800px' }}>
       <PageHeader
         title={isEdit ? 'Edit Student' : 'Add New Student'}
-        subtitle={isEdit ? 'Update student information' : 'Autosaved while you type so admissions do not vanish after one bad click'}
+        subtitle={isEdit ? 'Update student information' : 'Quick add first, complete profile when the required admission record is saved'}
         back={leaveForm}
       />
+
+      <DraftRecoveryBanner
+        draft={pendingDraft}
+        onRestore={() => {
+          setForm(f => ({ ...f, ...pendingDraft.form }))
+          setDraftSavedAt(pendingDraft.savedAt || null)
+          setDirty(true)
+          setPendingDraft(null)
+        }}
+        onDiscard={() => {
+          localStorage.removeItem(draftKey)
+          setPendingDraft(null)
+          setDraftSavedAt(null)
+        }}
+      />
+
+      {!isEdit && (
+        <div style={{ display: 'inline-flex', border: '1px solid var(--border-default)', borderRadius: 8, overflow: 'hidden', marginBottom: 14 }}>
+          {[
+            ['quick', '1. Quick Add'],
+            ['profile', '2. Complete Profile'],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setFormStep(value)}
+              style={{
+                border: 0,
+                padding: '8px 14px',
+                fontSize: 12.5,
+                fontWeight: 800,
+                cursor: 'pointer',
+                color: formStep === value ? 'var(--brand-700)' : 'var(--text-secondary)',
+                background: formStep === value ? 'var(--brand-50)' : 'transparent',
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="card" style={{ padding: '11px 14px', marginBottom: '14px', display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
         <div>
@@ -263,12 +368,10 @@ export default function StudentForm() {
           <button
             className="btn btn-secondary btn-sm"
             onClick={() => {
-              if (window.confirm('Clear the current admission draft?')) {
-                localStorage.removeItem(draftKey)
-                setForm(EMPTY_FORM)
-                setDirty(false)
-                setDraftSavedAt(null)
-              }
+              localStorage.removeItem(draftKey)
+              setForm(EMPTY_FORM)
+              setDirty(false)
+              setDraftSavedAt(null)
             }}
           >
             Clear draft
@@ -277,6 +380,8 @@ export default function StudentForm() {
       </div>
 
       {/* Personal Information */}
+      {(isEdit || formStep === 'quick') && (
+      <>
       <SectionCard title="Personal Information" subtitle="Name, date of birth and identity">
         <Field label="Full Name (English)" required error={errors.name_en}>
           <input className={`input${errors.name_en ? ' error' : ''}`} value={form.name_en} onChange={setField('name_en')} placeholder="e.g. Rahul Patel" />
@@ -315,7 +420,12 @@ export default function StudentForm() {
       </SectionCard>
 
       {/* Academic Details */}
-      <SectionCard title="Academic Details" subtitle="Class, year, GR number and enrollment">
+      <SectionCard
+        title="Enrollment Placement"
+        subtitle={isEdit
+          ? 'Class, year, roll, and status update the current enrollment. Permanent profile fields stay separate.'
+          : 'Choose the first academic year, class, and roll for this student.'}
+      >
         <Field label="Class / Standard" required error={errors.class_id}>
           <select className={`input${errors.class_id ? ' error' : ''}`} value={form.class_id} onChange={setField('class_id')}>
             <option value="">Select class...</option>
@@ -348,8 +458,55 @@ export default function StudentForm() {
           </Field>
         )}
       </SectionCard>
+      {isEdit && (
+        <div className="card" style={{ marginBottom: '14px' }}>
+          <div style={{
+            padding: '13px 18px',
+            borderBottom: '1px solid var(--border-subtle)',
+            background: 'var(--gray-50)',
+          }}>
+            <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>Enrollment History</div>
+            <div style={{ fontSize: '11.5px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+              Year-by-year placement, roll number, status, and promotion action.
+            </div>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            {loadingHistory ? (
+              <table className="data-table"><TableSkeleton rows={4} cols={5} /></table>
+            ) : enrollmentHistory.length === 0 ? (
+              <ScreenState type="empty" title="No enrollment history yet" description="History appears after the student is enrolled in an academic year." />
+            ) : (
+              <table className="data-table" style={{ minWidth: 620 }}>
+                <thead>
+                  <tr>
+                    <th>Academic Year</th>
+                    <th>Class</th>
+                    <th>Roll</th>
+                    <th>Status</th>
+                    <th>Promotion</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {enrollmentHistory.map(row => (
+                    <tr key={row.id}>
+                      <td>{row.academic_year_label || row.academic_year_id}</td>
+                      <td>{row.class_name ? `${row.class_name} - ${row.division}` : row.class_id}</td>
+                      <td>{row.roll_number || '-'}</td>
+                      <td><StatusBadge status={row.status} /></td>
+                      <td>{row.promotion_action || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+      </>
+      )}
 
       {/* Family & Contact */}
+      {(isEdit || formStep === 'quick') && (
       <SectionCard title="Family & Contact" subtitle="Parent information and contact details">
         <Field label="Father's Name" required error={errors.father_name}>
           <input className={`input${errors.father_name ? ' error' : ''}`} value={form.father_name} onChange={setField('father_name')} placeholder="Father's full name" />
@@ -488,6 +645,11 @@ export default function StudentForm() {
             />
           </Field>
         </div>
+      </SectionCard>
+      )}
+
+      {(isEdit || formStep === 'profile') && (
+      <SectionCard title="Complete Profile" subtitle="Optional details that can be filled after quick admission">
         <div style={{ gridColumn: '1 / -1' }}>
           <Field label="Reason for Leaving">
             <textarea
@@ -501,12 +663,23 @@ export default function StudentForm() {
           </Field>
         </div>
       </SectionCard>
+      )}
 
       {/* Actions */}
       <div style={{ display: 'flex', gap: '10px', paddingBottom: '32px', flexWrap: 'wrap' }}>
-        <button onClick={handleSubmit} disabled={loading} className="btn btn-primary btn-lg" style={{ flex: 1, minWidth: '140px' }}>
-          {loading ? <><span className="spinner" style={{ width: '15px', height: '15px' }} /> Saving...</> : isEdit ? 'Save Changes' : 'Add Student'}
+        <button onClick={() => handleSubmit(!isEdit && formStep === 'quick' ? 'continue' : 'list')} disabled={loading} className="btn btn-primary btn-lg" style={{ flex: 1, minWidth: '180px' }}>
+          {loading ? <><span className="spinner" style={{ width: '15px', height: '15px' }} /> Saving...</> : isEdit ? 'Save Changes' : formStep === 'quick' ? 'Save Student & Continue' : 'Save Additional Details'}
         </button>
+        {!isEdit && formStep === 'quick' && (
+          <button onClick={() => handleSubmit('add-another')} disabled={loading} className="btn btn-secondary btn-lg" style={{ flex: 1, minWidth: '160px' }}>
+            Save & Add Another
+          </button>
+        )}
+        {!isEdit && formStep === 'profile' && (
+          <button onClick={() => navigate('/students')} className="btn btn-secondary btn-lg" style={{ flex: 1, minWidth: '130px' }}>
+            Skip for Now
+          </button>
+        )}
         <button onClick={leaveForm} className="btn btn-secondary btn-lg" style={{ flex: 1, minWidth: '100px' }}>
           Cancel
         </button>

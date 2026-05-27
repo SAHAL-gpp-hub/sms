@@ -36,9 +36,18 @@ const Icons = {
   ),
 }
 
+const STAT_LINKS = {
+  'Last Exam': '/portal/results',
+  Grade: '/portal/results',
+  Attendance: '/portal/attendance',
+  'Fee Balance': '/portal/fees',
+}
+
 function StatBubble({ label, value, subtext, color, icon }) {
+  const href = STAT_LINKS[label]
+  const Wrapper = href ? Link : 'div'
   return (
-    <div style={{ background: 'white', borderRadius: '14px', padding: '13px 14px', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+    <Wrapper to={href} style={{ background: 'white', borderRadius: '14px', padding: '13px 14px', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', textDecoration: 'none', cursor: href ? 'pointer' : 'default', transition: 'transform 0.15s' }}>
       <div style={{ width: '42px', height: '42px', borderRadius: '11px', background: color + '18', display: 'flex', alignItems: 'center', justifyContent: 'center', color, flexShrink: 0 }}>
         {icon}
       </div>
@@ -46,8 +55,9 @@ function StatBubble({ label, value, subtext, color, icon }) {
         <div style={{ fontSize: '10px', fontWeight: 800, color: color, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>
         <div style={{ fontSize: '19px', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.03em', lineHeight: 1.1 }}>{value}</div>
         {subtext && <div style={{ fontSize: '10.5px', color: '#64748b', fontWeight: 600, marginTop: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtext}</div>}
+        {href && <div style={{ fontSize: 10, color, marginTop: 4, fontWeight: 800 }}>Tap to view</div>}
       </div>
-    </div>
+    </Wrapper>
   )
 }
 
@@ -109,6 +119,18 @@ export default function PortalDashboard() {
   const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })
   const firstName = profile?.name_en?.split(' ')[0] || (isParent ? 'Parent' : 'Student')
 
+  if (isParent && !loading && children.length === 0) {
+    return (
+      <div style={{ background: 'white', borderRadius: 16, padding: '34px 22px', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>{Icons.profile}</div>
+        <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>No student linked yet</div>
+        <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6, marginTop: 6 }}>
+          Ask the school admin to link your parent account to your child. Fees, attendance, and results will appear here after linking.
+        </div>
+      </div>
+    )
+  }
+
   return (
     <>
       <style>{`
@@ -162,13 +184,31 @@ export default function PortalDashboard() {
               Hello, {firstName}!
             </div>
             <div style={{ fontSize: '12px', opacity: 0.75, marginTop: '4px', fontWeight: 600 }}>
-              {profile ? `${profile.class_label || 'Class not assigned'} · Roll ${profile.roll_number || '—'} · ${profile.student_id || ''}` : 'Iqra English Medium School'}
+              {profile ? `${profile.class_label || 'Class not assigned'} · Roll ${profile.roll_number || '—'} · ${profile.academic_year_label || 'Current year'} · ${profile.student_id || ''}` : 'Iqra English Medium School'}
             </div>
           </div>
         </div>
 
         <div className="portal-dashboard-content">
           <div className="portal-dashboard-primary">
+            {!loading && hasBalance && (
+              <Link to="/portal/fees" style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                padding: '12px 14px',
+                borderRadius: 14,
+                background: '#fff1f2',
+                border: '1px solid #fecdd3',
+                color: '#b91c1c',
+                textDecoration: 'none',
+                fontWeight: 900,
+              }}>
+                <span>Fee due: {balance} outstanding</span>
+                <span className="btn btn-danger btn-sm">Pay Now</span>
+              </Link>
+            )}
             {/* Parent: show linked children summary if no child selected yet */}
             {isParent && children.length > 0 && (
               <div style={{ background: 'white', borderRadius: '14px', padding: '12px 14px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>

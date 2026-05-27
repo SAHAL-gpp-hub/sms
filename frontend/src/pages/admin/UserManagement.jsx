@@ -6,8 +6,9 @@ import toast from 'react-hot-toast'
 import { adminAPI, setupAPI, studentAPI, extractError } from '../../services/api'
 import {
   PageHeader, TabBar, EmptyState, TableSkeleton,
-  ConfirmModal, SearchInput, Select, FilterRow, Field,
+  ConfirmModal, SearchInput, Select, FilterRow, Field, ResponsiveTable,
 } from '../../components/UI'
+import { useAcademicYear } from '../../contexts/academicYearContext'
 
 // ── Role colours ──────────────────────────────────────────────────────────────
 const ROLE_META = {
@@ -82,36 +83,40 @@ function PasswordResetModal({ user, onClose, onSuccess }) {
 // TAB 1 — Users List
 // ══════════════════════════════════════════════════════════════════════════════
 function UsersTab() {
-  const [users, setUsers]             = useState([])
-  const [loading, setLoading]         = useState(true)
-  const [roleFilter, setRoleFilter]   = useState('')
-  const [search, setSearch]           = useState('')
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [roleFilter, setRoleFilter] = useState('')
+  const [search, setSearch] = useState('')
   const [resetTarget, setResetTarget] = useState(null)
   const [deactivateTarget, setDeactivateTarget] = useState(null)
   const [deactivating, setDeactivating] = useState(false)
 
   const fetchUsers = useCallback(async () => {
     setLoading(true)
+    setLoadError('')
     try {
-      const params = {}
-      if (roleFilter) params.role = roleFilter
-      const res = await adminAPI.listUsers(params)
+      const res = await adminAPI.listUsers()
       setUsers(res.data || [])
     } catch (err) {
-      toast.error(extractError(err))
+      const message = extractError(err)
+      setLoadError(message)
+      toast.error(message)
     } finally {
       setLoading(false)
     }
-  }, [roleFilter])
+  }, [])
 
   useEffect(() => { fetchUsers() }, [fetchUsers])
 
-  const filtered = search
-    ? users.filter(u =>
-        u.name.toLowerCase().includes(search.toLowerCase()) ||
-        u.email.toLowerCase().includes(search.toLowerCase())
+  const normalizedSearch = search.trim().toLowerCase()
+  const filtered = normalizedSearch
+    ? users.filter(user =>
+        user.name.toLowerCase().includes(normalizedSearch) ||
+        user.email.toLowerCase().includes(normalizedSearch)
       )
     : users
+  const visibleUsers = roleFilter ? filtered.filter(user => user.role === roleFilter) : filtered
 
   const handleDeactivate = async () => {
     if (!deactivateTarget) return
@@ -128,19 +133,23 @@ function UsersTab() {
     }
   }
 
-  const roleOptions = [
-    { value: 'admin',   label: 'Admin' },
-    { value: 'teacher', label: 'Teacher' },
-    { value: 'student', label: 'Student' },
-    { value: 'parent',  label: 'Parent' },
+  const counts = users.reduce((acc, user) => {
+    acc[user.role] = (acc[user.role] || 0) + 1
+    return acc
+  }, {})
+
+  const roleFilters = [
+    { value: '', label: 'All roles', count: users.length },
+    ...Object.entries(ROLE_META).map(([value, meta]) => ({ value, label: meta.label, count: counts[value] || 0 })),
   ]
 
-  // Counts by role
-  const counts = users.reduce((acc, u) => { acc[u.role] = (acc[u.role] || 0) + 1; return acc }, {})
+  const clearFilters = () => {
+    setSearch('')
+    setRoleFilter('')
+  }
 
   return (
     <div>
-      {/* Role summary chips */}
       {!loading && users.length > 0 && (
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '14px' }}>
           {Object.entries(ROLE_META).map(([role, meta]) => (
@@ -161,15 +170,50 @@ function UsersTab() {
 
       <FilterRow>
         <SearchInput value={search} onChange={setSearch} placeholder="Search name or email…" style={{ flex: 1, minWidth: '180px' }} />
-        <Select
-          value={roleFilter}
-          onChange={e => setRoleFilter(e.target.value)}
-          options={roleOptions}
-          placeholder="All roles"
-          style={{ minWidth: '140px' }}
-        />
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          {roleFilters.map(role => {
+            const active = roleFilter === role.value
+            const roleMeta = role.value ? ROLE_META[role.value] : null
+            return (
+              <button
+                key={role.value || 'all'}
+                type="button"
+                onClick={() => setRoleFilter(role.value)}
+                aria-pressed={active}
+                disabled={loading}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '7px',
+                  padding: '9px 12px',
+                  borderRadius: '999px',
+                  border: `1px solid ${active ? (roleMeta ? roleMeta.border : 'var(--brand-200)') : 'var(--border-default)'}`,
+                  background: active ? (roleMeta ? roleMeta.bg : 'var(--brand-50)') : 'var(--surface-0)',
+                  color: active ? (roleMeta ? roleMeta.color : 'var(--brand-700)') : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  fontFamily: 'var(--font-sans)',
+                  boxShadow: active ? 'var(--shadow-xs)' : 'none',
+                }}
+              >
+                {role.label}
+                <span style={{
+                  minWidth: '22px',
+                  padding: '1px 6px',
+                  borderRadius: '999px',
+                  background: active ? 'rgba(255,255,255,0.72)' : 'var(--gray-100)',
+                  color: active ? 'inherit' : 'var(--text-tertiary)',
+                  textAlign: 'center',
+                  fontSize: '11px',
+                  lineHeight: 1.4,
+                }}>{role.count}</span>
+              </button>
+            )
+          })}
+        </div>
         {(search || roleFilter) && (
-          <button className="btn btn-ghost btn-sm" onClick={() => { setSearch(''); setRoleFilter('') }}>Clear</button>
+          <button className="btn btn-ghost btn-sm" onClick={clearFilters}>Clear</button>
         )}
         <Link to="/admin/users/new" className="btn btn-primary" style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}>
           <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -180,8 +224,15 @@ function UsersTab() {
       </FilterRow>
 
       <div className="card">
-        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          <table className="data-table" style={{ minWidth: '560px' }}>
+        {loadError && users.length === 0 ? (
+          <EmptyState
+            icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v4m0 4h.01M5.07 19h13.86a2 2 0 001.73-3L13.73 4a2 2 0 00-3.46 0L3.34 16a2 2 0 001.73 3z" /></svg>}
+            title="Could not load users"
+            description={loadError}
+            action={<button className="btn btn-secondary btn-sm" onClick={fetchUsers}>Try again</button>}
+          />
+        ) : loading ? (
+          <ResponsiveTable>
             <thead>
               <tr>
                 <th>Name</th>
@@ -191,69 +242,88 @@ function UsersTab() {
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
-            {loading ? (
-              <TableSkeleton rows={6} cols={5} />
-            ) : filtered.length === 0 ? (
-              <tbody>
-                <tr>
-                  <td colSpan={5} style={{ padding: 0, border: 'none' }}>
-                    <EmptyState
-                      icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>}
-                      title="No users found"
-                      description="Create the first user account above"
-                    />
+            <TableSkeleton rows={6} cols={5} />
+          </ResponsiveTable>
+        ) : visibleUsers.length === 0 ? (
+          <EmptyState
+            icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>}
+            title={search || roleFilter ? 'No users match the current filters' : 'No users found'}
+            description={search || roleFilter ? 'Clear the search or role filter to see the full list.' : 'Create the first user account above.'}
+            action={search || roleFilter ? <button className="btn btn-secondary btn-sm" onClick={clearFilters}>Clear filters</button> : <Link to="/admin/users/new" className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>Add User</Link>}
+          />
+        ) : (
+          <ResponsiveTable>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleUsers.map(user => (
+                <tr key={user.id}>
+                  <td data-label="Name" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{user.name}</td>
+                  <td data-label="Email" style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{user.email}</td>
+                  <td data-label="Role"><RoleBadge role={user.role} /></td>
+                  <td data-label="Status">
+                    <span style={{
+                      display: 'inline-flex',
+                      fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
+                      background: user.is_active ? 'var(--success-100)' : 'var(--gray-100)',
+                      color: user.is_active ? 'var(--success-700)' : user.role === 'teacher' ? 'var(--warning-700)' : 'var(--gray-500)',
+                    }}>
+                      {user.is_active ? 'Active' : user.role === 'teacher' ? 'Pending invite' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td data-label="Actions" style={{ textAlign: 'right' }}>
+                    <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                      <Link
+                        to={`/admin/users/${user.id}/edit`}
+                        style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--brand-600)', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', textDecoration: 'none' }}
+                      >
+                        Edit
+                      </Link>
+                      <button
+                        onClick={() => setResetTarget(user)}
+                        style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--warning-600)', background: 'var(--warning-50)', border: '1px solid #fde68a', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
+                      >
+                        Reset PW
+                      </button>
+                      {!user.is_active && user.role === 'teacher' ? (
+                        <button
+                          onClick={async () => {
+                            try {
+                              await adminAPI.resendTeacherInvite(user.id)
+                              toast.success(`Invite resent to ${user.name}`)
+                            } catch (err) {
+                              toast.error(extractError(err))
+                            }
+                          }}
+                          style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--brand-700)', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
+                        >
+                          Resend Invite
+                        </button>
+                      ) : user.is_active ? (
+                        <button
+                          onClick={() => setDeactivateTarget(user)}
+                          style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--danger-600)', background: 'var(--danger-50)', border: '1px solid var(--danger-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
+                        >
+                          Deactivate
+                        </button>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
-              </tbody>
-            ) : (
-              <tbody>
-                {filtered.map(user => (
-                  <tr key={user.id}>
-                    <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{user.name}</td>
-                    <td style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{user.email}</td>
-                    <td><RoleBadge role={user.role} /></td>
-                    <td>
-                      <span style={{
-                        fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
-                        background: user.is_active ? 'var(--success-100)' : 'var(--gray-100)',
-                        color: user.is_active ? 'var(--success-700)' : 'var(--gray-500)',
-                      }}>
-                        {user.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                        <Link
-                          to={`/admin/users/${user.id}/edit`}
-                          style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--brand-600)', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', textDecoration: 'none' }}
-                        >
-                          Edit
-                        </Link>
-                        <button
-                          onClick={() => setResetTarget(user)}
-                          style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--warning-600)', background: 'var(--warning-50)', border: '1px solid #fde68a', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
-                        >
-                          Reset PW
-                        </button>
-                        {user.is_active && (
-                          <button
-                            onClick={() => setDeactivateTarget(user)}
-                            style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--danger-600)', background: 'var(--danger-50)', border: '1px solid var(--danger-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
-                          >
-                            Deactivate
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            )}
-          </table>
-        </div>
-        {!loading && filtered.length > 0 && (
+              ))}
+            </tbody>
+          </ResponsiveTable>
+        )}
+        {!loading && visibleUsers.length > 0 && (
           <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border-subtle)', fontSize: '12px', color: 'var(--text-tertiary)' }}>
-            Showing {filtered.length} of {users.length} user{users.length !== 1 ? 's' : ''}
+            Showing {visibleUsers.length} of {users.length} user{users.length !== 1 ? 's' : ''}
           </div>
         )}
       </div>
@@ -262,7 +332,7 @@ function UsersTab() {
       <ConfirmModal
         open={!!deactivateTarget}
         title="Deactivate User"
-        message={`Deactivate "${deactivateTarget?.name}"? They won't be able to log in. You can re-activate them by editing the account.`}
+        message={`Deactivate "${deactivateTarget?.name}"? They won't be able to log in. You can reactivate them later from the edit screen.`}
         confirmLabel="Deactivate"
         confirmVariant="danger"
         onConfirm={handleDeactivate}
@@ -360,27 +430,39 @@ function CorrectionRequestsTab() {
 // ══════════════════════════════════════════════════════════════════════════════
 // TAB 2 — Teacher Class Assignments
 // ══════════════════════════════════════════════════════════════════════════════
-function TeacherAssignmentsTab() {
+function TeacherAssignmentsTab({ selectedTeacherId = '', onTeacherSelected }) {
+  const { selectedYearId, years } = useAcademicYear()
   const [teachers, setTeachers]         = useState([])
-  const [selectedTeacher, setSelectedTeacher] = useState('')
+  const [selectedTeacher, setSelectedTeacherState] = useState(selectedTeacherId ? String(selectedTeacherId) : '')
   const [assignments, setAssignments]   = useState([])
   const [classes, setClasses]           = useState([])
-  const [years, setYears]               = useState([])
   const [subjects, setSubjects]         = useState([])
   const [loading, setLoading]           = useState(false)
   const [adding, setAdding]             = useState(false)
   const [removing, setRemoving]         = useState(null)
   const [form, setForm] = useState({ class_id: '', academic_year_id: '', subject_id: '' })
 
+  const setSelectedTeacher = useCallback((teacherId) => {
+    setSelectedTeacherState(teacherId)
+    onTeacherSelected?.(teacherId)
+  }, [onTeacherSelected])
+
   useEffect(() => {
     adminAPI.listUsers({ role: 'teacher' }).then(r => setTeachers(r.data || []))
-    setupAPI.getClasses().then(r => setClasses(r.data || []))
-    setupAPI.getAcademicYears().then(r => {
-      setYears(r.data || [])
-      const curr = r.data?.find(y => y.is_current)
-      if (curr) setForm(f => ({ ...f, academic_year_id: String(curr.id) }))
-    })
   }, [])
+
+  useEffect(() => {
+    if (selectedTeacherId) setSelectedTeacherState(String(selectedTeacherId))
+  }, [selectedTeacherId])
+
+  useEffect(() => {
+    setForm(f => ({ ...f, academic_year_id: selectedYearId || '', class_id: '', subject_id: '' }))
+    if (!selectedYearId) {
+      setClasses([])
+      return
+    }
+    setupAPI.getClasses(selectedYearId).then(r => setClasses(r.data || []))
+  }, [selectedYearId])
 
   // Load subjects when class changes
   useEffect(() => {
@@ -486,7 +568,7 @@ function TeacherAssignmentsTab() {
               </div>
               <div>
                 <label className="label" style={{ color: 'var(--brand-700)' }}>Academic Year *</label>
-                <select className="input" value={form.academic_year_id} onChange={e => setForm(f => ({ ...f, academic_year_id: e.target.value }))}>
+                <select className="input" value={form.academic_year_id} onChange={e => setForm(f => ({ ...f, academic_year_id: e.target.value }))} disabled>
                   <option value="">Select year…</option>
                   {yearOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
@@ -652,12 +734,21 @@ function PortalLinkingTab() {
     setBulkResult(null)
     try {
       let sent = 0
+      let skippedAlreadyLinked = 0
+      let skippedNoEmail = 0
       const errors = []
       for (const student of linkStatus?.unlinked_students || []) {
         for (const accountType of ['student', 'parent']) {
           const alreadyLinked = accountType === 'student' ? student.has_student_account : student.has_parent_account
           const hasEmail = accountType === 'student' ? student.has_student_email : student.has_guardian_email
-          if (alreadyLinked || !hasEmail) continue
+          if (alreadyLinked) {
+            skippedAlreadyLinked += 1
+            continue
+          }
+          if (!hasEmail) {
+            skippedNoEmail += 1
+            continue
+          }
           try {
             await adminAPI.createActivationInvite(student.id, accountType)
             sent += 1
@@ -666,7 +757,13 @@ function PortalLinkingTab() {
           }
         }
       }
-      setBulkResult({ sent, errors })
+      setBulkResult({
+        sent,
+        skippedAlreadyLinked,
+        skippedNoEmail,
+        errors,
+        failedStudents: errors.map(error => error.split(':')[0]),
+      })
       toast.success(`Invite links queued: ${sent}`)
       fetchAll()
       fetchLinkStatus()
@@ -677,20 +774,21 @@ function PortalLinkingTab() {
     }
   }
 
-  const handleGenerateOne = async (student) => {
-    const studentId = student.id
-    setGeneratingFor(studentId)
+  const handleGenerateAccount = async (student, accountType) => {
+    const hasAccount = accountType === 'student' ? student.has_student_account : student.has_parent_account
+    const hasEmail = accountType === 'student' ? student.has_student_email : student.has_guardian_email
+    if (hasAccount) {
+      toast.success(`${accountType === 'student' ? 'Student' : 'Parent'} account is already linked`)
+      return
+    }
+    if (!hasEmail) {
+      toast.error(`${accountType === 'student' ? 'Student' : 'Guardian'} email is missing`)
+      return
+    }
+    setGeneratingFor(`${student.id}-${accountType}`)
     try {
-      let sent = 0
-      if (!student.has_student_account && student.has_student_email) {
-        await adminAPI.createActivationInvite(studentId, 'student')
-        sent += 1
-      }
-      if (!student.has_parent_account && student.has_guardian_email) {
-        await adminAPI.createActivationInvite(studentId, 'parent')
-        sent += 1
-      }
-      toast.success(sent ? `Invite link${sent !== 1 ? 's' : ''} queued` : 'No activation-ready email found')
+      await adminAPI.createActivationInvite(student.id, accountType)
+      toast.success(`${accountType === 'student' ? 'Student' : 'Parent'} invite link queued`)
       fetchAll()
       fetchLinkStatus()
     } catch (err) {
@@ -801,15 +899,21 @@ function PortalLinkingTab() {
                 fontSize: '13px', lineHeight: 1.6,
               }}>
                 <div style={{ fontWeight: 700, color: 'var(--brand-700)', marginBottom: '4px' }}>
-                  Generation complete
+                  Bulk invite complete
                 </div>
-                <div style={{ color: 'var(--text-secondary)' }}>
-                  Invite links queued: <strong>{bulkResult.sent}</strong>
-                </div>
+                <div style={{ color: 'var(--text-secondary)' }}>Invite links queued: <strong>{bulkResult.sent}</strong></div>
+                <div style={{ color: 'var(--text-secondary)' }}>{bulkResult.skippedAlreadyLinked || 0} already linked account(s) skipped</div>
+                {(bulkResult.skippedNoEmail || 0) > 0 && (
+                  <div style={{ color: 'var(--warning-600)' }}>
+                    {bulkResult.skippedNoEmail} account(s) skipped because email is missing.{' '}
+                    <a href="/students" style={{ color: 'var(--brand-600)', fontWeight: 800 }}>Update student emails</a>
+                  </div>
+                )}
                 {bulkResult.errors?.length > 0 && (
                   <div style={{ marginTop: '6px', color: 'var(--danger-600)', fontSize: '12px' }}>
                     {bulkResult.errors.length} error{bulkResult.errors.length !== 1 ? 's' : ''}:
-                    {bulkResult.errors.map((e, i) => <div key={i} style={{ marginLeft: '8px' }}>• {e}</div>)}
+                    {bulkResult.errors.slice(0, 3).map((e, i) => <div key={i} style={{ marginLeft: '8px' }}>• {e}</div>)}
+                    {bulkResult.errors.length > 3 && <div style={{ marginLeft: '8px' }}>• {bulkResult.errors.length - 3} more failed</div>}
                   </div>
                 )}
               </div>
@@ -875,21 +979,42 @@ function PortalLinkingTab() {
                             )}
                           </td>
                           <td style={{ textAlign: 'right' }}>
-                            <button
-                              onClick={() => handleGenerateOne(s)}
-                              disabled={generatingFor === s.id}
-                              style={{
-                                padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600,
-                                color: 'var(--brand-600)', background: 'var(--brand-50)',
-                                border: '1px solid var(--brand-100)', cursor: 'pointer',
-                                fontFamily: 'var(--font-sans)',
-                              }}
-                            >
-                              {generatingFor === s.id
-                                ? <span className="spinner" style={{ width: '11px', height: '11px' }} />
-                                : 'Send invite'
-                              }
-                            </button>
+                            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                              <button
+                                onClick={() => handleGenerateAccount(s, 'student')}
+                                disabled={generatingFor === `${s.id}-student` || s.has_student_account || !s.has_student_email}
+                                style={{
+                                  padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 700,
+                                  color: s.has_student_account || !s.has_student_email ? 'var(--gray-400)' : 'var(--brand-600)',
+                                  background: s.has_student_account || !s.has_student_email ? 'var(--gray-50)' : 'var(--brand-50)',
+                                  border: `1px solid ${s.has_student_account || !s.has_student_email ? 'var(--border-subtle)' : 'var(--brand-100)'}`,
+                                  cursor: s.has_student_account || !s.has_student_email ? 'not-allowed' : 'pointer',
+                                  fontFamily: 'var(--font-sans)',
+                                }}
+                              >
+                                {generatingFor === `${s.id}-student`
+                                  ? <span className="spinner" style={{ width: '11px', height: '11px' }} />
+                                  : 'Student link'
+                                }
+                              </button>
+                              <button
+                                onClick={() => handleGenerateAccount(s, 'parent')}
+                                disabled={generatingFor === `${s.id}-parent` || s.has_parent_account || !s.has_guardian_email}
+                                style={{
+                                  padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 700,
+                                  color: s.has_parent_account || !s.has_guardian_email ? 'var(--gray-400)' : 'var(--warning-700)',
+                                  background: s.has_parent_account || !s.has_guardian_email ? 'var(--gray-50)' : 'var(--warning-50)',
+                                  border: `1px solid ${s.has_parent_account || !s.has_guardian_email ? 'var(--border-subtle)' : '#fde68a'}`,
+                                  cursor: s.has_parent_account || !s.has_guardian_email ? 'not-allowed' : 'pointer',
+                                  fontFamily: 'var(--font-sans)',
+                                }}
+                              >
+                                {generatingFor === `${s.id}-parent`
+                                  ? <span className="spinner" style={{ width: '11px', height: '11px' }} />
+                                  : 'Parent link'
+                                }
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -1007,10 +1132,271 @@ function PortalLinkingTab() {
   )
 }
 
+function TeacherRegistrationTab({ onOpenAssignments }) {
+  const [teachers, setTeachers] = useState([])
+  const [assignmentCounts, setAssignmentCounts] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [resending, setResending] = useState(null)
+  const [bulkResending, setBulkResending] = useState(false)
+  const [form, setForm] = useState({ name: '', email: '' })
+
+  const loadTeachers = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await adminAPI.listUsers({ role: 'teacher' })
+      const nextTeachers = res.data || []
+      setTeachers(nextTeachers)
+      const activeTeachers = nextTeachers.filter(t => t.is_active)
+      const counts = {}
+      await Promise.all(activeTeachers.map(async teacher => {
+        try {
+          const assignmentRes = await adminAPI.listTeacherAssignments(teacher.id)
+          counts[teacher.id] = (assignmentRes.data || []).length
+        } catch {
+          counts[teacher.id] = 0
+        }
+      }))
+      setAssignmentCounts(counts)
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { loadTeachers() }, [loadTeachers])
+
+  const sendInvite = async e => {
+    e.preventDefault()
+    if (!form.name.trim()) {
+      toast.error('Teacher name is required')
+      return
+    }
+    if (!form.email.trim()) {
+      toast.error('Teacher email is required')
+      return
+    }
+    setSaving(true)
+    try {
+      await adminAPI.createUser({
+        name: form.name.trim(),
+        email: form.email.trim(),
+        role: 'teacher',
+        send_invite: true,
+      })
+      toast.success('Teacher registration link queued')
+      setForm({ name: '', email: '' })
+      loadTeachers()
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const resendInvite = async teacher => {
+    setResending(teacher.id)
+    try {
+      await adminAPI.resendTeacherInvite(teacher.id)
+      toast.success(`Registration link resent to ${teacher.email}`)
+      loadTeachers()
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setResending(null)
+    }
+  }
+
+  const resendAllPending = async () => {
+    setBulkResending(true)
+    try {
+      const res = await adminAPI.resendPendingTeacherInvites()
+      const queued = res.data?.queued || 0
+      const failed = res.data?.failed || 0
+      if (failed) toast.error(`${queued} links queued, ${failed} failed`)
+      else toast.success(`Registration links queued: ${queued}`)
+      loadTeachers()
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setBulkResending(false)
+    }
+  }
+
+  const formatInviteDate = value => {
+    if (!value) return 'Not sent yet'
+    return new Date(value).toLocaleString([], {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
+  const activeCount = teachers.filter(t => t.is_active).length
+  const pendingCount = teachers.length - activeCount
+  const unassignedActiveCount = teachers.filter(t => t.is_active && !assignmentCounts[t.id]).length
+
+  return (
+    <div style={{ display: 'grid', gap: 16 }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 360px), 1fr))',
+        gap: 16,
+        alignItems: 'stretch',
+      }}>
+        <form className="card" onSubmit={sendInvite} style={{ padding: 22, border: '1px solid var(--brand-200)', background: 'linear-gradient(135deg, var(--brand-50), var(--surface-0))' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 18 }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--brand-700)', marginBottom: 8 }}>
+                Teacher Registration
+              </div>
+              <h2 style={{ margin: 0, fontSize: 24, lineHeight: 1.15, color: 'var(--text-primary)' }}>
+                Send setup link
+              </h2>
+            </div>
+            <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--brand-700)', background: 'white', border: '1px solid var(--brand-200)', borderRadius: 999, padding: '5px 10px', whiteSpace: 'nowrap' }}>
+              7 day link
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gap: 14 }}>
+            <Field label="Teacher name" required>
+              <input
+                className="input"
+                value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="e.g. Fatima Sheikh"
+                autoComplete="name"
+              />
+            </Field>
+            <Field label="Teacher email" required>
+              <input
+                className="input"
+                type="email"
+                value={form.email}
+                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                placeholder="teacher@iqraschool.in"
+                autoComplete="email"
+              />
+            </Field>
+            <button className="btn btn-primary btn-lg" disabled={saving}>
+              {saving
+                ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Sending link...</>
+                : <><svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg> Send Teacher Registration Link</>
+              }
+            </button>
+          </div>
+          <div style={{ marginTop: 14, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+            The teacher receives a `/portal/complete-registration` link, sets their own password, and becomes active automatically.
+          </div>
+        </form>
+
+        <div className="card" style={{ padding: 18 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--text-primary)' }}>Teacher Accounts</div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                {activeCount} active · {pendingCount} pending invite · {unassignedActiveCount} need assignment
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={resendAllPending}
+                disabled={!pendingCount || bulkResending}
+              >
+                {bulkResending ? <><span className="spinner" style={{ width: 12, height: 12 }} /> Resending...</> : 'Resend Pending'}
+              </button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => onOpenAssignments()}>
+                Assign Classes
+              </button>
+            </div>
+          </div>
+
+          {loading ? (
+            <table className="data-table"><TableSkeleton rows={4} cols={5} /></table>
+          ) : teachers.length === 0 ? (
+            <EmptyState title="No teachers yet" description="Send the first registration link from the form." />
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table" style={{ minWidth: 860 }}>
+                <thead>
+                  <tr>
+                    <th>Teacher</th>
+                    <th>Email</th>
+                    <th>Status</th>
+                    <th>Last Invite</th>
+                    <th style={{ textAlign: 'right' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {teachers.map(teacher => {
+                    const assignmentCount = assignmentCounts[teacher.id] || 0
+                    const needsAssignment = teacher.is_active && assignmentCount === 0
+                    return (
+                      <tr key={teacher.id}>
+                        <td style={{ fontWeight: 700 }}>{teacher.name}</td>
+                        <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{teacher.email}</td>
+                        <td>
+                          <span style={{
+                            fontSize: 11,
+                            fontWeight: 800,
+                            padding: '3px 8px',
+                            borderRadius: 999,
+                            background: !teacher.is_active ? 'var(--warning-50)' : needsAssignment ? 'var(--brand-50)' : 'var(--success-100)',
+                            color: !teacher.is_active ? 'var(--warning-700)' : needsAssignment ? 'var(--brand-700)' : 'var(--success-700)',
+                          }}>
+                            {!teacher.is_active ? 'Pending invite' : needsAssignment ? 'Active, needs assignment' : 'Active'}
+                          </span>
+                        </td>
+                        <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
+                          {formatInviteDate(teacher.last_invite_sent_at)}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          {!teacher.is_active ? (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => resendInvite(teacher)}
+                              disabled={resending === teacher.id}
+                            >
+                              {resending === teacher.id ? <><span className="spinner" style={{ width: 12, height: 12 }} /> Resending...</> : 'Resend Link'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className={needsAssignment ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
+                              onClick={() => onOpenAssignments(teacher.id)}
+                            >
+                              {needsAssignment ? 'Assign Classes' : `${assignmentCount} Assignment${assignmentCount === 1 ? '' : 's'}`}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // Main UserManagement — tabs wrapper
 // ══════════════════════════════════════════════════════════════════════════════
 const TAB_ICONS = {
+  register: (
+    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a3 3 0 11-6 0 3 3 0 016 0zM4 20a8 8 0 0116 0M19 8v6m3-3h-6" />
+    </svg>
+  ),
   users: (
     <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -1029,9 +1415,11 @@ const TAB_ICONS = {
 }
 
 export default function UserManagement() {
-  const [tab, setTab] = useState('users')
+  const [tab, setTab] = useState('register')
+  const [assignmentTeacherId, setAssignmentTeacherId] = useState('')
 
   const tabs = [
+    { value: 'register',    label: 'Teacher Registration', icon: TAB_ICONS.register },
     { value: 'users',       label: 'Users',              icon: TAB_ICONS.users },
     { value: 'assignments', label: 'Teacher Assignments', icon: TAB_ICONS.assignments },
     { value: 'portal',      label: 'Portal Linking',      icon: TAB_ICONS.portal },
@@ -1042,14 +1430,15 @@ export default function UserManagement() {
     <div>
       <PageHeader
         title="User Management"
-        subtitle="Manage admin, teacher, student and parent accounts · assign classes · link portal accounts"
+        subtitle="Register teachers, manage staff accounts, assign classes, and activate student or parent portal access"
       />
       <div style={{ marginBottom: '16px' }}>
         <TabBar tabs={tabs} active={tab} onChange={setTab} />
       </div>
 
+      {tab === 'register'    && <TeacherRegistrationTab onOpenAssignments={(teacherId = '') => { setAssignmentTeacherId(teacherId ? String(teacherId) : ''); setTab('assignments') }} />}
       {tab === 'users'       && <UsersTab />}
-      {tab === 'assignments' && <TeacherAssignmentsTab />}
+      {tab === 'assignments' && <TeacherAssignmentsTab selectedTeacherId={assignmentTeacherId} onTeacherSelected={setAssignmentTeacherId} />}
       {tab === 'portal'      && <PortalLinkingTab />}
       {tab === 'corrections' && <CorrectionRequestsTab />}
     </div>

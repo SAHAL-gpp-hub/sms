@@ -343,10 +343,15 @@ def seed() -> None:
                 fee_structures_by_class[cls.id].append(structure)
 
         student_fees: dict[int, list[StudentFee]] = {}
+        enrollment_by_student = {
+            enrollment.student_id: enrollment
+            for enrollment in db.query(Enrollment).all()
+        }
         for student in students:
             student_fees[student.id] = []
             for structure in fee_structures_by_class[student.class_id]:
                 fee = StudentFee(
+                    enrollment_id=enrollment_by_student[student.id].id,
                     student_id=student.id,
                     fee_structure_id=structure.id,
                     concession=Decimal("0"),
@@ -393,6 +398,7 @@ def seed() -> None:
             for subject, score in zip(subjects, scores, strict=True):
                 db.add(
                     Mark(
+                        enrollment_id=enrollment_by_student[student.id].id,
                         student_id=student.id,
                         subject_id=subject.id,
                         exam_id=annual_exam.id,
@@ -415,6 +421,7 @@ def seed() -> None:
             for student in students:
                 db.add(
                     Attendance(
+                        enrollment_id=enrollment_by_student[student.id].id,
                         student_id=student.id,
                         class_id=student.class_id,
                         date=attendance_date,

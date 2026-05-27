@@ -151,7 +151,7 @@ function ChildSwitcherDrawer({ open, onClose, childList, selectedChildId, onSele
                     {child.name_en}
                   </div>
                   <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600, marginTop: 2 }}>
-                    Std {child.class_id} · Roll {child.roll_number || '—'} · {child.student_id}
+                    {child.class_label || 'Class not assigned'} · Roll {child.roll_number || '—'} · {child.academic_year_label || 'Current year'}
                   </div>
                   <div style={{ marginTop: 4 }}>
                     <span style={{
@@ -231,7 +231,7 @@ export default function PortalLayout() {
     || (isParent ? 'Parent Portal' : 'Student')
 
   const displaySub = profile
-    ? `Std ${profile.class_id} · Roll ${profile.roll_number || '—'}`
+    ? `${profile.class_label || 'Class not assigned'} · Roll ${profile.roll_number || '—'}${profile.academic_year_label ? ` · ${profile.academic_year_label}` : ''}`
     : isParent
       ? childrenLoading
         ? 'Loading linked students…'
@@ -386,7 +386,7 @@ export default function PortalLayout() {
         .portal-icon-btn:hover { background:rgba(255,255,255,0.25); }
 
         .portal-main {
-          flex:1; overflow-y:auto; padding:18px 16px 104px;
+          flex:1; overflow-y:auto; padding:18px 16px calc(104px + env(safe-area-inset-bottom, 0px));
           -webkit-overflow-scrolling:touch;
         }
 
@@ -527,7 +527,7 @@ export default function PortalLayout() {
               ))}
             </nav>
             <div className="portal-sidebar-footer">
-              Optimized for mobile, tablet, and desktop workflows.
+              {profile?.academic_year_label ? `Current view: ${profile.academic_year_label}` : 'Optimized for mobile, tablet, and desktop workflows.'}
             </div>
           </aside>
 
@@ -556,6 +556,7 @@ export default function PortalLayout() {
                 <button
                   className="portal-icon-btn"
                   onClick={() => setDrawerOpen(true)}
+                  aria-label={`Switch student - ${children.length} linked`}
                   title={`Switch student (${children.length} linked)`}
                   style={{ position: 'relative' }}
                 >
@@ -576,7 +577,7 @@ export default function PortalLayout() {
                 </button>
               )}
               {/* Logout */}
-              <button className="portal-icon-btn" onClick={handleLogout} title="Logout">
+              <button className="portal-icon-btn" onClick={handleLogout} title="Logout" aria-label="Log out of portal">
                 <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                     d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -587,7 +588,7 @@ export default function PortalLayout() {
 
           {/* ── Active child strip (parent with >1 child) ── */}
           {isParent && children.length > 1 && profile && (
-            <button className="portal-active-strip" onClick={() => setDrawerOpen(true)}>
+            <button className="portal-active-strip" onClick={() => setDrawerOpen(true)} aria-label={`Switch student. Current student ${profile.name_en}`}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {/* Avatar chips */}
                 <div style={{ display: 'flex' }}>

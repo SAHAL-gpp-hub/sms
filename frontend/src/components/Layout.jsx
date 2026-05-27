@@ -1,6 +1,21 @@
 import { useState, useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
+import AcademicYearContextBar from './AcademicYearContextBar'
+import AcademicYearProvider from './AcademicYearProvider'
+import { useAcademicYear } from '../contexts/academicYearContext'
+
+function YearScopedContent({ pathname }) {
+  const { selectedYearId, refreshKey } = useAcademicYear()
+  return (
+    <main
+      key={`${pathname}:${selectedYearId || 'no-year'}:${refreshKey}`}
+      className="page-enter page-content app-content"
+    >
+      <Outlet />
+    </main>
+  )
+}
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -60,12 +75,10 @@ export default function Layout() {
           </div>
         </div>
 
-        <main
-          key={location.pathname}
-          className="page-enter page-content app-content"
-        >
-          <Outlet />
-        </main>
+        <AcademicYearProvider>
+          <AcademicYearContextBar />
+          <YearScopedContent pathname={location.pathname} />
+        </AcademicYearProvider>
       </div>
     </div>
   )

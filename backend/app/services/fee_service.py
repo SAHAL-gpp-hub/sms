@@ -30,15 +30,23 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.constants import RECEIPT_NUMBER_LOCK_KEY
 from app.models.base_models import (
-    Class, DataAuditActionEnum, FeeHead, FeePayment, FeeStructure, Student, StudentFee, StudentStatusEnum,
+    Class, DataAuditActionEnum, Enrollment, EnrollmentStatusEnum, FeeHead,
+    FeePayment, FeeStructure, Student, StudentFee,
 )
 from app.schemas.fee import (
     FeeHeadCreate, FeeStructureCreate, PaymentCreate,
     StudentLedger, StudentLedgerItem,
 )
 from app.services.audit_service import log_data_change, model_snapshot
+from app.services.student_service import ensure_enrollments_for_legacy_students
 
 logger = logging.getLogger("sms.fees")
+
+ACTIVE_ENROLLMENT_STATUSES = (
+    EnrollmentStatusEnum.active,
+    EnrollmentStatusEnum.retained,
+    EnrollmentStatusEnum.provisional,
+)
 
 
 PRELOADED_FEE_HEADS = [
@@ -164,8 +172,8 @@ def assign_fees_to_class(
     if academic_year_id is None:
         # Infer from the students' academic year or from the fee structures
         student_year = (
-            db.query(Student.academic_year_id)
-            .filter(Student.class_id == class_id, Student.status == StudentStatusEnum.Active)
+            db.query(Enrollment.academic_year_id)
+            .filter(Enrollment.class_id == class_id, Enrollment.status.in_(ACTIVE_ENROLLMENT_STATUSES))
             .first()
         )
         structure_year = (
@@ -184,31 +192,32 @@ def assign_fees_to_class(
         .filter_by(class_id=class_id, academic_year_id=academic_year_id)
         .all()
     )
-    students = (
-        db.query(Student)
+    enrollments = (
+        db.query(Enrollment)
         .filter_by(class_id=class_id, academic_year_id=academic_year_id)
-        .filter(Student.status == StudentStatusEnum.Active)
+        .filter(Enrollment.status.in_(ACTIVE_ENROLLMENT_STATUSES))
         .all()
     )
 
     existing_pairs = {
-        (student_id, fee_structure_id)
-        for student_id, fee_structure_id in (
-            db.query(StudentFee.student_id, StudentFee.fee_structure_id)
+        (enrollment_id, fee_structure_id)
+        for enrollment_id, fee_structure_id in (
+            db.query(StudentFee.enrollment_id, StudentFee.fee_structure_id)
             .filter(StudentFee.academic_year_id == academic_year_id)
-            .filter(StudentFee.student_id.in_([student.id for student in students]))
+            .filter(StudentFee.enrollment_id.in_([enrollment.id for enrollment in enrollments]))
             .filter(StudentFee.fee_structure_id.in_([fs.id for fs in structures]))
             .all()
         )
-    } if students and structures else set()
+    } if enrollments and structures else set()
 
     assigned = 0
-    for student in students:
+    for enrollment in enrollments:
         for fs in structures:
-            pair = (student.id, fs.id)
+            pair = (enrollment.id, fs.id)
             if pair not in existing_pairs:
                 db.add(StudentFee(
-                    student_id=student.id,
+                    enrollment_id=enrollment.id,
+                    student_id=enrollment.student_id,
                     fee_structure_id=fs.id,
                     concession=Decimal("0.00"),
                     net_amount=Decimal(str(fs.amount)),
@@ -240,7 +249,8 @@ def get_student_ledger(db: Session, student_id: int) -> Optional[StudentLedger]:
             joinedload(StudentFee.fee_structure).joinedload(FeeStructure.fee_head),
             joinedload(StudentFee.payments),
         )
-        .filter(StudentFee.student_id == student_id)
+        .join(Enrollment, Enrollment.id == StudentFee.enrollment_id)
+        .filter(Enrollment.student_id == student_id)
         .all()
     )
 
@@ -263,6 +273,9 @@ def get_student_ledger(db: Session, student_id: int) -> Optional[StudentLedger]:
             paid_amount=paid,
             balance=net - paid,
             student_fee_id=sf.id,
+            enrollment_id=sf.enrollment_id,
+            academic_year_id=sf.academic_year_id,
+            invoice_type=sf.invoice_type or "regular",
         ))
 
     return StudentLedger(
@@ -360,7 +373,10 @@ def record_payment(db: Session, data: PaymentCreate, actor_user_id: int | None =
 def get_payments_by_student(db: Session, student_id: int):
     sf_ids = [
         sf.id
-        for sf in db.query(StudentFee).filter_by(student_id=student_id).all()
+        for sf in db.query(StudentFee)
+        .join(Enrollment, Enrollment.id == StudentFee.enrollment_id)
+        .filter(Enrollment.student_id == student_id)
+        .all()
     ]
     if not sf_ids:
         return []
@@ -385,6 +401,19 @@ def get_defaulters(
     Returns students with outstanding fee balance, using a single SQL query
     with GROUP BY instead of a Python loop with one query per student.
     """
+    ensure_enrollments_for_legacy_students(db)
+    unlinked_fees = db.query(StudentFee).filter(StudentFee.enrollment_id.is_(None)).all()
+    linked_any = False
+    for fee in unlinked_fees:
+        enrollment = db.query(Enrollment).filter_by(
+            student_id=fee.student_id,
+            academic_year_id=fee.academic_year_id,
+        ).first()
+        if enrollment:
+            fee.enrollment_id = enrollment.id
+            linked_any = True
+    if linked_any:
+        db.commit()
     payment_totals = (
         db.query(
             FeePayment.student_fee_id.label("student_fee_id"),
@@ -394,51 +423,52 @@ def get_defaulters(
         .subquery()
     )
 
-    fee_year = func.coalesce(StudentFee.academic_year_id, FeeStructure.academic_year_id)
     fee_totals = (
         db.query(
-            StudentFee.student_id.label("student_id"),
+            Enrollment.student_id.label("student_id"),
+            Enrollment.class_id.label("class_id"),
+            Enrollment.academic_year_id.label("academic_year_id"),
             func.coalesce(func.sum(StudentFee.net_amount), 0).label("total_due"),
             func.sum(func.coalesce(payment_totals.c.total_paid, 0)).label("total_paid"),
         )
+        .join(Enrollment, Enrollment.id == StudentFee.enrollment_id)
         .join(FeeStructure, StudentFee.fee_structure_id == FeeStructure.id, isouter=True)
         .outerjoin(payment_totals, payment_totals.c.student_fee_id == StudentFee.id)
     )
 
     if academic_year_id is not None:
-        fee_totals = fee_totals.filter(fee_year == academic_year_id)
+        fee_totals = fee_totals.filter(Enrollment.academic_year_id == academic_year_id)
     else:
-        fee_totals = (
-            fee_totals
-            .join(Student, Student.id == StudentFee.student_id)
-            .filter(fee_year == Student.academic_year_id)
-        )
+        fee_totals = fee_totals.filter(Enrollment.status.in_(ACTIVE_ENROLLMENT_STATUSES))
 
-    fee_totals = fee_totals.group_by(StudentFee.student_id).subquery()
+    if class_id is not None:
+        fee_totals = fee_totals.filter(Enrollment.class_id == class_id)
+
+    fee_totals = fee_totals.group_by(
+        Enrollment.student_id, Enrollment.class_id, Enrollment.academic_year_id
+    ).subquery()
 
     q = (
         db.query(
             Student,
             Class.name.label("class_name"),
+            fee_totals.c.class_id,
+            fee_totals.c.academic_year_id,
             fee_totals.c.total_due,
             fee_totals.c.total_paid,
         )
         .join(fee_totals, fee_totals.c.student_id == Student.id)
-        .outerjoin(Class, Class.id == Student.class_id)
-        .filter(Student.status == StudentStatusEnum.Active)
+        .outerjoin(Class, Class.id == fee_totals.c.class_id)
     )
 
-    if class_id is not None:
-        q = q.filter(Student.class_id == class_id)
-
     defaulters = []
-    for student, class_name, total_due, total_paid in q.all():
+    for student, class_name, row_class_id, row_year_id, total_due, total_paid in q.all():
         balance = Decimal(str(total_due)) - Decimal(str(total_paid))
         if balance > 0:
             defaulters.append({
                 "student_id":   student.id,
                 "student_name": student.name_en,
-                "class_id":     student.class_id,
+                "class_id":     row_class_id,
                 "class_name":   class_name or "—",
                 "contact":      student.contact,
                 "total_due":    float(total_due),

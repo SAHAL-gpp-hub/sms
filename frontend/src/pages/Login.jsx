@@ -1,7 +1,7 @@
 // Login.jsx — Redesigned: warm geometric brutalism meets Islamic pattern art
 // Concept: School in Gujarat → geometric tile motifs, warm saffron-teal palette,
 // bold editorial typography, asymmetric split layout.
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { authAPI, extractError } from '../services/api'
 import { normalizeAuthUser, setAuthUser, setToken } from '../services/auth'
@@ -43,7 +43,7 @@ function FloatingDots({ count = 12, color }) {
         const y = 5 + (i * 11.7) % 90
         const delay = (i * 0.3) % 3
         return (
-          <div key={i} style={{
+          <div key={i} className="floating-dot" style={{
             position: 'absolute',
             left: `${x}%`,
             top: `${y}%`,
@@ -69,6 +69,12 @@ export default function Login() {
   const [otp, setOtp]                   = useState('')
   const [loading, setLoading]           = useState(false)
   const [error, setError]               = useState(null)
+  const showMotion = useMemo(() => {
+    if (typeof window === 'undefined') return false
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+    const lowEnd = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2
+    return !reduced && !lowEnd
+  }, [])
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -553,13 +559,26 @@ export default function Login() {
           .left-stats { flex-wrap: wrap; gap: 16px; }
           .form-title { font-size: 24px; }
         }
+        @media (prefers-reduced-motion: reduce) {
+          .floating-dot,
+          .submit-btn::before,
+          .btn-spinner,
+          .form-header,
+          .field-group,
+          .form-actions,
+          .portal-link,
+          .register-link {
+            animation: none !important;
+            transition: none !important;
+          }
+        }
       `}</style>
 
       <div className="login-root">
         {/* ── Left panel ───────────────────────────── */}
         <div className="login-left">
           <GeometricPattern />
-          <FloatingDots count={10} color="rgba(255,220,160,0.35)" />
+          {showMotion && <FloatingDots count={10} color="rgba(255,220,160,0.35)" />}
 
           {/* Brand */}
           <div className="brand-mark">

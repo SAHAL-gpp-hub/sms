@@ -387,11 +387,12 @@ class ExamSubjectConfig(Base):
 class Mark(Base):
     __tablename__ = "marks"
     __table_args__ = (
-        UniqueConstraint("student_id", "subject_id", "exam_id", name="uq_mark_student_subject_exam"),
+        UniqueConstraint("enrollment_id", "subject_id", "exam_id", name="uq_mark_enrollment_subject_exam"),
     )
 
     id              = Column(Integer, primary_key=True)
-    student_id      = Column(Integer, ForeignKey("students.id"))
+    enrollment_id   = Column(Integer, ForeignKey("enrollments.id", ondelete="CASCADE"), nullable=True, index=True)
+    student_id      = Column(Integer, ForeignKey("students.id"), nullable=True, index=True)  # legacy mirror
     subject_id      = Column(Integer, ForeignKey("subjects.id"))
     exam_id         = Column(Integer, ForeignKey("exams.id"))
     theory_marks    = Column(Numeric(5, 2), nullable=True)
@@ -453,7 +454,8 @@ class StudentFee(Base):
     __tablename__ = "student_fees"
 
     id                = Column(Integer, primary_key=True)
-    student_id        = Column(Integer, ForeignKey("students.id"), index=True)
+    enrollment_id     = Column(Integer, ForeignKey("enrollments.id", ondelete="CASCADE"), nullable=True, index=True)
+    student_id        = Column(Integer, ForeignKey("students.id"), nullable=True, index=True)  # legacy mirror
     fee_structure_id  = Column(Integer, ForeignKey("fee_structures.id"))
     concession        = Column(Numeric(10, 2), default=0)
     net_amount        = Column(Numeric(10, 2), nullable=False)
@@ -516,12 +518,13 @@ class TransferCertificate(Base):
 class Attendance(Base):
     __tablename__ = "attendance"
     __table_args__ = (
-        UniqueConstraint("student_id", "class_id", "date", name="uq_attendance_student_class_date"),
+        UniqueConstraint("enrollment_id", "date", name="uq_attendance_enrollment_date"),
     )
 
     id         = Column(Integer, primary_key=True)
-    student_id = Column(Integer, ForeignKey("students.id"))
-    class_id   = Column(Integer, ForeignKey("classes.id"))
+    enrollment_id = Column(Integer, ForeignKey("enrollments.id", ondelete="CASCADE"), nullable=True, index=True)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=True, index=True)  # legacy mirror
+    class_id   = Column(Integer, ForeignKey("classes.id"), nullable=True, index=True)  # legacy mirror
     date       = Column(Date, nullable=False)
     status     = Column(String(5), nullable=False)
 
@@ -776,7 +779,10 @@ class ProfileCorrectionRequest(Base):
 # ─────────────────────────────────────────────────────────────────────────────
 
 FeeStructure.fee_head = relationship("FeeHead", foreign_keys=[FeeStructure.fee_head_id])
+Attendance.enrollment = relationship("Enrollment", foreign_keys=[Attendance.enrollment_id])
+Mark.enrollment = relationship("Enrollment", foreign_keys=[Mark.enrollment_id])
 StudentFee.student = relationship("Student", foreign_keys=[StudentFee.student_id])
+StudentFee.enrollment = relationship("Enrollment", foreign_keys=[StudentFee.enrollment_id])
 StudentFee.fee_structure = relationship("FeeStructure", foreign_keys=[StudentFee.fee_structure_id])
 StudentFee.payments = relationship("FeePayment", foreign_keys=[FeePayment.student_fee_id])
 StudentFee.source_invoice = relationship("StudentFee", foreign_keys=[StudentFee.source_invoice_id], remote_side=[StudentFee.id])

@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
 import { feeAPI, setupAPI, extractError } from '../../services/api'
 import { PageHeader, FilterRow, Select, EmptyState, TableSkeleton, ConfirmModal, InlineBanner } from '../../components/UI'
+import OnboardingEmptyState from '../../components/OnboardingEmptyState'
+import { useAcademicYear } from '../../contexts/academicYearContext'
 
 const FREQ_COLORS = {
   Monthly:   { bg: 'var(--brand-50)',   color: 'var(--brand-700)',   border: 'var(--brand-200)' },
@@ -21,8 +23,8 @@ function FreqBadge({ freq }) {
 }
 
 export default function FeeStructure() {
+  const { selectedYearId, selectedYear: selectedYearMeta, years, isClosedYear } = useAcademicYear()
   const [classes, setClasses]           = useState([])
-  const [years, setYears]               = useState([])
   const [feeHeads, setFeeHeads]         = useState([])
   const [structures, setStructures]     = useState([])
   const [selectedClass, setSelectedClass] = useState('')
@@ -33,18 +35,24 @@ export default function FeeStructure() {
   const [previewingPlan, setPreviewingPlan] = useState(false)
   const [loadingStructures, setLoadingStructures] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [applyConfirm, setApplyConfirm] = useState(null)
   const [deleting, setDeleting]         = useState(false)
   const [form, setForm] = useState({ fee_head_id: '', amount: '', due_date: '' })
 
   useEffect(() => {
-    setupAPI.getClasses().then(r => setClasses(r.data))
-    setupAPI.getAcademicYears().then(r => {
-      setYears(r.data)
-      const curr = r.data.find(y => y.is_current)
-      if (curr) setSelectedYear(String(curr.id))
-    })
     feeAPI.getFeeHeads().then(r => setFeeHeads(r.data))
   }, [])
+
+  useEffect(() => {
+    setSelectedYear(selectedYearId || '')
+    setSelectedClass('')
+    setStructures([])
+    if (!selectedYearId) {
+      setClasses([])
+      return
+    }
+    setupAPI.getClasses(selectedYearId).then(r => setClasses(r.data))
+  }, [selectedYearId])
 
   useEffect(() => {
     if (selectedClass && selectedYear) {
@@ -90,22 +98,30 @@ export default function FeeStructure() {
       setPreviewingPlan(true)
       const previewRes = await feeAPI.previewFeePlan(payload)
       const preview = previewRes.data
-      const yearLabel = years.find(y => String(y.id) === selectedYear)?.label || 'Selected year'
-      const confirmed = window.confirm(
-        `Apply this fee plan to ${preview.affected_students || 0} student(s) in ${selectedClassName ? `Class ${selectedClassName.name} ${selectedClassName.division}` : 'the selected class'} for ${yearLabel}?\n\n` +
-        `Duplicates: ${preview.duplicate_assignments || 0}\nWarnings: ${(preview.warnings || []).length ? preview.warnings.join(', ') : 'None'}`
-      )
-      if (!confirmed) return
-      await feeAPI.applyFeePlan(payload)
-      toast.success(`Fee plan applied to ${preview.affected_students || 0} student record(s)`)
-      setPreviewingPlan(false)
-      setForm({ fee_head_id: '', amount: '', due_date: '' })
-      const r = await feeAPI.getFeeStructures({ class_id: selectedClass, academic_year_id: selectedYear })
-      setStructures(r.data)
+      setApplyConfirm({ preview, payload })
     } catch (err) {
       toast.error(extractError(err))
     } finally {
       setPreviewingPlan(false)
+      setAdding(false)
+    }
+  }
+
+  const executeApplyPlan = async () => {
+    if (!applyConfirm) return
+    setAdding(true)
+    try {
+      const r = await feeAPI.applyFeePlan(applyConfirm.payload)
+      const assigned = r.data?.students_assigned ?? r.data?.assigned ?? applyConfirm.preview?.affected_students ?? 0
+      toast.success(`Fee plan applied and assigned to ${assigned} student record(s)`)
+      setApplyConfirm(null)
+      setForm({ fee_head_id: '', amount: '', due_date: '' })
+      const structuresRes = await feeAPI.getFeeStructures({ class_id: selectedClass, academic_year_id: selectedYear })
+      setStructures(structuresRes.data)
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setAdding(false)
     }
   }
 
@@ -181,7 +197,7 @@ export default function FeeStructure() {
     <div>
       <PageHeader
         title="Fee Structure"
-        subtitle="Define fees per class and academic year"
+        subtitle={`Define fees for ${selectedYearMeta?.label || 'the selected academic year'}`}
       />
 
       {feeHeads.length === 0 && (
@@ -200,8 +216,14 @@ export default function FeeStructure() {
         </div>
       )}
 
+      {classes.length === 0 && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <OnboardingEmptyState type="noClasses" />
+        </div>
+      )}
+
       {/* Filters */}
-      <FilterRow>
+      {classes.length > 0 && <FilterRow>
         <Select
           value={selectedClass}
           onChange={e => setSelectedClass(e.target.value)}
@@ -214,16 +236,10 @@ export default function FeeStructure() {
           onChange={e => setSelectedYear(e.target.value)}
           options={yearOptions}
           placeholder="Select year…"
+          disabled
           style={{ flex: 1, minWidth: '150px' }}
         />
-        {selectedClass && selectedYear && (
-          <button className="btn btn-success" onClick={handleAssign} disabled={assigning} style={{ whiteSpace: 'nowrap' }}>
-            {assigning
-              ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Assigning…</>
-              : <><svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" style={{flexShrink:0}}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg> Repair legacy assignments</>}
-          </button>
-        )}
-      </FilterRow>
+      </FilterRow>}
 
       {selectedClass && selectedYear && (
         <>
@@ -236,7 +252,7 @@ export default function FeeStructure() {
               <InlineBanner
                 type="info"
                 title="Create and assign in one step"
-                message="New fee items now preview affected students before applying. Use the legacy assign action only if older fee records were never attached to students."
+                message="New fee items preview affected students, then apply and assign in one step."
               />
               {/* Responsive grid: stacks on mobile */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginTop: '12px', marginBottom: '12px' }}>
@@ -257,13 +273,26 @@ export default function FeeStructure() {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                <button className="btn btn-secondary" onClick={handlePreviewOnly} disabled={previewingPlan || adding} style={{ flex: 1, minWidth: '180px' }}>
+                <button className="btn btn-secondary" onClick={handlePreviewOnly} disabled={previewingPlan || adding || isClosedYear} style={{ flex: 1, minWidth: '180px' }}>
                   {previewingPlan && !adding ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Previewing…</> : 'Preview impact'}
                 </button>
-                <button className="btn btn-primary" onClick={handleAdd} disabled={adding || previewingPlan} style={{ flex: 1, minWidth: '220px' }}>
+                <button className="btn btn-primary" onClick={handleAdd} disabled={adding || previewingPlan || isClosedYear} style={{ flex: 1, minWidth: '220px' }}>
                   {adding ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Applying…</> : 'Preview and apply fee plan'}
                 </button>
               </div>
+              <details style={{ marginTop: 14 }}>
+                <summary style={{ fontSize: 12, color: 'var(--text-tertiary)', cursor: 'pointer', fontWeight: 800 }}>
+                  Advanced options
+                </summary>
+                <div style={{ marginTop: 10, padding: 12, border: '1px solid var(--border-subtle)', borderRadius: 10, background: 'var(--gray-50)' }}>
+                  <button className="btn btn-secondary" onClick={handleAssign} disabled={assigning || structures.length === 0 || isClosedYear}>
+                    {assigning ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Re-syncing…</> : 'Re-sync Fee Assignments'}
+                  </button>
+                  <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', marginTop: 6 }}>
+                    Creates fee records for students added after the fee structure was set up. Safe to run multiple times.
+                  </div>
+                </div>
+              </details>
             </div>
           </div>
 
@@ -293,11 +322,7 @@ export default function FeeStructure() {
             {loadingStructures ? (
               <table className="data-table"><TableSkeleton rows={4} cols={4} /></table>
             ) : structures.length === 0 ? (
-              <EmptyState
-                icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>}
-                title="No fees defined yet"
-                description="Use the form above to add fees"
-              />
+              <OnboardingEmptyState type="noFeeStructure" />
             ) : (
               <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                 <table className="data-table" style={{ minWidth: '400px' }}>
@@ -335,7 +360,7 @@ export default function FeeStructure() {
         </>
       )}
 
-      {!selectedClass && (
+      {classes.length > 0 && !selectedClass && (
         <div className="card">
           <EmptyState
             icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>}
@@ -354,6 +379,33 @@ export default function FeeStructure() {
         onConfirm={handleDeleteConfirm}
         onCancel={() => setDeleteTarget(null)}
         loading={deleting}
+      />
+      <ConfirmModal
+        open={!!applyConfirm}
+        title="Apply Fee Plan"
+        message={
+          applyConfirm && (
+            <div>
+              <div>
+                Apply fees to <strong>{applyConfirm.preview?.affected_students || 0}</strong> student(s)
+                {selectedClassName ? ` in Class ${selectedClassName.name} ${selectedClassName.division}` : ''}?
+              </div>
+              {(applyConfirm.preview?.duplicate_assignments || 0) > 0 && (
+                <div style={{ marginTop: 8, color: 'var(--warning-600)' }}>
+                  {applyConfirm.preview.duplicate_assignments} existing assignment(s) will be skipped or updated.
+                </div>
+              )}
+              {(applyConfirm.preview?.warnings || []).map((warning, index) => (
+                <div key={index} style={{ marginTop: 4, fontSize: 12.5, color: 'var(--text-secondary)' }}>{warning}</div>
+              ))}
+            </div>
+          )
+        }
+        confirmLabel="Apply Fee Plan"
+        confirmVariant="primary"
+        onConfirm={executeApplyPlan}
+        onCancel={() => setApplyConfirm(null)}
+        loading={adding}
       />
     </div>
   )

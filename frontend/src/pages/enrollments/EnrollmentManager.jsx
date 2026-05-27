@@ -4,12 +4,15 @@ import toast from 'react-hot-toast'
 import { enrollmentsAPI, extractError, setupAPI, studentAPI } from '../../services/api'
 import { getAuthUser } from '../../services/auth'
 import {
-  EmptyState,
   FilterRow,
   PageHeader,
+  ReadonlyBanner,
+  ScreenState,
   Select,
+  StatusBadge,
   TableSkeleton,
 } from '../../components/UI'
+import { useAcademicYear } from '../../contexts/academicYearContext'
 
 const ROLL_STRATEGIES = [
   { value: 'alphabetical', label: 'Alphabetical' },
@@ -20,15 +23,21 @@ const ROLL_STRATEGIES = [
 export default function EnrollmentManager() {
   const authUser = getAuthUser()
   const isAdmin = authUser?.role === 'admin'
+  const {
+    selectedYearId: selectedYear,
+    selectedYear: selectedYearMeta,
+    years,
+    isClosedYear,
+    loading: yearLoading,
+    setSelectedYearId,
+  } = useAcademicYear()
 
-  const [years, setYears] = useState([])
   const [classes, setClasses] = useState([])
   const [students, setStudents] = useState([])
   const [enrollments, setEnrollments] = useState([])
   const [rollList, setRollList] = useState([])
   const [history, setHistory] = useState([])
 
-  const [selectedYear, setSelectedYear] = useState('')
   const [selectedClass, setSelectedClass] = useState('')
   const [selectedStudent, setSelectedStudent] = useState('')
   const [strategy, setStrategy] = useState('alphabetical')
@@ -39,14 +48,10 @@ export default function EnrollmentManager() {
   const [reassigning, setReassigning] = useState(false)
 
   useEffect(() => {
-    Promise.all([setupAPI.getAcademicYears(), studentAPI.list({ limit: 200 })])
-      .then(([yearRes, studentRes]) => {
-        const yearList = yearRes.data || []
-        setYears(yearList)
+    studentAPI.list({ limit: 200 })
+      .then((studentRes) => {
         const rawStudents = studentRes.data || []
         setStudents(Array.isArray(rawStudents) ? rawStudents : (rawStudents.items || []))
-        const current = yearList.find(y => y.is_current)
-        if (current) setSelectedYear(String(current.id))
       })
       .catch(err => toast.error(extractError(err)))
       .finally(() => setLoading(false))
@@ -130,15 +135,21 @@ export default function EnrollmentManager() {
     <div>
       <PageHeader
         title="Enrollments"
-        subtitle="Browse year-scoped enrollments, class roll lists, and student history"
+        subtitle={selectedYearMeta?.label ? `Browse placements, roll lists, and history for ${selectedYearMeta.label}` : 'Browse year-scoped enrollments, class roll lists, and student history'}
       />
+      {isClosedYear && (
+        <ReadonlyBanner
+          yearLabel={selectedYearMeta?.label}
+          reason="This academic year is closed. Enrollment records can be reviewed, but roll reassignment is disabled."
+        />
+      )}
 
       <FilterRow>
         <Select
           label="Academic Year"
           value={selectedYear}
           onChange={e => {
-            setSelectedYear(e.target.value)
+            setSelectedYearId(e.target.value)
             setSelectedClass('')
           }}
           options={yearOptions}
@@ -163,6 +174,10 @@ export default function EnrollmentManager() {
         />
       </FilterRow>
 
+      {!selectedYear && !yearLoading && (
+        <div className="card"><ScreenState type="no-year" /></div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '14px' }}>
         <div className="card">
           <div className="card-header">
@@ -173,7 +188,11 @@ export default function EnrollmentManager() {
             {loading ? (
               <table className="data-table"><TableSkeleton rows={6} cols={6} /></table>
             ) : enrollments.length === 0 ? (
-              <EmptyState title="No enrollments found" description="Pick an academic year to load records." />
+              <ScreenState
+                type="empty"
+                title="No enrollments found"
+                description={selectedClass ? 'This class has no enrollments in the selected academic year.' : 'No enrollments exist for the selected academic year.'}
+              />
             ) : (
               <table className="data-table" style={{ minWidth: '720px' }}>
                 <thead>
@@ -193,7 +212,7 @@ export default function EnrollmentManager() {
                       <td className="mono">{row.student_code || '—'}</td>
                       <td>{row.class_name ? `${row.class_name} — ${row.division}` : row.class_id}</td>
                       <td>{row.roll_number || '—'}</td>
-                      <td>{row.status}</td>
+                      <td><StatusBadge status={row.status} /></td>
                       <td>{row.academic_year_label || row.academic_year_id}</td>
                     </tr>
                   ))}
@@ -212,7 +231,7 @@ export default function EnrollmentManager() {
                   <select className="input" value={strategy} onChange={e => setStrategy(e.target.value)} style={{ minWidth: '150px', padding: '6px 8px', fontSize: '12px' }}>
                     {ROLL_STRATEGIES.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
-                  <button className="btn btn-secondary btn-sm" onClick={handleReassign} disabled={reassigning}>
+                  <button className="btn btn-secondary btn-sm" onClick={handleReassign} disabled={reassigning || isClosedYear}>
                     {reassigning ? 'Updating...' : 'Reassign'}
                   </button>
                 </div>
@@ -222,7 +241,7 @@ export default function EnrollmentManager() {
               {loadingRolls ? (
                 <table className="data-table"><TableSkeleton rows={5} cols={4} /></table>
               ) : rollList.length === 0 ? (
-                <EmptyState title="No roll list loaded" description="Choose a class to view ordered enrollments." />
+                <ScreenState type="no-class" title="No roll list loaded" description="Choose a class to view ordered enrollments." />
               ) : (
                 <table className="data-table">
                   <thead>
@@ -239,7 +258,7 @@ export default function EnrollmentManager() {
                         <td>{row.roll_number || '—'}</td>
                         <td style={{ fontWeight: 700 }}>{row.student_name}</td>
                         <td className="mono">{row.gr_number || '—'}</td>
-                        <td>{row.status}</td>
+                        <td><StatusBadge status={row.status} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -257,7 +276,7 @@ export default function EnrollmentManager() {
               {loadingHistory ? (
                 <table className="data-table"><TableSkeleton rows={4} cols={5} /></table>
               ) : history.length === 0 ? (
-                <EmptyState title="No history selected" description="Choose a student to see year-by-year placement." />
+                <ScreenState type="empty" title="No history selected" description="Choose a student to see year-by-year placement." />
               ) : (
                 <table className="data-table">
                   <thead>
@@ -275,7 +294,7 @@ export default function EnrollmentManager() {
                         <td>{row.academic_year_label || row.academic_year_id}</td>
                         <td>{row.class_name ? `${row.class_name} — ${row.division}` : row.class_id}</td>
                         <td>{row.roll_number || '—'}</td>
-                        <td>{row.status}</td>
+                        <td><StatusBadge status={row.status} /></td>
                         <td>{row.promotion_action || '—'}</td>
                       </tr>
                     ))}

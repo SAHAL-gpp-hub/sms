@@ -133,7 +133,8 @@ class ExamSubjectConfigBulk(BaseModel):
 # ── Marks entry ───────────────────────────────────────────────────────────
 
 class MarkEntry(BaseModel):
-    student_id:      int
+    enrollment_id:   Optional[int] = None
+    student_id:      Optional[int] = None
     subject_id:      int
     exam_id:         int
     theory_marks:    Optional[Decimal] = None
@@ -173,6 +174,7 @@ class MarkOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id:              int
+    enrollment_id:   int
     student_id:      int
     subject_id:      int
     exam_id:         int

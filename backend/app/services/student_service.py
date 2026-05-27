@@ -37,6 +37,25 @@ from app.services.audit_service import log_data_change, model_snapshot
 logger = logging.getLogger("sms.students")
 
 
+def ensure_enrollments_for_legacy_students(db: Session) -> None:
+    students = (
+        db.query(Student)
+        .filter(Student.class_id.isnot(None), Student.academic_year_id.isnot(None))
+        .all()
+    )
+    created = False
+    for student in students:
+        existing = db.query(Enrollment.id).filter_by(
+            student_id=student.id,
+            academic_year_id=student.academic_year_id,
+        ).first()
+        if not existing:
+            _create_enrollment_for_student(db, student)
+            created = True
+    if created:
+        db.commit()
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # ID generation
 # ──────────────────────────────────────────────────────────────────────────────
@@ -229,18 +248,20 @@ def get_students(
     offset: int                        = 0,
     branch_id: Optional[int]           = None,
 ) -> list[Student]:
+    ensure_enrollments_for_legacy_students(db)
     query = get_students_query(db, branch_id=branch_id).filter(Student.status == StudentStatusEnum.Active)
-
+    if class_id is not None or class_ids or academic_year_id is not None:
+        query = query.join(Enrollment, Enrollment.student_id == Student.id)
     if class_id is not None:
-        query = query.filter(Student.class_id == class_id)
+        query = query.filter(Enrollment.class_id == class_id)
     elif class_ids:
-        query = query.filter(Student.class_id.in_(class_ids))
+        query = query.filter(Enrollment.class_id.in_(class_ids))
     if student_ids is not None:
         if len(student_ids) == 0:
             return []
         query = query.filter(Student.id.in_(student_ids))
     if academic_year_id is not None:
-        query = query.filter(Student.academic_year_id == academic_year_id)
+        query = query.filter(Enrollment.academic_year_id == academic_year_id)
     search = search.strip() if search else None
     if search:
         id_prefix = f"{search}%"
@@ -254,7 +275,7 @@ def get_students(
             )
         )
 
-    query = query.order_by(Student.id.desc())
+    query = query.distinct().order_by(Student.id.desc())
     return query.offset(offset).limit(limit).all()
 
 
@@ -269,17 +290,20 @@ def get_students_page(
     offset: int = 0,
     branch_id: Optional[int] = None,
 ) -> tuple[list[Student], int]:
+    ensure_enrollments_for_legacy_students(db)
     query = get_students_query(db, branch_id=branch_id).filter(Student.status == StudentStatusEnum.Active)
+    if class_id is not None or class_ids or academic_year_id is not None:
+        query = query.join(Enrollment, Enrollment.student_id == Student.id)
     if class_id is not None:
-        query = query.filter(Student.class_id == class_id)
+        query = query.filter(Enrollment.class_id == class_id)
     elif class_ids:
-        query = query.filter(Student.class_id.in_(class_ids))
+        query = query.filter(Enrollment.class_id.in_(class_ids))
     if student_ids is not None:
         if len(student_ids) == 0:
             return [], 0
         query = query.filter(Student.id.in_(student_ids))
     if academic_year_id is not None:
-        query = query.filter(Student.academic_year_id == academic_year_id)
+        query = query.filter(Enrollment.academic_year_id == academic_year_id)
     search = search.strip() if search else None
     if search:
         id_prefix = f"{search}%"
@@ -292,6 +316,7 @@ def get_students_page(
                 Student.contact.ilike(id_prefix),
             )
         )
+    query = query.distinct()
     total = query.count()
     items = query.order_by(Student.id.desc()).offset(offset).limit(limit).all()
     return items, total
@@ -320,11 +345,14 @@ def update_student(
     if not student:
         return None
 
-    old_year_id  = student.academic_year_id
-    old_class_id = student.class_id
     old_snapshot = model_snapshot(student)
 
     updates = data.model_dump(exclude_unset=True)
+    enrollment_updates = {
+        key: updates.pop(key)
+        for key in list(updates.keys())
+        if key in {"class_id", "academic_year_id", "roll_number"}
+    }
 
     resolved_contact = updates.get("contact", student.contact)
     if "student_phone" in updates and not updates.get("student_phone") and resolved_contact:
@@ -335,11 +363,27 @@ def update_student(
     for key, value in updates.items():
         setattr(student, key, value)
 
-    # If class or year changed, ensure enrollment exists for the new year
-    year_changed  = (student.academic_year_id != old_year_id)
-    class_changed = (student.class_id != old_class_id)
-    if year_changed or class_changed:
-        _create_enrollment_for_student(db, student)
+    if enrollment_updates:
+        target_year_id = enrollment_updates.get("academic_year_id", student.academic_year_id)
+        target_class_id = enrollment_updates.get("class_id", student.class_id)
+        enrollment = db.query(Enrollment).filter_by(
+            student_id=student.id,
+            academic_year_id=target_year_id,
+        ).first()
+        if enrollment:
+            if "class_id" in enrollment_updates:
+                enrollment.class_id = target_class_id
+            if "roll_number" in enrollment_updates:
+                enrollment.roll_number = str(enrollment_updates["roll_number"]) if enrollment_updates["roll_number"] is not None else None
+        else:
+            student.class_id = target_class_id
+            student.academic_year_id = target_year_id
+            student.roll_number = enrollment_updates.get("roll_number", student.roll_number)
+            _create_enrollment_for_student(db, student)
+        # Keep legacy mirrors aligned for old UI paths while services move to Enrollment.
+        student.class_id = target_class_id
+        student.academic_year_id = target_year_id
+        student.roll_number = enrollment_updates.get("roll_number", student.roll_number)
 
     db.commit()
     db.refresh(student)

@@ -1,13 +1,16 @@
 // MarksEntry.jsx — Full rebuild with Subject Manager + per-exam custom marks
 // Fully responsive across all device sizes (logic unchanged)
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { marksAPI, setupAPI, extractError, openSignedPdf } from '../../services/api'
-import { getAuthUser } from '../../services/auth'
 import {
   PageHeader, FilterRow, Select, EmptyState,
-  TableSkeleton, TabBar, InlineBanner, ConfirmModal,
+  TableSkeleton, TabBar, InlineBanner, ConfirmModal, ReadonlyBanner, ScreenState,
 } from '../../components/UI'
+import OnboardingEmptyState from '../../components/OnboardingEmptyState'
+import { useAcademicYear } from '../../contexts/academicYearContext'
+import { useRoleContext } from '../../hooks/useRoleContext'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -110,6 +113,7 @@ const RESPONSIVE_CSS = `
 
   /* ───── Marks-entry grid table outer scroll ───── */
   .me-grid-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .me-mobile-card-list { display: none; }
 
   /* ───── Help/info bar above grid ───── */
   .me-info-bar {
@@ -218,6 +222,48 @@ const RESPONSIVE_CSS = `
     .me-hide-mobile { display: none; }
   }
 
+  @media (max-width: 768px) {
+    .me-entry-table { display: none; }
+    .me-mobile-card-list {
+      display: grid;
+      gap: 12px;
+      padding: 12px;
+    }
+    .me-student-mark-card {
+      border: 1px solid var(--border-default);
+      border-radius: 10px;
+      background: var(--surface-0);
+      overflow: hidden;
+    }
+    .me-student-mark-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px;
+      background: var(--gray-50);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .me-subject-mark-row {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .me-subject-mark-row:last-child { border-bottom: 0; }
+    .me-mobile-mark-inputs {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+      gap: 8px;
+      align-items: end;
+    }
+    .me-mobile-mark-inputs input[type="number"] {
+      width: 100%;
+      min-height: 44px;
+      text-align: center;
+    }
+  }
+
   /* ════════════════════════════════════════════════════════════════════
      EXTRA SMALL (≤ 420px)
      ════════════════════════════════════════════════════════════════════ */
@@ -251,6 +297,82 @@ function GradeBadge({ grade }) {
     }}>
       {grade}
     </span>
+  )
+}
+
+function StudentMarksCard({ student, subjects, marks, onChange, canEditSubject }) {
+  return (
+    <article className="me-student-mark-card">
+      <div className="me-student-mark-header">
+        <div>
+          <div style={{ fontWeight: 850, color: 'var(--text-primary)' }}>{student.student_name}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
+            Roll {student.roll_number || '-'}
+          </div>
+        </div>
+        <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--brand-700)', background: 'var(--brand-50)', border: '1px solid var(--brand-200)', borderRadius: 999, padding: '3px 8px' }}>
+          {subjects.length} subject{subjects.length === 1 ? '' : 's'}
+        </span>
+      </div>
+      {subjects.map(subject => {
+        const current = marks?.[subject.id] || {}
+        const locked = current.is_locked || !canEditSubject(subject.id)
+        return (
+          <div key={subject.id} className="me-subject-mark-row">
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)' }}>
+                {subject.name}
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                Theory /{subject.max_theory}{subject.max_practical > 0 ? ` · Practical /${subject.max_practical}` : ''}
+              </div>
+            </div>
+            <div className="me-mobile-mark-inputs">
+              <label>
+                <span className="label" style={{ fontSize: 11 }}>Theory</span>
+                <input
+                  className="input"
+                  type="number"
+                  min="0"
+                  max={subject.max_theory}
+                  value={current.theory ?? ''}
+                  onChange={event => onChange(student.student_id, subject.id, 'theory', event.target.value)}
+                  disabled={locked || current.is_absent}
+                  placeholder={`/${subject.max_theory}`}
+                />
+              </label>
+              {subject.max_practical > 0 ? (
+                <label>
+                  <span className="label" style={{ fontSize: 11 }}>Practical</span>
+                  <input
+                    className="input"
+                    type="number"
+                    min="0"
+                    max={subject.max_practical}
+                    value={current.practical ?? ''}
+                    onChange={event => onChange(student.student_id, subject.id, 'practical', event.target.value)}
+                    disabled={locked || current.is_absent}
+                    placeholder={`/${subject.max_practical}`}
+                  />
+                </label>
+              ) : (
+                <div />
+              )}
+              <label style={{ display: 'grid', justifyItems: 'center', gap: 4, fontSize: 11, fontWeight: 800, color: 'var(--danger-600)' }}>
+                Abs
+                <input
+                  type="checkbox"
+                  checked={current.is_absent || false}
+                  onChange={event => onChange(student.student_id, subject.id, 'is_absent', event.target.checked)}
+                  disabled={locked}
+                  style={{ accentColor: 'var(--danger-500)', width: 20, height: 20 }}
+                />
+              </label>
+            </div>
+          </div>
+        )
+      })}
+    </article>
   )
 }
 
@@ -967,18 +1089,17 @@ function ExamConfigPanel({ examId, classId, onConfigSaved }) {
 // Main MarksEntry page
 // ─────────────────────────────────────────────────────────────────────────────
 export default function MarksEntry() {
-  const authUser = useMemo(() => getAuthUser(), [])
-  const isTeacher = authUser?.role === 'teacher'
-  const subjectAssignments = useMemo(() => authUser?.subjectAssignments || [], [authUser])
-  const marksClassIds = useMemo(
-    () => [...new Set(subjectAssignments.map(a => a.class_id))],
-    [subjectAssignments]
-  )
+  const {
+    selectedYearId: selectedYear,
+    selectedYear: selectedYearMeta,
+    years,
+    isClosedYear,
+    setSelectedYearId,
+  } = useAcademicYear()
+  const { user: authUser, isTeacher, subjectAssignments, classTeacherClassIds, subjectClassIds: marksClassIds } = useRoleContext()
   const [classes, setClasses]         = useState([])
-  const [years, setYears]             = useState([])
   const [exams, setExams]             = useState([])
   const [selectedClass, setSelectedClass] = useState('')
-  const [selectedYear, setSelectedYear]   = useState('')
   const [selectedExam, setSelectedExam]   = useState('')
 
   const [gridData, setGridData]       = useState(null)
@@ -1018,6 +1139,7 @@ export default function MarksEntry() {
             theory:    m.theory    ?? '',
             practical: m.practical ?? '',
             is_absent: m.is_absent || false,
+            is_locked: m.is_locked || false,
           }
         })
       })
@@ -1049,7 +1171,12 @@ export default function MarksEntry() {
 
   // ── Effects ───────────────────────────────────────────────────────────────
   useEffect(() => {
-    setupAPI.getClasses().then(r => {
+    if (!selectedYear) {
+      setClasses([])
+      setSelectedClass('')
+      return
+    }
+    setupAPI.getClasses(selectedYear).then(r => {
       const allClasses = r.data || []
       setClasses(
         isTeacher
@@ -1057,12 +1184,7 @@ export default function MarksEntry() {
           : allClasses
       )
     })
-    setupAPI.getAcademicYears().then(r => {
-      setYears(r.data)
-      const curr = r.data.find(y => y.is_current)
-      if (curr) setSelectedYear(String(curr.id))
-    })
-  }, [isTeacher, marksClassIds])
+  }, [isTeacher, marksClassIds, selectedYear])
 
   useEffect(() => {
     if (selectedClass && selectedYear) {
@@ -1078,6 +1200,27 @@ export default function MarksEntry() {
       loadGrid()
     }
   }, [selectedExam, selectedClass, view, loadGrid])
+
+  useEffect(() => {
+    if (!gridData || !selectedClass) return
+    const filterKey = `marks-subject-filter:${selectedClass}:${authUser?.id || 'user'}`
+    const saved = localStorage.getItem(filterKey)
+    if (saved && (saved === 'all' || gridData.subjects.some(subject => String(subject.id) === saved))) {
+      setSubjectFilter(saved)
+      return
+    }
+    if (!isTeacher || subjectAssignments.length === 0) return
+    const mySubjectsForClass = subjectAssignments
+      .filter(assignment => Number(assignment.class_id) === Number(selectedClass))
+      .map(assignment => String(assignment.subject_id))
+      .filter(subjectId => gridData.subjects.some(subject => String(subject.id) === subjectId))
+    if (mySubjectsForClass.length === 1) setSubjectFilter(mySubjectsForClass[0])
+  }, [authUser?.id, gridData, isTeacher, selectedClass, subjectAssignments])
+
+  useEffect(() => {
+    if (!selectedClass) return
+    localStorage.setItem(`marks-subject-filter:${selectedClass}:${authUser?.id || 'user'}`, subjectFilter)
+  }, [authUser?.id, selectedClass, subjectFilter])
 
   useEffect(() => {
     if (!draftKey || !dirty) return undefined
@@ -1101,6 +1244,8 @@ export default function MarksEntry() {
 
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleMarkChange = (studentId, subjectId, field, value) => {
+    if (isClosedYear || !canEditSubject(subjectId)) return
+    if (localMarks[studentId]?.[subjectId]?.is_locked) return
     setDirty(true)
     setLocalMarks(prev => ({
       ...prev,
@@ -1118,6 +1263,7 @@ export default function MarksEntry() {
     gridData.students.forEach(student => {
       gridData.subjects.forEach(subject => {
         const marks = localMarks[student.student_id]?.[subject.id] || {}
+        if (!canEditSubject(subject.id) || marks.is_locked) return
         if (marks.is_absent) return
         const checks = [
           { label: 'theory', value: marks.theory, max: subject.max_theory },
@@ -1140,6 +1286,7 @@ export default function MarksEntry() {
   }
 
   const handleSave = async () => {
+    if (isClosedYear) return
     if (!gridData) return
     if (!validateMarks()) return
     setSaving(true)
@@ -1147,8 +1294,11 @@ export default function MarksEntry() {
       const entries = []
       gridData.students.forEach(s => {
         gridData.subjects.forEach(sub => {
+          if (!canEditSubject(sub.id)) return
           const m = localMarks[s.student_id]?.[sub.id]
+          if (m?.is_locked) return
           entries.push({
+            enrollment_id:    s.enrollment_id,
             student_id:      s.student_id,
             subject_id:      sub.id,
             exam_id:         parseInt(selectedExam),
@@ -1158,6 +1308,10 @@ export default function MarksEntry() {
           })
         })
       })
+      if (entries.length === 0) {
+        toast.error('No editable marks available for this selection')
+        return
+      }
       await marksAPI.bulkSaveMarks(entries)
       if (draftKey) localStorage.removeItem(draftKey)
       setDirty(false)
@@ -1225,6 +1379,22 @@ export default function MarksEntry() {
     if (subjectFilter === 'all') return gridData.subjects
     return gridData.subjects.filter(subject => String(subject.id) === subjectFilter)
   }, [gridData, subjectFilter])
+  const teacherSubjectIds = useMemo(() => (
+    subjectAssignments
+      .filter(assignment => Number(assignment.class_id) === Number(selectedClass))
+      .map(assignment => Number(assignment.subject_id))
+  ), [selectedClass, subjectAssignments])
+  const isClassTeacherForSelectedClass = useMemo(() => (
+    classTeacherClassIds.map(Number).includes(Number(selectedClass))
+  ), [classTeacherClassIds, selectedClass])
+  const hasSpecificSubjectsForSelectedClass = teacherSubjectIds.length > 0
+  const canEditSubject = useCallback((subjectId) => (
+    !isClosedYear && (
+      !isTeacher ||
+      (!hasSpecificSubjectsForSelectedClass && isClassTeacherForSelectedClass) ||
+      teacherSubjectIds.includes(Number(subjectId))
+    )
+  ), [hasSpecificSubjectsForSelectedClass, isClassTeacherForSelectedClass, isClosedYear, isTeacher, teacherSubjectIds])
 
   const mainTabs = [
     { value: 'entry',     label: 'Marks Entry' },
@@ -1238,8 +1408,14 @@ export default function MarksEntry() {
     <div className="me-root">
       <PageHeader
         title="Marks Entry"
-        subtitle="Enter marks class-wise. Manage subjects dynamically. Set custom max marks per exam."
+        subtitle={selectedYearMeta?.label ? `Enter marks for ${selectedYearMeta.label}. Teacher edits are limited to assigned subjects.` : 'Enter marks class-wise. Manage subjects dynamically. Set custom max marks per exam.'}
       />
+      {isClosedYear && (
+        <ReadonlyBanner
+          yearLabel={selectedYearMeta?.label}
+          reason="This academic year is closed. Marks can be reviewed, but creating exams and saving marks are disabled."
+        />
+      )}
 
       {/* Top filters */}
       <FilterRow>
@@ -1262,7 +1438,7 @@ export default function MarksEntry() {
           value={selectedYear}
           onChange={e => {
             if (!confirmLoseMarksDraft()) return
-            setSelectedYear(e.target.value)
+            setSelectedYearId(e.target.value)
             setSelectedExam('')
             setGridData(null)
             setSubjectFilter('all')
@@ -1293,7 +1469,7 @@ export default function MarksEntry() {
             <button
               className="btn btn-secondary"
               onClick={() => setShowNewExam(s => !s)}
-              disabled={!selectedClass}
+              disabled={!selectedClass || isClosedYear}
               title="Create new exam"
             >
               + New
@@ -1326,7 +1502,7 @@ export default function MarksEntry() {
               <label className="label">Date (optional)</label>
               <input type="date" className="input" value={newExam.exam_date} onChange={e => setNewExam(n => ({ ...n, exam_date: e.target.value }))} />
             </div>
-            <button className="btn btn-primary" onClick={handleCreateExam} disabled={creatingExam || !newExam.name.trim()}>
+            <button className="btn btn-primary" onClick={handleCreateExam} disabled={creatingExam || !newExam.name.trim() || isClosedYear}>
               {creatingExam ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Creating…</> : 'Create Exam'}
             </button>
             <button className="btn btn-secondary" onClick={() => setShowNewExam(false)}>Cancel</button>
@@ -1337,11 +1513,23 @@ export default function MarksEntry() {
       {/* No class selected — prompt */}
       {!selectedClass && (
         <div className="card">
-          <EmptyState
-            icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>}
-            title={isTeacher && classes.length === 0 ? 'No subject assignments' : 'Select a class to begin'}
-            description={isTeacher && classes.length === 0 ? 'Ask an admin to assign you to subjects before entering marks' : 'Choose a class and academic year from the filters above'}
-          />
+          {!selectedYear ? (
+            <ScreenState type="no-year" />
+          ) : isTeacher && classes.length === 0 ? (
+            <EmptyState
+              icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>}
+              title="No subject assignments"
+              description="Ask an admin to assign you to subjects before entering marks"
+            />
+          ) : classes.length === 0 ? (
+            <OnboardingEmptyState type="noClasses" />
+          ) : (
+            <EmptyState
+              icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>}
+              title="Select a class to begin"
+              description="Choose a class and academic year from the filters above"
+            />
+          )}
         </div>
       )}
 
@@ -1380,7 +1568,7 @@ export default function MarksEntry() {
                     Saved
                   </span>
                 )}
-                <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+                <button className="btn btn-primary" onClick={handleSave} disabled={saving || isClosedYear || !dirty}>
                   {saving ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Saving…</> : 'Save All Marks'}
                 </button>
               </div>
@@ -1473,8 +1661,11 @@ export default function MarksEntry() {
                   ) : !hasStudents ? (
                     <EmptyState
                       icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>}
-                      title="No students in this class"
-                      description="Add students to this class to start entering marks"
+                      title={`No students enrolled in ${classes.find(c => String(c.id) === selectedClass)?.name || 'this class'}`}
+                      description={isTeacher
+                        ? 'No enrolled students found. Contact your admin so students can be assigned to this class.'
+                        : 'This class has no active students. Add students via Students, then return here to enter marks.'}
+                      action={!isTeacher && <Link to="/students/new" className="btn btn-primary btn-sm">Add Students</Link>}
                     />
                   ) : (
                     <>
@@ -1499,7 +1690,19 @@ export default function MarksEntry() {
                         </label>
                         {subjectFilter === 'all' && <span style={{ color: 'var(--warning-600)', fontWeight: 600 }}>Scroll right to see all subjects</span>}
                       </div>
-                      <div className="me-grid-scroll">
+                      <div className="me-mobile-card-list">
+                        {gridData.students.map(student => (
+                          <StudentMarksCard
+                            key={student.student_id}
+                            student={student}
+                            subjects={visibleSubjects}
+                            marks={localMarks[student.student_id] || {}}
+                            onChange={handleMarkChange}
+                            canEditSubject={canEditSubject}
+                          />
+                        ))}
+                      </div>
+                      <div className="me-grid-scroll me-entry-table">
                         <table style={{ borderCollapse: 'separate', borderSpacing: 0, fontSize: '12.5px', minWidth: '100%' }}>
                           <thead>
                             <tr>
@@ -1564,6 +1767,7 @@ export default function MarksEntry() {
                                 </td>
                                 {visibleSubjects.map(sub => {
                                   const m = localMarks[student.student_id]?.[sub.id] || {}
+                                  const locked = m.is_locked || !canEditSubject(sub.id)
                                   return (
                                     <td key={sub.id} style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', textAlign: 'center', background: sub.has_custom_config && si % 2 === 0 ? '#fafbff' : undefined }}>
                                       <div style={{ display: 'flex', gap: '4px', alignItems: 'center', justifyContent: 'center' }}>
@@ -1573,7 +1777,7 @@ export default function MarksEntry() {
                                           max={sub.max_theory}
                                           value={m.theory ?? ''}
                                           onChange={e => handleMarkChange(student.student_id, sub.id, 'theory', e.target.value)}
-                                          disabled={m.is_absent}
+                                          disabled={locked || m.is_absent}
                                           placeholder={`/${sub.max_theory}`}
                                           style={{
                                             width: '52px', padding: '5px 4px',
@@ -1581,8 +1785,8 @@ export default function MarksEntry() {
                                             borderRadius: '6px', fontSize: '12px',
                                             textAlign: 'center', outline: 'none',
                                             fontFamily: 'var(--font-mono)',
-                                            background: m.is_absent ? 'var(--gray-100)' : 'var(--surface-0)',
-                                            color: m.is_absent ? 'var(--text-tertiary)' : 'var(--text-primary)',
+                                            background: (locked || m.is_absent) ? 'var(--gray-100)' : 'var(--surface-0)',
+                                            color: (locked || m.is_absent) ? 'var(--text-tertiary)' : 'var(--text-primary)',
                                             transition: 'border-color 0.12s',
                                           }}
                                           onFocus={e => e.target.style.borderColor = 'var(--brand-500)'}
@@ -1595,7 +1799,7 @@ export default function MarksEntry() {
                                             max={sub.max_practical}
                                             value={m.practical ?? ''}
                                             onChange={e => handleMarkChange(student.student_id, sub.id, 'practical', e.target.value)}
-                                            disabled={m.is_absent}
+                                            disabled={locked || m.is_absent}
                                             placeholder={`P/${sub.max_practical}`}
                                             style={{
                                               width: '52px', padding: '5px 4px',
@@ -1603,8 +1807,8 @@ export default function MarksEntry() {
                                               borderRadius: '6px', fontSize: '12px',
                                               textAlign: 'center', outline: 'none',
                                               fontFamily: 'var(--font-mono)',
-                                              background: m.is_absent ? 'var(--gray-100)' : 'var(--surface-0)',
-                                              color: m.is_absent ? 'var(--text-tertiary)' : 'var(--text-primary)',
+                                              background: (locked || m.is_absent) ? 'var(--gray-100)' : 'var(--surface-0)',
+                                              color: (locked || m.is_absent) ? 'var(--text-tertiary)' : 'var(--text-primary)',
                                             }}
                                             onFocus={e => e.target.style.borderColor = 'var(--brand-500)'}
                                             onBlur={e => e.target.style.borderColor = 'var(--border-default)'}
@@ -1615,9 +1819,12 @@ export default function MarksEntry() {
                                             type="checkbox"
                                             checked={m.is_absent || false}
                                             onChange={e => handleMarkChange(student.student_id, sub.id, 'is_absent', e.target.checked)}
+                                            disabled={locked}
                                             style={{ accentColor: 'var(--danger-500)', width: '13px', height: '13px' }}
                                           />
-                                          <span style={{ fontSize: '9px', color: 'var(--danger-500)', fontWeight: 700 }}>Abs</span>
+                                          <span style={{ fontSize: '9px', color: locked ? 'var(--text-tertiary)' : 'var(--danger-500)', fontWeight: 700 }}>
+                                            {m.is_locked ? 'Locked' : !canEditSubject(sub.id) ? 'View' : 'Abs'}
+                                          </span>
                                         </label>
                                       </div>
                                     </td>
@@ -1632,7 +1839,7 @@ export default function MarksEntry() {
                         <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
                           {gridData.students.length} student{gridData.students.length !== 1 ? 's' : ''} · {visibleSubjects.length} of {gridData.subjects.length} subject{gridData.subjects.length !== 1 ? 's' : ''}
                         </span>
-                        <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+                        <button className="btn btn-primary" onClick={handleSave} disabled={saving || isClosedYear || !dirty}>
                           {saving ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Saving…</> : 'Save All Marks'}
                         </button>
                       </div>

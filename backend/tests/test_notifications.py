@@ -22,7 +22,9 @@ from app.models.base_models import (
     StudentStatusEnum,
     User,
 )
-from app.services import notification_service
+from app.routers.analytics import analytics_summary, at_risk_students
+from app.routers.notifications import retry_notification
+from app.services import attendance_service, notification_service
 
 
 SQLALCHEMY_TEST_URL = "sqlite:///./test_notifications.db"
@@ -234,5 +236,46 @@ def test_whatsapp_otp_enqueues_pending_outbox_item():
 
         assert item.status == "pending"
         assert item.last_error is None
+    finally:
+        db.close()
+
+
+def test_retry_notification_resets_failed_outbox_item():
+    db = TestingSessionLocal()
+    try:
+        item = NotificationOutbox(
+            provider="whatsapp",
+            destination="9876543210",
+            body="Retry me",
+            payload={"body": "Retry me"},
+            status="failed",
+            attempts=3,
+            last_error="Temporary provider outage",
+        )
+        db.add(item)
+        db.commit()
+
+        result = retry_notification(item.id, db=db, _=None)
+        db.refresh(item)
+
+        assert result == {"message": "Notification queued for retry", "id": item.id}
+        assert item.status == "pending"
+        assert item.attempts == 0
+        assert item.last_error is None
+        assert item.next_attempt_at is not None
+    finally:
+        db.close()
+
+
+def test_analytics_summary_uses_bulk_attendance_summary():
+    db = TestingSessionLocal()
+    try:
+        summary = analytics_summary(academic_year_id=1, db=db, _=None)
+        bulk_rows = attendance_service.get_monthly_summary_bulk(db, 1, date.today().year, date.today().month)
+        risk = at_risk_students(threshold=75, academic_year_id=1, db=db, _=None)
+
+        assert set(summary) == {"collection_rate", "total_collected", "outstanding", "at_risk_count"}
+        assert isinstance(bulk_rows, list)
+        assert risk["count"] == len(risk["students"])
     finally:
         db.close()

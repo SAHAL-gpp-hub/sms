@@ -26,8 +26,9 @@ from datetime import date
 
 
 class AttendanceEntry(BaseModel):
-    student_id: int
-    class_id:   int
+    enrollment_id: Optional[int] = None
+    student_id: Optional[int] = None
+    class_id:   Optional[int] = None
     date:       date
     status:     str   # P / A / L / OL
 
@@ -38,8 +39,9 @@ class AttendanceBulk(BaseModel):
 
 class AttendanceOut(BaseModel):
     id:         int
-    student_id: int
-    class_id:   int
+    enrollment_id: int
+    student_id: Optional[int]
+    class_id:   Optional[int]
     date:       date
     status:     str
     model_config = {"from_attributes": True}

@@ -15,7 +15,7 @@ FIXES:
   "Last 4 Digits of Aadhar".
 """
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional
 from datetime import date
 from app.models.base_models import GenderEnum, StudentStatusEnum
@@ -213,6 +213,8 @@ class StudentOut(BaseModel):
     previous_school:  Optional[str] = None
     student_user_id:  Optional[int] = None
     parent_user_id:   Optional[int] = None
+    current_enrollment_id: Optional[int] = None
+    enrollment_history: list[dict] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 

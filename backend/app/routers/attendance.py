@@ -40,17 +40,31 @@ def mark_attendance(
     else:
         entries = data.entries
     if current_user.role == "teacher":
-        class_ids = {entry.class_id for entry in entries}
+        class_ids = set()
+        for entry in entries:
+            if entry.class_id is not None:
+                class_ids.add(entry.class_id)
+            elif entry.enrollment_id is not None:
+                enrollment = db.query(Enrollment).filter_by(id=entry.enrollment_id).first()
+                if not enrollment:
+                    raise HTTPException(status_code=404, detail=f"Enrollment {entry.enrollment_id} not found")
+                class_ids.add(enrollment.class_id)
         for class_id in class_ids:
             ensure_class_teacher_access(current_user, class_id)
         for entry in entries:
-            student = db.query(Student).filter_by(id=entry.student_id).first()
-            if not student:
-                raise HTTPException(status_code=404, detail=f"Student {entry.student_id} not found")
-            if student.class_id != entry.class_id:
+            if entry.enrollment_id is not None:
+                enrollment = db.query(Enrollment).filter_by(id=entry.enrollment_id).first()
+            else:
+                cls = db.query(Class).filter_by(id=entry.class_id).first()
+                enrollment = db.query(Enrollment).filter_by(
+                    student_id=entry.student_id,
+                    class_id=entry.class_id,
+                    academic_year_id=cls.academic_year_id if cls else None,
+                ).first()
+            if not enrollment:
                 raise HTTPException(
                     status_code=422,
-                    detail=f"Student {entry.student_id} does not belong to class {entry.class_id}",
+                    detail="Student is not enrolled in this class/year",
                 )
     try:
         return attendance_service.mark_attendance_bulk(db, entries)
@@ -94,13 +108,14 @@ def get_monthly_summary(
 
 @router.get("/dashboard-stats")
 def get_dashboard_stats(
+    academic_year_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_role("admin")),
 ):
-    cache_key = "dashboard_stats:admin"
+    cache_key = f"dashboard_stats:admin:{academic_year_id or 'current'}"
     cached = response_cache.get(cache_key)
     if cached is not None:
         return cached
-    data = attendance_service.get_dashboard_stats(db)
+    data = attendance_service.get_dashboard_stats(db, academic_year_id)
     response_cache.set(cache_key, data, settings.RESPONSE_CACHE_TTL_SECONDS)
     return data

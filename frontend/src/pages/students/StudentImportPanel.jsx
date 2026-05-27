@@ -309,7 +309,7 @@ export default function StudentImportPanel() {
         open={!!rollbackTarget}
         title="Mark imported students as Left"
         message={`Batch #${rollbackTarget?.id} rollback will not delete records. It will mark the ${rollbackTarget?.imported_rows || 0} imported student(s) as Left, keep the batch audit trail, and leave skipped/error rows untouched. Continue?`}
-        confirmLabel="Mark as Left"
+        confirmLabel="Withdraw Student"
         confirmVariant="danger"
         onConfirm={handleRollback}
         onCancel={() => setRollbackTarget(null)}

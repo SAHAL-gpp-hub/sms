@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Area,
@@ -18,6 +18,7 @@ import {
 } from 'recharts'
 import { analyticsAPI, formatINR, marksAPI, setupAPI } from '../../services/api'
 import { EmptyState, MetricCard, SectionPanel, Skeleton } from '../../components/UI'
+import { useAcademicYear } from '../../contexts/academicYearContext'
 
 const CHART_COLORS = ['#2563eb', '#16a34a', '#f59e0b', '#ef4444', '#9333ea', '#0ea5e9', '#14b8a6', '#64748b']
 
@@ -27,21 +28,41 @@ function ChartShell({ loading, empty, children }) {
   return children
 }
 
+function LazyChart({ height = 260, children }) {
+  const ref = useRef(null)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    if (visible) return undefined
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: '160px 0px', threshold: 0.1 },
+    )
+    if (ref.current) observer.observe(ref.current)
+    return () => observer.disconnect()
+  }, [visible])
+
+  return (
+    <div ref={ref} style={{ minHeight: height }}>
+      {visible ? children : <Skeleton height={`${height}px`} />}
+    </div>
+  )
+}
+
 export default function Analytics() {
+  const { selectedYearId, selectedYear, years } = useAcademicYear()
   const [months, setMonths] = useState(12)
   const [attendanceMonths, setAttendanceMonths] = useState(3)
   const [riskThreshold, setRiskThreshold] = useState(75)
   const [selectedClassId, setSelectedClassId] = useState('')
   const [selectedExamClassId, setSelectedExamClassId] = useState('')
 
-  const yearsQuery = useQuery({
-    queryKey: ['analytics-years'],
-    queryFn: async () => (await setupAPI.getAcademicYears()).data || [],
-  })
-  const years = yearsQuery.data || []
-  const defaultYearId = years.find(y => y.is_current)?.id || years[0]?.id || null
-  const [academicYearId, setAcademicYearId] = useState(null)
-  const activeYearId = academicYearId || defaultYearId
+  const activeYearId = selectedYearId || null
 
   const classesQuery = useQuery({
     queryKey: ['analytics-classes', activeYearId],
@@ -83,6 +104,12 @@ export default function Analytics() {
     queryFn: async () => (await analyticsAPI.feeCollection({ academic_year_id: activeYearId, months })).data,
   })
 
+  const summaryQuery = useQuery({
+    queryKey: ['analytics-summary', activeYearId],
+    enabled: !!activeYearId,
+    queryFn: async () => (await analyticsAPI.summary({ academic_year_id: activeYearId })).data,
+  })
+
   const classPerfQuery = useQuery({
     queryKey: ['analytics-class-performance', activeYearId, activeExamId],
     enabled: !!activeYearId && !!activeExamId,
@@ -98,18 +125,20 @@ export default function Analytics() {
   })
 
   const attendanceQuery = useQuery({
-    queryKey: ['analytics-attendance-trends', attendanceMonths, selectedClassId],
+    queryKey: ['analytics-attendance-trends', activeYearId, attendanceMonths, selectedClassId],
+    enabled: !!activeYearId,
     queryFn: async () =>
       (await analyticsAPI.attendanceTrends({
+        academic_year_id: activeYearId,
         months: attendanceMonths,
         class_id: selectedClassId || undefined,
       })).data || [],
   })
 
   const topStudentsQuery = useQuery({
-    queryKey: ['analytics-top-students', activeExamId],
+    queryKey: ['analytics-top-students', activeYearId, activeExamId],
     enabled: !!activeExamId,
-    queryFn: async () => (await analyticsAPI.topStudents({ exam_id: activeExamId, limit: 10 })).data || [],
+    queryFn: async () => (await analyticsAPI.topStudents({ academic_year_id: activeYearId, exam_id: activeExamId, limit: 10 })).data || [],
   })
 
   const atRiskQuery = useQuery({
@@ -123,7 +152,7 @@ export default function Analytics() {
   })
 
   const feeTrend = feeQuery.data?.trend || []
-  const feeSummary = feeQuery.data?.summary || {}
+  const feeSummary = summaryQuery.data || feeQuery.data?.summary || {}
   const classPerformance = classPerfQuery.data || []
   const attendanceTrend = attendanceQuery.data || []
   const topStudents = topStudentsQuery.data || []
@@ -142,10 +171,10 @@ export default function Analytics() {
     <div style={{ display: 'grid', gap: 16 }}>
       <SectionPanel
         title="Analytics Dashboard"
-        subtitle="School-wide finance, academics, and attendance insights."
+        subtitle={`School-wide finance, academics, and attendance insights for ${selectedYear?.label || 'the selected academic year'}.`}
         actions={(
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <select className="input" value={activeYearId || ''} onChange={e => setAcademicYearId(Number(e.target.value) || null)}>
+            <select className="input" value={activeYearId || ''} disabled>
               {years.map(year => <option key={year.id} value={year.id}>{year.label}</option>)}
             </select>
             <select
@@ -170,10 +199,10 @@ export default function Analytics() {
         )}
       >
         <div className="metric-grid">
-          <MetricCard label="Collection Rate" value={`${(feeSummary.collection_rate || 0).toFixed(1)}%`} sub="Current year" color="var(--brand-600)" />
-          <MetricCard label="Total Collected" value={formatINR(feeSummary.total_collected || 0)} sub="Current year" color="var(--success-600)" />
-          <MetricCard label="Outstanding" value={formatINR(feeSummary.outstanding || 0)} sub="Pending dues" color="var(--danger-600)" />
-          <MetricCard label="At-Risk Attendance" value={atRiskQuery.data?.count || 0} sub="This month" color="var(--warning-600)" />
+          <MetricCard label="Collection Rate" value={`${(feeSummary.collection_rate || 0).toFixed(1)}%`} sub="Current year" color="var(--brand-600)" loading={summaryQuery.isLoading} />
+          <MetricCard label="Total Collected" value={formatINR(feeSummary.total_collected || 0)} sub="Current year" color="var(--success-600)" loading={summaryQuery.isLoading} />
+          <MetricCard label="Outstanding" value={formatINR(feeSummary.outstanding || 0)} sub="Pending dues" color="var(--danger-600)" loading={summaryQuery.isLoading} />
+          <MetricCard label="At-Risk Attendance" value={feeSummary.at_risk_count ?? atRiskQuery.data?.count ?? 0} sub="This month" color="var(--warning-600)" loading={summaryQuery.isLoading} />
         </div>
       </SectionPanel>
 
@@ -187,31 +216,35 @@ export default function Analytics() {
             </select>
           </div>
           <ChartShell loading={feeQuery.isLoading} empty={!feeTrend.length}>
-            <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={feeTrend}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Line dataKey="collected" stroke="#2563eb" strokeWidth={2} />
-              </LineChart>
-            </ResponsiveContainer>
+            <LazyChart>
+              <ResponsiveContainer width="100%" height={260}>
+                <LineChart data={feeTrend}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Line dataKey="collected" stroke="#2563eb" strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+            </LazyChart>
           </ChartShell>
         </SectionPanel>
 
         <SectionPanel title="Class Performance" subtitle="Average exam percentage by class">
           <ChartShell loading={classPerfQuery.isLoading} empty={!classPerformance.length}>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={classPerformance}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="class_name" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="avg_percentage" fill="#16a34a" />
-              </BarChart>
-            </ResponsiveContainer>
+            <LazyChart>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={classPerformance}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="class_name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="avg_percentage" fill="#16a34a" />
+                </BarChart>
+              </ResponsiveContainer>
+            </LazyChart>
           </ChartShell>
         </SectionPanel>
       </div>
@@ -219,13 +252,15 @@ export default function Analytics() {
       <div className="dashboard-grid">
         <SectionPanel title="Grade Distribution" subtitle="School-wide grade count">
           <ChartShell loading={gradeQuery.isLoading} empty={!pieData.length}>
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Tooltip />
-                <Legend />
-                <Pie data={pieData} dataKey="count" nameKey="grade" outerRadius={90} />
-              </PieChart>
-            </ResponsiveContainer>
+            <LazyChart>
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChart>
+                  <Tooltip />
+                  <Legend />
+                  <Pie data={pieData} dataKey="count" nameKey="grade" outerRadius={90} />
+                </PieChart>
+              </ResponsiveContainer>
+            </LazyChart>
           </ChartShell>
         </SectionPanel>
 
@@ -244,16 +279,18 @@ export default function Analytics() {
             </select>
           </div>
           <ChartShell loading={attendanceQuery.isLoading} empty={!attendanceTrend.length}>
-            <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={attendanceTrend}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis domain={[0, 100]} />
-                <Tooltip />
-                <Legend />
-                <Area type="monotone" dataKey="attendance_pct" fill="#93c5fd" stroke="#2563eb" />
-              </AreaChart>
-            </ResponsiveContainer>
+            <LazyChart>
+              <ResponsiveContainer width="100%" height={260}>
+                <AreaChart data={attendanceTrend}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis domain={[0, 100]} />
+                  <Tooltip />
+                  <Legend />
+                  <Area type="monotone" dataKey="attendance_pct" fill="#93c5fd" stroke="#2563eb" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </LazyChart>
           </ChartShell>
         </SectionPanel>
       </div>

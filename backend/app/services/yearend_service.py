@@ -48,6 +48,7 @@ from app.models.base_models import (
 )
 from app.core.constants import CLASS_ORDER, PROMOTION_LOCK_KEY, RECEIPT_NUMBER_LOCK_KEY, TC_NUMBER_LOCK_KEY
 from app.services.marks_service import GSEB_SUBJECTS, get_class_results
+from app.services.student_service import ensure_enrollments_for_legacy_students
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Constants
@@ -178,9 +179,16 @@ def get_attendance_percentage(
 
     total_working = count_working_days(db, year_obj.id, start, end)
 
+    enrollment = db.query(Enrollment).filter_by(
+        student_id=student_id,
+        class_id=class_id,
+        academic_year_id=cls.academic_year_id,
+    ).first()
+    if not enrollment:
+        return None
+
     present_count = db.query(func.count(Attendance.id)).filter(
-        Attendance.student_id == student_id,
-        Attendance.class_id   == class_id,
+        Attendance.enrollment_id == enrollment.id,
         Attendance.status     == "P",
         Attendance.date       >= start,
         Attendance.date       <= end,
@@ -193,11 +201,24 @@ def get_attendance_percentage(
 
 def _get_unpaid_dues(db: Session, student_id: int, academic_year_id: int) -> list[StudentFee]:
     """Returns StudentFee rows with outstanding balance for a student in a year."""
+    ensure_enrollments_for_legacy_students(db)
+    enrollment = db.query(Enrollment).filter_by(
+        student_id=student_id,
+        academic_year_id=academic_year_id,
+    ).first()
+    if enrollment:
+        db.query(StudentFee).filter(
+            StudentFee.student_id == student_id,
+            StudentFee.academic_year_id == academic_year_id,
+            StudentFee.enrollment_id == None,  # noqa: E711
+        ).update({StudentFee.enrollment_id: enrollment.id}, synchronize_session=False)
+
     fees = (
         db.query(StudentFee)
+        .join(Enrollment, Enrollment.id == StudentFee.enrollment_id)
         .filter(
-            StudentFee.student_id       == student_id,
-            StudentFee.academic_year_id == academic_year_id,
+            Enrollment.student_id       == student_id,
+            Enrollment.academic_year_id == academic_year_id,
             StudentFee.invoice_type     == "regular",
         )
         .all()
@@ -243,6 +264,7 @@ def validate_pre_promotion(
     current_class = db.query(Class).filter_by(id=class_id).first()
     if not current_class:
         return {"can_proceed": False, "errors": ["Class not found"], "warnings": [], "stats": {}}
+    ensure_enrollments_for_legacy_students(db)
 
     # 1. Next class must be determinable
     try:
@@ -295,14 +317,14 @@ def validate_pre_promotion(
         )
 
     # 4. Count students in various states
-    active_students = db.query(Student).filter(
-        Student.class_id == class_id,
-        Student.academic_year_id == current_class.academic_year_id,
-        Student.status.in_([
-            StudentStatusEnum.Active,
-            StudentStatusEnum.Detained,
-            StudentStatusEnum.On_Hold,
-            StudentStatusEnum.Provisional,
+    active_students = db.query(Student).join(Enrollment, Enrollment.student_id == Student.id).filter(
+        Enrollment.class_id == class_id,
+        Enrollment.academic_year_id == current_class.academic_year_id,
+        Enrollment.status.in_([
+            EnrollmentStatusEnum.active,
+            EnrollmentStatusEnum.retained,
+            EnrollmentStatusEnum.on_hold,
+            EnrollmentStatusEnum.provisional,
         ]),
     ).all()
 
@@ -361,7 +383,12 @@ def validate_pre_promotion(
     if exam_ids and promotable_student_ids:
         existing_marks = db.query(func.count(Mark.id)).filter(
             Mark.exam_id.in_(exam_ids),
-            Mark.student_id.in_(promotable_student_ids),
+            Mark.enrollment_id.in_(
+                db.query(Enrollment.id).filter(
+                    Enrollment.student_id.in_(promotable_student_ids),
+                    Enrollment.academic_year_id == current_class.academic_year_id,
+                )
+            ),
         ).scalar() or 0
     if exam_ids:
         unlocked_marks = db.query(func.count(Mark.id)).filter(
@@ -427,17 +454,20 @@ def generate_candidate_list(db: Session, class_id: int) -> list[dict]:
     cls = db.query(Class).filter_by(id=class_id).first()
     if not cls:
         return []
+    ensure_enrollments_for_legacy_students(db)
 
-    students = db.query(Student).filter(
-        Student.class_id == class_id,
-        Student.academic_year_id == cls.academic_year_id,
-        Student.status.in_([
-            StudentStatusEnum.Active,
-            StudentStatusEnum.Detained,
-            StudentStatusEnum.On_Hold,
-            StudentStatusEnum.Provisional,
+    enrollments = db.query(Enrollment).join(Student, Student.id == Enrollment.student_id).filter(
+        Enrollment.class_id == class_id,
+        Enrollment.academic_year_id == cls.academic_year_id,
+        Enrollment.status.in_([
+            EnrollmentStatusEnum.active,
+            EnrollmentStatusEnum.retained,
+            EnrollmentStatusEnum.on_hold,
+            EnrollmentStatusEnum.provisional,
         ]),
-    ).order_by(Student.roll_number).all()
+    ).order_by(Enrollment.roll_number).all()
+    students = [enrollment.student for enrollment in enrollments if enrollment.student]
+    enrollment_by_student = {enrollment.student_id: enrollment for enrollment in enrollments}
 
     # Get all exam results for this class in one shot
     results_map: dict[int, dict] = {}
@@ -463,7 +493,7 @@ def generate_candidate_list(db: Session, class_id: int) -> list[dict]:
         result = results_map.get(student.id, {})
 
         # Pending dues
-        current_year_id = student.academic_year_id
+        current_year_id = enrollment_by_student[student.id].academic_year_id
         unpaid_fees = _get_unpaid_dues(db, student.id, current_year_id)
         pending_amount = sum(
             Decimal(str(sf.net_amount)) - sum(
@@ -494,7 +524,8 @@ def generate_candidate_list(db: Session, class_id: int) -> list[dict]:
             "student_name":     student.name_en,
             "student_name_gu":  student.name_gu,
             "gr_number":        student.gr_number,
-            "roll_number":      student.roll_number,
+            "enrollment_id":    enrollment_by_student[student.id].id,
+            "roll_number":      enrollment_by_student[student.id].roll_number,
             "current_status":   student.status.value if hasattr(student.status, "value") else student.status,
             "exam_result":      result.get("result", "NO_MARKS"),
             "percentage":       result.get("percentage"),
@@ -570,6 +601,7 @@ def bulk_promote_students(
     current_class = db.query(Class).filter_by(id=class_id).first()
     if not current_class:
         raise ValueError("Class not found")
+    ensure_enrollments_for_legacy_students(db)
 
     # ── 2. Pre-promotion validation ───────────────────────────────────────────
     validation = validate_pre_promotion(db, class_id, new_academic_year_id)
@@ -592,15 +624,22 @@ def bulk_promote_students(
         raise
 
     # ── 3. Get students eligible for this run ─────────────────────────────────
-    students = db.query(Student).filter(
-        Student.class_id == class_id,
-        Student.academic_year_id == current_class.academic_year_id,
+    source_enrollments = db.query(Enrollment).join(Student, Student.id == Enrollment.student_id).filter(
+        Enrollment.class_id == class_id,
+        Enrollment.academic_year_id == current_class.academic_year_id,
+        Enrollment.status.in_([
+            EnrollmentStatusEnum.active,
+            EnrollmentStatusEnum.retained,
+            EnrollmentStatusEnum.provisional,
+        ]),
         Student.status.notin_([
             StudentStatusEnum.Left,
             StudentStatusEnum.TC_Issued,
             StudentStatusEnum.Alumni,
         ]),
     ).order_by(Student.name_en).all()
+    students = [enroll.student for enroll in source_enrollments if enroll.student]
+    source_enrollment_by_student = {enroll.student_id: enroll for enroll in source_enrollments}
 
     student_actions = student_actions or {}
 
@@ -731,12 +770,15 @@ def bulk_promote_students(
                 continue
 
             # ── Create new Enrollment ─────────────────────────────────────
+            source_enrollment = source_enrollment_by_student.get(student.id)
             new_enrollment = Enrollment(
                 student_id       = student.id,
                 academic_year_id = new_academic_year_id,
                 class_id         = target_class_id,
                 roll_number      = roll_num,
-                original_roll_number = str(student.roll_number) if student.roll_number is not None else None,
+                original_roll_number = source_enrollment.roll_number if source_enrollment else (
+                    str(student.roll_number) if student.roll_number is not None else None
+                ),
                 status           = enroll_status,
                 promotion_action = action,
                 promotion_status = "completed",
@@ -760,6 +802,7 @@ def bulk_promote_students(
                 arrear_amount = Decimal(str(original_fee.net_amount)) - Decimal(str(paid_so_far))
                 if arrear_amount > 0:
                     arrear = StudentFee(
+                        enrollment_id     = new_enrollment.id,
                         student_id        = student.id,
                         fee_structure_id  = original_fee.fee_structure_id,
                         concession        = Decimal("0.00"),
@@ -916,7 +959,7 @@ def undo_promotion(
 
         # Delete arrear fees created during this promotion
         arrears = db.query(StudentFee).filter(
-            StudentFee.student_id        == enroll.student_id,
+            StudentFee.enrollment_id     == enroll.id,
             StudentFee.academic_year_id  == new_academic_year_id,
             StudentFee.invoice_type      == "arrear",
             StudentFee.source_invoice_id.isnot(None),

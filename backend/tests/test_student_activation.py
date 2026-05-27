@@ -170,6 +170,30 @@ def test_start_activation_matches_identifier_and_email_case_insensitively(client
     db.close()
 
 
+def test_activation_identifier_can_be_registered_phone(client):
+    db = TestingSessionLocal()
+    try:
+        student = student_activation_service._find_student(
+            db,
+            "+91 98765 43210",
+            "alice@student.example",
+            "student",
+        )
+        parent = student_activation_service._find_student(
+            db,
+            "9876543211",
+            "parent@example.com",
+            "parent",
+        )
+
+        assert student is not None
+        assert student.student_id == "SMS-2026-001"
+        assert parent is not None
+        assert parent.student_id == "SMS-2026-001"
+    finally:
+        db.close()
+
+
 def test_student_activation_completes_and_cannot_be_reused(client):
     db = TestingSessionLocal()
     activation = _latest_activation(db, "student")

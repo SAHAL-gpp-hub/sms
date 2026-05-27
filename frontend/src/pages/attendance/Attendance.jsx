@@ -1,9 +1,10 @@
 // Attendance.jsx — Fully responsive with mobile-optimized status toggles
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import toast from 'react-hot-toast'
 import { setupAPI, attendanceAPI, extractError, openSignedPdf } from '../../services/api'
-import { getAuthUser } from '../../services/auth'
-import { PageHeader, FilterRow, Select, EmptyState, TableSkeleton, TabBar } from '../../components/UI'
+import { PageHeader, FilterRow, Select, EmptyState, TableSkeleton, TabBar, ReadonlyBanner, ScreenState } from '../../components/UI'
+import { useAcademicYear } from '../../contexts/academicYearContext'
+import { useRoleContext } from '../../hooks/useRoleContext'
 
 const STATUS_OPTIONS = [
   { value: 'UNMARKED', label: 'Unmarked', short: '—', color: '#64748b', bg: '#f8fafc', border: '#cbd5e1' },
@@ -18,31 +19,38 @@ const MARKABLE_STATUS_OPTIONS = STATUS_OPTIONS.filter(o => o.value !== 'UNMARKED
 const MONTHS = ['January','February','March','April','May','June',
                 'July','August','September','October','November','December']
 
-function StatusToggle({ value, onChange }) {
+function StatusToggle({ value, onChange, disabled = false }) {
   return (
-    <div style={{ display: 'flex', gap: '4px', flexWrap: 'nowrap' }}>
+    <div className="status-toggle-group">
       {MARKABLE_STATUS_OPTIONS.map(opt => (
         <button
+          className="status-btn"
           key={opt.value}
           type="button"
           onClick={() => onChange(opt.value)}
+          disabled={disabled}
           title={opt.label}
           aria-pressed={value === opt.value}
           style={{
-            minWidth: '64px',
-            minHeight: '36px',
-            padding: '4px 8px',
-            borderRadius: '7px',
+            minWidth: '76px',
+            minHeight: '46px',
+            padding: '7px 10px',
+            borderRadius: '8px',
             border: `1.5px solid ${value === opt.value ? opt.color : 'var(--border-default)'}`,
             background: value === opt.value ? opt.bg : 'var(--surface-0)',
             color: value === opt.value ? opt.color : 'var(--text-tertiary)',
             fontSize: '12px',
             fontWeight: 700,
-            cursor: 'pointer',
+            cursor: disabled ? 'not-allowed' : 'pointer',
             transition: 'all 0.12s',
             fontFamily: 'var(--font-sans)',
             touchAction: 'manipulation',
             transform: value === opt.value ? 'scale(1.08)' : 'scale(1)',
+            opacity: disabled ? 0.65 : 1,
+            display: 'grid',
+            gridTemplateColumns: 'auto 1fr',
+            alignItems: 'center',
+            columnGap: '5px',
           }}
         >
           <span className="attendance-status-short">{opt.short}</span>
@@ -92,9 +100,8 @@ function AttendanceSummaryBar({ statuses }) {
 }
 
 export default function Attendance() {
-  const authUser = useMemo(() => getAuthUser(), [])
-  const isTeacher = authUser?.role === 'teacher'
-  const classTeacherClassIds = useMemo(() => authUser?.classTeacherClassIds || [], [authUser])
+  const { selectedYearId, selectedYear, isClosedYear, loading: yearLoading } = useAcademicYear()
+  const { isTeacher, classTeacherClassIds } = useRoleContext()
   const [classes, setClasses]               = useState([])
   const [selectedClass, setSelectedClass]   = useState('')
   const [selectedDate, setSelectedDate]     = useState(new Date().toISOString().split('T')[0])
@@ -106,6 +113,7 @@ export default function Attendance() {
   const [dirty, setDirty]                   = useState(false)
   const [view, setView]                     = useState('daily')
   const [monthlySummary, setMonthlySummary] = useState([])
+  const [highlightUnmarked, setHighlightUnmarked] = useState(false)
   const [loadingMonthly, setLoadingMonthly] = useState(false)
   const [monthYear, setMonthYear] = useState({
     year: new Date().getFullYear(),
@@ -113,6 +121,7 @@ export default function Attendance() {
   })
 
   const fetchDailyAttendance = useCallback(async () => {
+    if (!selectedClass || !selectedDate) return
     setLoading(true)
     setSaved(false)
     setDirty(false)
@@ -122,6 +131,7 @@ export default function Attendance() {
       const map = {}
       r.data.forEach(s => { map[s.student_id] = s.status || 'UNMARKED' })
       setStatuses(map)
+      setHighlightUnmarked(false)
     } catch (err) {
       toast.error(extractError(err))
     } finally {
@@ -143,7 +153,12 @@ export default function Attendance() {
   }, [monthYear.month, monthYear.year, selectedClass])
 
   useEffect(() => {
-    setupAPI.getClasses().then(r => {
+    if (!selectedYearId) {
+      setClasses([])
+      setSelectedClass('')
+      return
+    }
+    setupAPI.getClasses(selectedYearId).then(r => {
       const allClasses = r.data || []
       setClasses(
         isTeacher
@@ -151,7 +166,7 @@ export default function Attendance() {
           : allClasses
       )
     })
-  }, [classTeacherClassIds, isTeacher])
+  }, [classTeacherClassIds, isTeacher, selectedYearId])
 
   useEffect(() => {
     if (selectedClass && selectedDate && view === 'daily') fetchDailyAttendance()
@@ -172,45 +187,52 @@ export default function Attendance() {
   }, [dirty])
 
   const handleStatusChange = (studentId, status) => {
+    if (isClosedYear) return
     setStatuses(prev => ({ ...prev, [studentId]: status }))
+    setHighlightUnmarked(false)
     setSaved(false)
     setDirty(true)
   }
 
   const handleMarkAll = (status) => {
+    if (isClosedYear) return
     const label = STATUS_OPTIONS.find(o => o.value === status)?.label
-    if (!window.confirm(`Mark all ${roster.length} students as ${label}? This will replace the current marks on this screen.`)) return
     const map = {}
     roster.forEach(s => { map[s.student_id] = status })
     setStatuses(map)
+    setHighlightUnmarked(false)
     setSaved(false)
     setDirty(true)
     toast(`All marked as ${label}`)
   }
 
   const handleMarkRemainingPresent = () => {
+    if (isClosedYear) return
     const unmarkedCount = roster.filter(s => !statuses[s.student_id] || statuses[s.student_id] === 'UNMARKED').length
     if (unmarkedCount === 0) return
-    if (!window.confirm(`Mark the remaining ${unmarkedCount} unmarked student${unmarkedCount !== 1 ? 's' : ''} as Present?`)) return
     const map = { ...statuses }
     roster.forEach(s => {
       if (!map[s.student_id] || map[s.student_id] === 'UNMARKED') map[s.student_id] = 'P'
     })
     setStatuses(map)
+    setHighlightUnmarked(false)
     setSaved(false)
     setDirty(true)
   }
 
   const handleSave = async () => {
+    if (isClosedYear) return
     if (roster.length === 0) return
     const unmarked = roster.filter(s => !statuses[s.student_id] || statuses[s.student_id] === 'UNMARKED')
     if (unmarked.length > 0) {
-      toast.error(`${unmarked.length} student${unmarked.length !== 1 ? 's are' : ' is'} still unmarked`)
+      setHighlightUnmarked(true)
+      document.getElementById(`student-row-${unmarked[0].student_id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
     setSaving(true)
     try {
       const entries = roster.map(s => ({
+        enrollment_id: s.enrollment_id,
         student_id: s.student_id,
         class_id:   parseInt(selectedClass),
         date:       selectedDate,
@@ -219,6 +241,7 @@ export default function Attendance() {
       await attendanceAPI.markBulk(entries)
       setSaved(true)
       setDirty(false)
+      setHighlightUnmarked(false)
       toast.success(`Saved for ${entries.length} students`)
     } catch (err) {
       toast.error(extractError(err))
@@ -231,19 +254,127 @@ export default function Attendance() {
   const currentYear = new Date().getFullYear()
   const yearOptions = Array.from({ length: 7 }, (_, i) => currentYear - 3 + i)
   const unmarkedCount = roster.filter(s => !statuses[s.student_id] || statuses[s.student_id] === 'UNMARKED').length
-  const canSave = roster.length > 0 && unmarkedCount === 0
-
   const confirmDiscard = () => !dirty || window.confirm('You have unsaved attendance changes. Discard them?')
   const displayDate = selectedDate
     ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })
     : ''
 
   return (
-    <div>
+    <div className="attendance-page">
+      <style>{`
+        .attendance-page .filter-row-inner {
+          align-items: end;
+        }
+        .attendance-actions {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+        .attendance-bulk-actions {
+          display: flex;
+          gap: 6px;
+          flex-wrap: wrap;
+        }
+        .attendance-status-toggle-cell {
+          min-width: 360px;
+        }
+        .status-toggle-group {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(76px, 1fr));
+          gap: 6px;
+          width: min(100%, 380px);
+        }
+        .attendance-status-short {
+          display: inline-grid;
+          place-items: center;
+          width: 22px;
+          height: 22px;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.72);
+          font-size: 11px;
+          line-height: 1;
+        }
+        .attendance-status-label {
+          min-width: 0;
+          line-height: 1.1;
+        }
+        .attendance-save-bar {
+          position: sticky;
+          bottom: 0;
+          z-index: 20;
+          margin-top: 12px;
+          padding: 10px 12px;
+          border-radius: 10px 10px 0 0;
+          box-shadow: 0 -8px 24px rgba(15,23,42,0.08);
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+        @media (max-width: 900px) {
+          .attendance-actions {
+            justify-content: flex-start;
+            width: 100%;
+          }
+          .attendance-status-toggle-cell {
+            min-width: 0;
+          }
+          .status-toggle-group {
+            width: 100%;
+          }
+        }
+        @media (max-width: 640px) {
+          .attendance-page .filter-row-inner > * {
+            min-width: 100% !important;
+            width: 100%;
+          }
+          .attendance-actions > div,
+          .attendance-actions .btn,
+          .attendance-bulk-actions,
+          .attendance-bulk-actions button {
+            width: 100%;
+          }
+          .attendance-bulk-actions {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+          .attendance-save-bar {
+            align-items: stretch;
+          }
+          .attendance-save-bar > div,
+          .attendance-save-bar .btn {
+            width: 100%;
+          }
+        }
+        @media (max-width: 380px) {
+          .status-toggle-group {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px !important;
+          }
+          .status-btn {
+            min-height: 44px !important;
+            font-size: 13px !important;
+          }
+        }
+        @keyframes unmarkedPulse {
+          0%, 100% { box-shadow: inset 0 0 0 2px #dc2626; }
+          50% { box-shadow: inset 0 0 0 4px #fecaca; }
+        }
+      `}</style>
       <PageHeader
         title="Attendance"
-        subtitle="Mark daily attendance and view monthly reports"
+        subtitle={selectedYear?.label ? `Mark daily attendance and view monthly reports for ${selectedYear.label}` : 'Mark daily attendance and view monthly reports'}
       />
+      {isClosedYear && (
+        <ReadonlyBanner
+          yearLabel={selectedYear?.label}
+          reason="This academic year is closed. Attendance can be reviewed, but editing and saving are disabled."
+        />
+      )}
 
       {/* Filters */}
       <FilterRow>
@@ -306,6 +437,22 @@ export default function Attendance() {
         </div>
       </FilterRow>
 
+      {!selectedYearId && !yearLoading && (
+        <div className="card"><ScreenState type="no-year" /></div>
+      )}
+      {selectedYearId && isTeacher && classes.length === 0 && !loading && (
+        <div className="card">
+          <ScreenState
+            type="no-permission"
+            title="No attendance assignment"
+            description="Ask an admin to assign you as class teacher for this academic year."
+          />
+        </div>
+      )}
+      {selectedYearId && !selectedClass && classes.length > 0 && (
+        <div className="card"><ScreenState type="no-class" description="Choose a class and date before loading the attendance roster." /></div>
+      )}
+
       {/* Daily View */}
       {view === 'daily' && selectedClass && (
         <>
@@ -321,14 +468,14 @@ export default function Attendance() {
                   </div>
                 )}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <div className="attendance-actions">
                 {/* Mark all buttons */}
-                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                <div className="attendance-bulk-actions">
                   {MARKABLE_STATUS_OPTIONS.map(opt => (
                     <button
                       key={opt.value}
                       onClick={() => handleMarkAll(opt.value)}
-                      disabled={roster.length === 0}
+                      disabled={roster.length === 0 || isClosedYear}
                       style={{
                         padding: '5px 10px',
                         minHeight: '34px',
@@ -338,9 +485,9 @@ export default function Attendance() {
                         color: opt.color,
                         fontSize: '11.5px',
                         fontWeight: 700,
-                        cursor: 'pointer',
+                        cursor: (roster.length === 0 || isClosedYear) ? 'not-allowed' : 'pointer',
                         fontFamily: 'var(--font-sans)',
-                        opacity: roster.length === 0 ? 0.5 : 1,
+                        opacity: (roster.length === 0 || isClosedYear) ? 0.5 : 1,
                         touchAction: 'manipulation',
                         whiteSpace: 'nowrap',
                       }}
@@ -349,9 +496,9 @@ export default function Attendance() {
                     </button>
                   ))}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   {unmarkedCount > 0 && (
-                    <button type="button" className="btn btn-secondary" onClick={handleMarkRemainingPresent}>
+                    <button type="button" className="btn btn-secondary" onClick={handleMarkRemainingPresent} disabled={isClosedYear}>
                       Mark remaining present ({unmarkedCount})
                     </button>
                   )}
@@ -363,7 +510,7 @@ export default function Attendance() {
                       Saved
                     </span>
                   )}
-                  <button className="btn btn-primary" onClick={handleSave} disabled={saving || !canSave} style={{ whiteSpace: 'nowrap' }}>
+                  <button className="btn btn-primary" onClick={handleSave} disabled={saving || roster.length === 0 || isClosedYear || !dirty} style={{ whiteSpace: 'nowrap' }}>
                     {saving ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Saving…</> : 'Save'}
                   </button>
                 </div>
@@ -389,25 +536,35 @@ export default function Attendance() {
                     </tr>
                   </thead>
                   <tbody>
-                    {roster.map(student => (
-                      <tr key={student.student_id}>
+                    {roster.map(student => {
+                      const isUnmarked = !statuses[student.student_id] || statuses[student.student_id] === 'UNMARKED'
+                      return (
+                      <tr
+                        key={student.student_id}
+                        id={`student-row-${student.student_id}`}
+                        style={{
+                          animation: highlightUnmarked && isUnmarked ? 'unmarkedPulse 1.1s ease-in-out infinite' : undefined,
+                          background: highlightUnmarked && isUnmarked ? '#fff1f2' : undefined,
+                        }}
+                      >
                         <td style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 600 }}>
                           {student.roll_number || '—'}
                         </td>
                         <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                           {student.student_name}
                         </td>
-                        <td>
+                        <td className="attendance-status-toggle-cell">
                           <StatusToggle
                             value={statuses[student.student_id] || 'UNMARKED'}
                             onChange={status => handleStatusChange(student.student_id, status)}
+                            disabled={isClosedYear}
                           />
                           {(!statuses[student.student_id] || statuses[student.student_id] === 'UNMARKED') && (
                             <div style={{ marginTop: '5px', fontSize: '11px', fontWeight: 700, color: '#64748b' }}>Unmarked</div>
                           )}
                         </td>
                       </tr>
-                    ))}
+                    )})}
                   </tbody>
                 </table>
               </div>
@@ -417,39 +574,42 @@ export default function Attendance() {
             {roster.length > 5 && !loading && (
               <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'flex-end', gap: '8px', flexWrap: 'wrap' }}>
                 {unmarkedCount > 0 && (
-                  <button type="button" className="btn btn-secondary" onClick={handleMarkRemainingPresent}>
+                  <button type="button" className="btn btn-secondary" onClick={handleMarkRemainingPresent} disabled={isClosedYear}>
                     Mark remaining present ({unmarkedCount})
                   </button>
                 )}
-                <button className="btn btn-primary" onClick={handleSave} disabled={saving || !canSave}>
+                <button className="btn btn-primary" onClick={handleSave} disabled={saving || roster.length === 0 || isClosedYear || !dirty}>
                   {saving ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Saving…</> : 'Save Attendance'}
                 </button>
               </div>
             )}
           </div>
           {roster.length > 0 && !loading && (
-            <div style={{
-              position: 'sticky',
-              bottom: 0,
-              zIndex: 20,
-              marginTop: '12px',
-              padding: '10px',
-              border: '1px solid var(--border-default)',
-              borderRadius: '12px',
-              background: 'rgba(255,255,255,0.96)',
-              boxShadow: '0 -8px 24px rgba(15,23,42,0.08)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: '10px',
-              flexWrap: 'wrap',
+            <div className="attendance-save-bar" style={{
+              border: highlightUnmarked && unmarkedCount > 0 ? '1px solid #fecaca' : '1px solid var(--border-default)',
+              background: highlightUnmarked && unmarkedCount > 0 ? '#fee2e2' : 'rgba(255,255,255,0.96)',
             }}>
               <strong style={{ color: unmarkedCount ? 'var(--danger-600)' : 'var(--success-700)' }}>
-                {unmarkedCount ? `${unmarkedCount} unmarked` : 'Ready to save'}
+                {unmarkedCount ? `${unmarkedCount} student${unmarkedCount !== 1 ? 's' : ''} still unmarked` : 'Ready to save'}
               </strong>
-              <button className="btn btn-primary" onClick={handleSave} disabled={saving || !canSave}>
-                {saving ? 'Saving…' : 'Save Attendance'}
-              </button>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {highlightUnmarked && unmarkedCount > 0 && (
+                  <button className="btn btn-secondary" type="button" onClick={() => {
+                    const next = roster.find(s => !statuses[s.student_id] || statuses[s.student_id] === 'UNMARKED')
+                    if (next) document.getElementById(`student-row-${next.student_id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                  }}>
+                    Next unmarked
+                  </button>
+                )}
+                {unmarkedCount > 0 && (
+                  <button className="btn btn-secondary" type="button" onClick={handleMarkRemainingPresent} disabled={isClosedYear}>
+                    Mark all Present
+                  </button>
+                )}
+                <button className="btn btn-primary" onClick={handleSave} disabled={saving || roster.length === 0 || isClosedYear || !dirty}>
+                  {saving ? 'Saving…' : 'Save Attendance'}
+                </button>
+              </div>
             </div>
           )}
         </>

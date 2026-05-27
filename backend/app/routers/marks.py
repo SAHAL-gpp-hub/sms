@@ -60,7 +60,11 @@ def get_subjects(
     if class_id:
         ensure_class_access(current_user, class_id)
         subjects = marks_service.get_subjects(db, class_id, include_inactive)
-        if current_user.role == "teacher":
+        has_specific_subjects = any(
+            a["class_id"] == class_id
+            for a in current_user.subject_assignments
+        )
+        if current_user.role == "teacher" and has_specific_subjects:
             allowed_subject_ids = {
                 a["subject_id"]
                 for a in current_user.subject_assignments
@@ -75,7 +79,11 @@ def get_subjects(
         if not cls:
             return []
         subjects = marks_service.get_subjects(db, cls.id, include_inactive)
-        if current_user.role == "teacher":
+        has_specific_subjects = any(
+            a["class_id"] == cls.id
+            for a in current_user.subject_assignments
+        )
+        if current_user.role == "teacher" and has_specific_subjects:
             allowed_subject_ids = {
                 a["subject_id"]
                 for a in current_user.subject_assignments
@@ -282,7 +290,11 @@ def get_marks(
     """
     ensure_class_access(current_user, class_id)
     allowed_subject_ids = None
-    if current_user.role == "teacher":
+    has_specific_subjects = any(
+        a["class_id"] == class_id
+        for a in current_user.subject_assignments
+    )
+    if current_user.role == "teacher" and has_specific_subjects:
         allowed_subject_ids = [
             a["subject_id"]
             for a in current_user.subject_assignments
@@ -305,13 +317,6 @@ def bulk_save_marks(
     if current_user.role == "teacher":
         if not entries:
             return {"saved": 0}
-        student_ids = {entry.student_id for entry in entries}
-        students = db.query(Student).filter(Student.id.in_(student_ids)).all()
-        found_ids = {student.id for student in students}
-        missing_ids = student_ids - found_ids
-        if missing_ids:
-            raise HTTPException(status_code=404, detail=f"Students not found: {sorted(missing_ids)}")
-        students_by_id = {student.id: student for student in students}
         exam_ids = {entry.exam_id for entry in entries}
         subject_ids = {entry.subject_id for entry in entries}
         exams = db.query(Exam).filter(Exam.id.in_(exam_ids)).all()
@@ -323,18 +328,20 @@ def bulk_save_marks(
         if missing_subject_ids := subject_ids - set(subjects_by_id):
             raise HTTPException(status_code=404, detail=f"Subjects not found: {sorted(missing_subject_ids)}")
         for entry in entries:
-            student = students_by_id[entry.student_id]
             exam = exams_by_id[entry.exam_id]
             subject = subjects_by_id[entry.subject_id]
-            enrolled_for_exam = db.query(Enrollment.id).filter_by(
-                student_id=student.id,
-                class_id=exam.class_id,
-                academic_year_id=exam.academic_year_id,
-            ).first()
-            if student.class_id != exam.class_id and not enrolled_for_exam:
+            if entry.enrollment_id is not None:
+                enrolled_for_exam = db.query(Enrollment).filter_by(id=entry.enrollment_id).first()
+            else:
+                enrolled_for_exam = db.query(Enrollment).filter_by(
+                    student_id=entry.student_id,
+                    class_id=exam.class_id,
+                    academic_year_id=exam.academic_year_id,
+                ).first()
+            if not enrolled_for_exam:
                 raise HTTPException(
                     status_code=422,
-                    detail=f"Student {student.id} does not belong to exam class {exam.class_id}",
+                    detail="Student is not enrolled for this exam class/year",
                 )
             if subject.class_id != exam.class_id:
                 raise HTTPException(

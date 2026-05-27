@@ -14,17 +14,19 @@ Run with:
 """
 
 import pytest
-from datetime import date  # ✅ FIX: import date for type-safe Date column values
+from datetime import date, timedelta  # ✅ FIX: import date for type-safe Date column values
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from urllib.parse import parse_qs, urlparse
 
+from app.core.config import settings
 from app.core.database import Base, get_db
-from app.core.security import get_password_hash
+from app.core.security import create_access_token, get_password_hash
 from app.main import app
 from app.models.base_models import (
     AcademicYear, Class, Exam, FeeHead, FeePayment, FeeStructure, Student, StudentFee,
-    GenderEnum, StudentStatusEnum, Subject,
+    AuthRefreshSession, GenderEnum, NotificationOutbox, StudentStatusEnum, Subject,
     TeacherClassAssignment, User,
 )
 
@@ -198,6 +200,11 @@ def student_items(payload):
     return payload
 
 
+def invite_token(invitation_url):
+    params = parse_qs(urlparse(invitation_url).query)
+    return params["token"][0]
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 1. Login / JWT issuance
 # ══════════════════════════════════════════════════════════════════════════════
@@ -238,6 +245,30 @@ class TestLogin:
     def test_wrong_password_returns_401(self, client):
         res = login(client, "admin@test.com", "wrongpassword")
         assert res.status_code == 401
+
+    def test_refresh_rotates_session_and_keeps_access_working(self, client):
+        res = login(client, "teacherb@test.com", "teacher1234")
+        assert res.status_code == 200
+        first_cookie = client.cookies.get(settings.REFRESH_COOKIE_NAME)
+        assert first_cookie
+
+        refresh_res = client.post("/api/v1/auth/refresh")
+        assert refresh_res.status_code == 200
+        data = refresh_res.json()
+        assert data["role"] == "teacher"
+        assert data["access_token"]
+        assert client.cookies.get(settings.REFRESH_COOKIE_NAME) != first_cookie
+
+        me = client.get("/api/v1/auth/me", headers=auth(data["access_token"]))
+        assert me.status_code == 200
+        assert me.json()["email"] == "teacherb@test.com"
+
+        with TestingSessionLocal() as db:
+            user = db.query(User).filter_by(email="teacherb@test.com").one()
+            sessions = db.query(AuthRefreshSession).filter_by(user_id=user.id).order_by(AuthRefreshSession.id).all()
+            assert len(sessions) >= 2
+            assert sessions[-2].revoked_at is not None
+            assert sessions[-2].replaced_by_session_id == sessions[-1].id
 
     def test_inactive_user_cannot_login(self, client):
         res = login(client, "inactive@test.com", "inactive1234")
@@ -305,6 +336,112 @@ class TestAdminEndpoints:
         }, headers=auth(tok))
         assert res.status_code == 201
         assert res.json()["role"] == "teacher"
+
+    def test_admin_can_create_teacher_invite_with_metadata(self, client):
+        tok = token(client, "admin@test.com", "admin1234")
+        res = client.post("/api/v1/admin/users", json={
+            "name": "Pending Teacher",
+            "email": "pending-teacher@test.com",
+            "role": "teacher",
+            "send_invite": True,
+        }, headers=auth(tok))
+        assert res.status_code == 201
+        data = res.json()
+        assert data["is_active"] is False
+        assert data["invite_status"] == "pending"
+        assert data["can_resend_invite"] is True
+        assert "/complete-registration?token=" in data["invitation_url"]
+
+        listed = client.get("/api/v1/admin/users?role=teacher", headers=auth(tok)).json()
+        teacher = next(u for u in listed if u["email"] == "pending-teacher@test.com")
+        assert teacher["invite_status"] == "pending"
+        assert teacher["last_invite_sent_at"] is not None
+
+    def test_pending_teacher_can_complete_registration_from_invite(self, client):
+        tok = token(client, "admin@test.com", "admin1234")
+        create_res = client.post("/api/v1/admin/users", json={
+            "name": "Invite Completion",
+            "email": "invite-completion@test.com",
+            "role": "teacher",
+            "send_invite": True,
+        }, headers=auth(tok))
+        assert create_res.status_code == 201
+
+        complete_res = client.post("/api/v1/auth/complete-registration", json={
+            "registration_token": invite_token(create_res.json()["invitation_url"]),
+            "password": "teacherpass9",
+        })
+        assert complete_res.status_code == 200
+        data = complete_res.json()
+        assert data["role"] == "teacher"
+        assert data["access_token"]
+        assert client.cookies.get(settings.REFRESH_COOKIE_NAME)
+
+        login_res = login(client, "invite-completion@test.com", "teacherpass9")
+        assert login_res.status_code == 200
+
+    def test_complete_registration_rejects_non_registration_token(self, client):
+        access_token = create_access_token(
+            subject=1,
+            role="teacher",
+            expires_delta=timedelta(minutes=5),
+            extra_claims={"purpose": "access"},
+        )
+
+        res = client.post("/api/v1/auth/complete-registration", json={
+            "registration_token": access_token,
+            "password": "teacherpass9",
+        })
+        assert res.status_code == 401
+
+    def test_admin_can_resend_teacher_invite(self, client):
+        tok = token(client, "admin@test.com", "admin1234")
+        users = client.get("/api/v1/admin/users?role=teacher", headers=auth(tok)).json()
+        teacher = next(u for u in users if u["email"] == "inactive@test.com")
+
+        with TestingSessionLocal() as db:
+            before = db.query(NotificationOutbox).filter(NotificationOutbox.destination == "inactive@test.com").count()
+
+        res = client.post(f"/api/v1/admin/users/{teacher['id']}/resend-invite", headers=auth(tok))
+        assert res.status_code == 200
+        data = res.json()
+        assert data["queued"] is True
+        assert data["expires_in_days"] == 7
+        assert data["email"] == "inactive@test.com"
+        assert "/complete-registration?token=" in data["invitation_url"]
+
+        with TestingSessionLocal() as db:
+            after = db.query(NotificationOutbox).filter(NotificationOutbox.destination == "inactive@test.com").count()
+        assert after == before + 1
+
+    def test_resend_teacher_invite_rejects_invalid_targets_and_roles(self, client):
+        tok = token(client, "admin@test.com", "admin1234")
+        users = client.get("/api/v1/admin/users", headers=auth(tok)).json()
+        active_teacher = next(u for u in users if u["email"] == "teachera@test.com")
+        student_user = next(u for u in users if u["email"] == "student@test.com")
+
+        active_res = client.post(f"/api/v1/admin/users/{active_teacher['id']}/resend-invite", headers=auth(tok))
+        assert active_res.status_code == 409
+
+        non_teacher_res = client.post(f"/api/v1/admin/users/{student_user['id']}/resend-invite", headers=auth(tok))
+        assert non_teacher_res.status_code == 422
+
+        missing_res = client.post("/api/v1/admin/users/999999/resend-invite", headers=auth(tok))
+        assert missing_res.status_code == 404
+
+        teacher_tok = token(client, "teachera@test.com", "teacher1234")
+        forbidden_res = client.post(f"/api/v1/admin/users/{student_user['id']}/resend-invite", headers=auth(teacher_tok))
+        assert forbidden_res.status_code == 403
+
+    def test_admin_can_bulk_resend_pending_teacher_invites(self, client):
+        tok = token(client, "admin@test.com", "admin1234")
+        res = client.post("/api/v1/admin/teachers/resend-pending-invites", headers=auth(tok))
+        assert res.status_code == 200
+        data = res.json()
+        assert data["queued"] >= 1
+        assert data["skipped_active"] >= 2
+        assert data["failed"] == 0
+        assert data["failures"] == []
 
     def test_teacher_cannot_create_user(self, client):
         tok = token(client, "teachera@test.com", "teacher1234")

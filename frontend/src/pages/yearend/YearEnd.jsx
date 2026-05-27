@@ -370,7 +370,7 @@ function YearLifecycleTab({ years, onRefresh }) {
                   </div>
                 </div>
                 {y.status === 'draft' && (
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                     <button
                       className="btn btn-success btn-sm"
                       disabled={activating === y.id}
@@ -378,14 +378,19 @@ function YearLifecycleTab({ years, onRefresh }) {
                     >
                       {activating === y.id ? <Spinner /> : 'Activate'}
                     </button>
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      disabled={activating === y.id}
-                      onClick={() => handleForceActivate(y.id, y.label)}
-                      title="Skip validation checks"
-                    >
-                      Force
-                    </button>
+                    <details style={{ position: 'relative' }}>
+                      <summary style={{ fontSize: 11, color: 'var(--text-tertiary)', cursor: 'pointer', listStyle: 'none', fontWeight: 800 }}>
+                        Advanced
+                      </summary>
+                      <div style={{ position: 'absolute', right: 0, marginTop: 6, background: 'white', border: '1px solid var(--border-default)', borderRadius: 8, padding: 12, zIndex: 10, width: 280, boxShadow: 'var(--shadow-lg)' }}>
+                        <div style={{ fontSize: 12, color: 'var(--danger-700)', marginBottom: 8 }}>
+                          Force activation skips validation checks for missing classes, fees, or subjects.
+                        </div>
+                        <button className="btn btn-danger btn-sm" style={{ width: '100%' }} disabled={activating === y.id} onClick={() => handleForceActivate(y.id, y.label)}>
+                          Force Activate
+                        </button>
+                      </div>
+                    </details>
                   </div>
                 )}
               </div>
@@ -434,6 +439,7 @@ function PromotionTab({ years, onRefresh }) {
   const [previewingAll, setPreviewingAll]           = useState(false)
   const [runningAll, setRunningAll]                 = useState(false)
   const [allRunResult, setAllRunResult]             = useState(null)
+  const [classProgress, setClassProgress]           = useState({})
 
   // ── Promotion selectors ─────────────────────────────────────────────────────
   const [selectedClass, setSelectedClass]     = useState('')
@@ -450,6 +456,13 @@ function PromotionTab({ years, onRefresh }) {
   const [result, setResult]                   = useState(null)
   const [phase, setPhase]                     = useState('setup') // setup | review | done
 
+  useEffect(() => {
+    if (years.length > 0 && !selectedSourceYear) {
+      const activeYear = years.find(y => y.is_current || y.status === 'active')
+      if (activeYear) setSelectedSourceYear(String(activeYear.id))
+    }
+  }, [selectedSourceYear, years])
+
   // ── Fetch classes whenever source year changes ──────────────────────────────
   useEffect(() => {
     if (!selectedSourceYear) {
@@ -462,6 +475,7 @@ function PromotionTab({ years, onRefresh }) {
     setSelectedClass('')
     setAllClassRows([])
     setAllRunResult(null)
+    setClassProgress({})
     setPhase('setup')
     setResult(null)
     setCandidates(null)
@@ -483,6 +497,7 @@ function PromotionTab({ years, onRefresh }) {
     const buildPreview = async () => {
       setPreviewingAll(true)
       setAllRunResult(null)
+      setClassProgress({})
 
       const candidateResults = await Promise.allSettled(
         sourceClasses.map(cls => yearendAPI.getCandidates(cls.id))
@@ -576,8 +591,9 @@ function PromotionTab({ years, onRefresh }) {
     setResult(null)
   }
 
-  const waitForJob = (job) => new Promise(resolve => {
+  const waitForJob = (job, onUpdate) => new Promise(resolve => {
     const finish = data => {
+      onUpdate?.(data)
       if (['completed', 'failed', 'cancelled'].includes(data.status)) resolve(data)
       return ['completed', 'failed', 'cancelled'].includes(data.status)
     }
@@ -649,6 +665,36 @@ function PromotionTab({ years, onRefresh }) {
     }
   }
 
+  const downloadPromotionReport = () => {
+    if (!result?.data) return
+    const classInfo = sourceClasses.find(c => String(c.id) === selectedClass)
+    const targetYear = years.find(y => String(y.id) === selectedNewYear)
+    const rows = [
+      ['Metric', 'Count'],
+      ['Promoted to next class', result.data.promoted || 0],
+      ['Retained in same class', result.data.retained || 0],
+      ['Graduated', result.data.graduated || 0],
+      ['TC Issued', result.data.transferred || 0],
+      ['Dropped out', result.data.dropped || 0],
+      ['On Hold', result.data.on_hold || 0],
+      ['Errors', result.data.errors?.length || 0],
+      ['', ''],
+      ['Class', classInfo ? formatClassOptionLabel(classInfo) : selectedClass],
+      ['Target Year', targetYear?.label || selectedNewYear],
+      ['Run at', new Date().toLocaleString()],
+    ]
+    const csv = rows.map(row => row.map(cell => `"${String(cell ?? '').replaceAll('"', '""')}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `promotion-report-${classInfo?.name || selectedClass}-${Date.now()}.csv`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }
+
   const setAll = (action) => {
     const actions = {}
     candidates?.forEach(c => { actions[c.student_id] = action })
@@ -673,6 +719,9 @@ function PromotionTab({ years, onRefresh }) {
 
     setRunningAll(true)
     setAllRunResult(null)
+    setClassProgress(Object.fromEntries(
+      selectedRows.flatMap(row => row.divisions.map(div => [div.classId, { status: 'pending', promoted: 0, retained: 0, error: '' }]))
+    ))
     selectedRows.forEach(row => updateAllClassRow(row.key, current => ({ ...current, status: 'queued', error: '', results: [] })))
     try {
       const classIds = selectedRows.flatMap(row => row.divisions.map(div => div.classId))
@@ -680,9 +729,20 @@ function PromotionTab({ years, onRefresh }) {
         class_ids: classIds,
         new_academic_year_id: parseInt(selectedNewYear),
         roll_strategy: rollStrategy,
-        force: forcePromote,
+        force: false,
       })
-      const job = await waitForJob(r.data)
+      const job = await waitForJob(r.data, latest => {
+        const progress = {}
+        ;(latest.result?.classes || []).forEach(item => {
+          progress[item.class_id] = {
+            status: item.status || latest.status,
+            promoted: item.result?.promoted || 0,
+            retained: item.result?.retained || 0,
+            error: item.error || '',
+          }
+        })
+        setClassProgress(current => ({ ...current, ...progress }))
+      })
       const failures = []
       let done = 0
       const byClass = new Map((job.result?.classes || []).map(item => [item.class_id, item]))
@@ -723,6 +783,7 @@ function PromotionTab({ years, onRefresh }) {
   }))
 
   const sourceYearLabel = years.find(y => String(y.id) === selectedSourceYear)?.label
+  const selectedTargetYear = years.find(y => String(y.id) === selectedNewYear)
   const selectedAllRows = allClassRows.filter(row => row.included)
   const allClassTotals = selectedAllRows.reduce((acc, row) => {
     row.divisions.forEach(div => {
@@ -879,10 +940,15 @@ function PromotionTab({ years, onRefresh }) {
             </select>
           </div>
         </div>
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 12 }}>
-          <input type="checkbox" checked={forcePromote} onChange={e => setForcePromote(e.target.checked)} />
-          Force promotion when preflight has blocking issues
-        </label>
+        {promotionMode === 'single' ? (
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 12 }}>
+            <input type="checkbox" checked={forcePromote} onChange={e => setForcePromote(e.target.checked)} />
+            Force promotion when preflight has blocking issues
+            <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>(single class only)</span>
+          </label>
+        ) : (
+          <InlineBanner type="info" message="Classes with blocking validation errors are skipped in bulk mode. Use single-class mode to force-promote one class intentionally." />
+        )}
 
         {promotionMode === 'single' && phase === 'setup' && (
           <button
@@ -1084,6 +1150,41 @@ function PromotionTab({ years, onRefresh }) {
                   {runningAll ? <><Spinner /> Running…</> : `▶ Run promotion for ${selectedAllRows.length} class${selectedAllRows.length !== 1 ? 'es' : ''}`}
                 </button>
               </div>
+              {(runningAll || Object.keys(classProgress).length > 0) && (
+                <div style={{ marginTop: 14, display: 'grid', gap: 8 }}>
+                  {selectedAllRows.flatMap(row => row.divisions.map(div => {
+                    const progress = classProgress[div.classId] || { status: 'pending', promoted: 0, retained: 0, error: '' }
+                    const statusColor = progress.status === 'failed'
+                      ? 'var(--danger-600)'
+                      : progress.status === 'completed' || progress.status === 'done'
+                        ? 'var(--success-700)'
+                        : 'var(--brand-600)'
+                    return (
+                      <div
+                        key={div.classId}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'minmax(90px, 1fr) auto minmax(120px, 1fr)',
+                          gap: 10,
+                          alignItems: 'center',
+                          padding: '10px 12px',
+                          border: '1px solid var(--border-subtle)',
+                          borderRadius: 8,
+                          background: 'var(--surface-0)',
+                        }}
+                      >
+                        <strong style={{ fontSize: 12.5 }}>{row.name} - {div.division}</strong>
+                        <span style={{ fontSize: 11.5, fontWeight: 900, color: statusColor, textTransform: 'uppercase' }}>
+                          {progress.status}
+                        </span>
+                        <span style={{ fontSize: 12, color: progress.error ? 'var(--danger-700)' : 'var(--text-secondary)' }}>
+                          {progress.error || `${progress.promoted} promoted · ${progress.retained} retained`}
+                        </span>
+                      </div>
+                    )
+                  }))}
+                </div>
+              )}
             </>
           )}
         </YeCard>
@@ -1257,14 +1358,20 @@ function PromotionTab({ years, onRefresh }) {
                   {result.data.errors.length} skipped: {result.data.errors.map(e => e.student_name || e.student_id).join(', ')}
                 </div>
               )}
-              <button
-                className="btn btn-secondary btn-sm"
-                style={{ marginTop: 10 }}
-                disabled={undoing}
-                onClick={handleUndo}
-              >
-                {undoing ? <><Spinner size={12} /> Undoing…</> : '← Undo This Promotion'}
-              </button>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                <button className="btn btn-secondary btn-sm" onClick={downloadPromotionReport}>
+                  Download Report
+                </button>
+                {selectedTargetYear?.status === 'draft' ? (
+                  <button className="btn btn-secondary btn-sm" disabled={undoing} onClick={handleUndo}>
+                    {undoing ? <><Spinner size={12} /> Undoing…</> : '← Undo This Promotion'}
+                  </button>
+                ) : (
+                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', padding: '8px 12px', background: 'var(--gray-50)', borderRadius: 8 }}>
+                    Undo is not available because {selectedTargetYear?.label || 'the target year'} is {selectedTargetYear?.status || 'not draft'}.
+                  </div>
+                )}
+              </div>
             </>
           ) : (
             <div style={{ fontWeight: 700, color: 'var(--danger-700)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1434,15 +1541,32 @@ function OperationsTab({ years }) {
       </YeCard>
       <ConfirmModal
         open={!!confirmOp}
-        title={confirmOp === 'lock' ? 'Lock Marks' : confirmOp === 'unlock' ? 'Unlock Marks' : confirmOp === 'fees' ? 'Clone Fee Structure' : 'Clone Subjects'}
+        title={confirmOp === 'lock' ? 'Lock All Exam Marks - Irreversible' : confirmOp === 'unlock' ? 'Unlock Marks' : confirmOp === 'fees' ? 'Clone Fee Structure' : 'Clone Subjects'}
         message={
           confirmOp === 'lock'
-            ? 'This locks all currently entered marks for the selected year and prevents normal mark edits afterward.'
+            ? (
+              <div>
+                <div style={{ marginBottom: 12 }}>
+                  This will lock <strong>all mark records</strong> for <strong>{years.find(y => String(y.id) === lockYear)?.label}</strong>.
+                </div>
+                <div style={{ padding: 12, background: '#fff1f2', borderRadius: 8, border: '1px solid #fecdd3', marginBottom: 12 }}>
+                  <strong style={{ color: '#b91c1c' }}>After locking:</strong>
+                  <ul style={{ marginTop: 6, paddingLeft: 16, fontSize: 13 }}>
+                    <li>Teachers cannot edit any marks</li>
+                    <li>Results and marksheets are frozen</li>
+                    <li>Unlocking requires admin override in Operations</li>
+                  </ul>
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  Run this after verifying marks are complete and before starting promotion.
+                </div>
+              </div>
+            )
             : confirmOp === 'unlock'
             ? 'This admin override unlocks all marks for the selected year so they can be edited again.'
             : 'This copies setup data into the target year and skips records that already exist.'
         }
-        confirmLabel={confirmOp === 'lock' ? 'Lock Marks' : confirmOp === 'unlock' ? 'Unlock Marks' : 'Continue'}
+        confirmLabel={confirmOp === 'lock' ? 'Lock All Marks' : confirmOp === 'unlock' ? 'Unlock Marks' : 'Continue'}
         confirmVariant={confirmOp === 'lock' ? 'danger' : confirmOp === 'unlock' ? 'secondary' : 'primary'}
         loading={locking || unlocking || cloningFees || cloningSubs}
         onConfirm={confirmOp === 'lock' ? handleLockMarks : confirmOp === 'unlock' ? handleUnlockMarks : confirmOp === 'fees' ? handleCloneFees : handleCloneSubjects}

@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { feeAPI, setupAPI, formatINR, openSignedPdf } from '../../services/api'
 import { PageHeader, FilterRow, Select, EmptyState, TableSkeleton } from '../../components/UI'
+import { useAcademicYear } from '../../contexts/academicYearContext'
 
 function DefaulterCard({ d, resolveClassName }) {
   const balancePct = d.total_due > 0 ? Math.min(((d.balance / d.total_due) * 100), 100).toFixed(0) : 0
@@ -60,11 +61,11 @@ function DefaulterCard({ d, resolveClassName }) {
 }
 
 export default function Defaulters() {
+  const { selectedYearId, selectedYear, years } = useAcademicYear()
   const [classes, setClasses]       = useState([])
-  const [years, setYears]           = useState([])
   const [classFilter, setClassFilter] = useState('')
-  const [yearFilter, setYearFilter]   = useState('')
   const [isMobile, setIsMobile]     = useState(window.innerWidth < 640)
+  const yearFilter = selectedYearId || ''
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 640)
@@ -73,13 +74,9 @@ export default function Defaulters() {
   }, [])
 
   useEffect(() => {
-    setupAPI.getClasses().then(r => setClasses(r.data))
-    setupAPI.getAcademicYears().then(r => {
-      setYears(r.data)
-      const curr = r.data.find(y => y.is_current)
-      if (curr) setYearFilter(String(curr.id))
-    })
-  }, [])
+    if (!selectedYearId) return
+    setupAPI.getClasses(selectedYearId).then(r => setClasses(r.data))
+  }, [selectedYearId])
 
   const defaultersQuery = useQuery({
     queryKey: ['defaulters', classFilter, yearFilter],
@@ -132,7 +129,7 @@ export default function Defaulters() {
     <div>
       <PageHeader
         title="Fee Defaulters"
-        subtitle="Students with outstanding fee balance"
+        subtitle={`Students with outstanding fee balance for ${selectedYear?.label || 'the selected academic year'}`}
         actions={
           defaulters.length > 0 && (
             <button
@@ -148,9 +145,9 @@ export default function Defaulters() {
 
       <FilterRow>
         <Select value={classFilter} onChange={e => setClassFilter(e.target.value)} options={classOptions} placeholder="All Classes" style={{ flex: 1, minWidth: '150px' }} />
-        <Select value={yearFilter}  onChange={e => setYearFilter(e.target.value)}  options={yearOptions}  placeholder="All Years"   style={{ flex: 1, minWidth: '150px' }} />
+        <Select value={yearFilter}  onChange={() => {}}  options={yearOptions}  placeholder="All Years" disabled style={{ flex: 1, minWidth: '150px' }} />
         {(classFilter || yearFilter) && (
-          <button className="btn btn-ghost btn-sm" onClick={() => { setClassFilter(''); setYearFilter('') }}>Clear</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setClassFilter('')}>Clear</button>
         )}
       </FilterRow>
 

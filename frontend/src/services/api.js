@@ -104,10 +104,41 @@ export async function openProtectedPdf(path, params = {}, fallbackFileName = 'do
   }
 }
 
+const YEAR_SCOPED_GET_PREFIXES = [
+  '/analytics/',
+  '/attendance/dashboard-stats',
+  '/enrollments/',
+  '/fees/defaulters',
+  '/fees/structure',
+  '/marks/exams',
+  '/marks/results',
+  '/report-cards',
+  '/students/',
+]
+
+function selectedYearFromStorage() {
+  try {
+    const value = localStorage.getItem('sms_selected_academic_year_id')
+    return value ? Number(value) : null
+  } catch {
+    return null
+  }
+}
+
+function shouldAttachSelectedYear(config) {
+  if ((config.method || 'get').toLowerCase() !== 'get') return false
+  const url = config.url || ''
+  return YEAR_SCOPED_GET_PREFIXES.some(prefix => url.startsWith(prefix))
+}
+
 api.interceptors.request.use(config => {
   config.metadata = { startTime: performance.now() }
   const token = getToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
+  if (shouldAttachSelectedYear(config) && !config.params?.academic_year_id && !config.params?.academicYearId) {
+    const selected = selectedYearFromStorage()
+    if (selected) config.params = { ...(config.params || {}), academic_year_id: selected }
+  }
   return config
 })
 
@@ -163,8 +194,26 @@ api.interceptors.response.use(
 // year without each page needing to fetch the year list separately.
 let _currentYearId = null
 let _currentYearPromise = null
+export const SELECTED_YEAR_KEY = 'sms_selected_academic_year_id'
+
+function getSelectedYearId() {
+  try {
+    const value = localStorage.getItem(SELECTED_YEAR_KEY)
+    return value ? Number(value) : null
+  } catch {
+    return null
+  }
+}
+
+function withSelectedYear(params = {}) {
+  if (params.academic_year_id || params.academicYearId) return params
+  const selected = getSelectedYearId()
+  return selected ? { ...params, academic_year_id: selected } : params
+}
 
 async function getCurrentYearId() {
+  const selected = getSelectedYearId()
+  if (selected) return selected
   if (_currentYearId !== null && _currentYearId !== undefined) return _currentYearId
   // Deduplicate concurrent calls — only one request in flight at a time
   if (!_currentYearPromise) {
@@ -187,6 +236,11 @@ export function clearYearCache() {
   _currentYearPromise = null
 }
 
+export function warmCurrentYearCache(yearId) {
+  _currentYearId = yearId || null
+  _currentYearPromise = yearId ? Promise.resolve(yearId) : null
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const authAPI = {
   login: (email, password) => {
@@ -198,6 +252,8 @@ export const authAPI = {
     })
   },
   register: (data) => api.post('/auth/register', data),
+  completeStaffRegistration: (registrationToken, password) =>
+    api.post('/auth/complete-registration', { registration_token: registrationToken, password }),
   registerStatus: () => api.get('/auth/register-status'),
   me:       ()     => api.get('/auth/me'),
   logout:   ()     => api.post('/auth/logout'),
@@ -216,7 +272,7 @@ export const studentAuthAPI = {
 
 // ── Students ──────────────────────────────────────────────────────────────────
 export const studentAPI = {
-  list:   (params)     => api.get('/students/', { params }),
+  list:   (params)     => api.get('/students/', { params: withSelectedYear(params) }),
   get:    (id)         => api.get(`/students/${id}`),
   create: (data)       => api.post('/students/', data),
   update: (id, data)   => api.put(`/students/${id}`, data),
@@ -261,7 +317,7 @@ export const feeAPI = {
   getFeeHeads:        ()       => api.get('/fees/heads'),
   createFeeHead:      (data)   => api.post('/fees/heads', data),
   seedFeeHeads:       ()       => api.post('/fees/heads/seed'),
-  getFeeStructures:   (params) => api.get('/fees/structure', { params }),
+  getFeeStructures:   (params) => api.get('/fees/structure', { params: withSelectedYear(params) }),
   getFeeStructure:    (id)     => api.get(`/fees/structure/${id}`),
   createFeeStructure: (data)   => api.post('/fees/structure', data),
   previewFeePlan:     (data)   => api.post('/fees/structure/preview', data),
@@ -276,7 +332,7 @@ export const feeAPI = {
   getLedger:     (studentId) => api.get(`/fees/ledger/${studentId}`),
   recordPayment: (data)      => api.post('/fees/payment', data),
   getPayments:   (studentId) => api.get(`/fees/payments/${studentId}`),
-  getDefaulters: (params)    => api.get('/fees/defaulters', { params }),
+  getDefaulters: (params)    => api.get('/fees/defaulters', { params: withSelectedYear(params) }),
 }
 
 // ── Marks ─────────────────────────────────────────────────────────────────────
@@ -295,7 +351,7 @@ export const marksAPI = {
   deleteSubject:  (id)       => api.delete(`/marks/subjects/${id}`),
   seedSubjects:   (classId)  => api.post(`/marks/subjects/seed/${classId}`),
 
-  getExams:   (params) => api.get('/marks/exams', { params }),
+  getExams:   (params) => api.get('/marks/exams', { params: withSelectedYear(params) }),
   createExam: (data)   => api.post('/marks/exams', {
     ...data,
     class_id:         parseInt(data.class_id),
@@ -324,11 +380,14 @@ export const attendanceAPI = {
     api.post('/attendance/bulk', { entries }),
   getMonthlySummary: (classId, year, month) =>
     api.get('/attendance/monthly', { params: { class_id: classId, year, month } }),
-  getDashboardStats: () => api.get('/attendance/dashboard-stats'),
+  getDashboardStats: (academicYearId) => api.get('/attendance/dashboard-stats', {
+    params: academicYearId ? { academic_year_id: academicYearId } : {},
+  }),
 }
 
 // ── Analytics ────────────────────────────────────────────────────────────────
 export const analyticsAPI = {
+  summary:            (params) => api.get('/analytics/summary', { params }),
   feeCollection:      (params) => api.get('/analytics/fee-collection', { params }),
   classPerformance:   (params) => api.get('/analytics/class-performance', { params }),
   gradeDistribution:  (params) => api.get('/analytics/grade-distribution', { params }),
@@ -400,7 +459,7 @@ export const enrollmentsAPI = {
   getHistory:    (studentId)            => api.get(`/enrollments/student/${studentId}`),
   getRollList:   (classId, academicYearId) =>
     api.get(`/enrollments/class/${classId}/roll-list`, {
-      params: { academic_year_id: academicYearId },
+      params: { academic_year_id: academicYearId || getSelectedYearId() },
     }),
   reassignRolls: (classId, academicYearId, strategy = 'alphabetical') =>
     api.post('/enrollments/reassign-rolls', {
@@ -428,6 +487,10 @@ export const adminAPI = {
   updateUser:    (id, data) => api.put(`/admin/users/${id}`, data),
   resetPassword: (id, newPassword) =>
     api.post(`/admin/users/${id}/reset-password`, { new_password: newPassword }),
+  resendTeacherInvite: (id) =>
+    api.post(`/admin/users/${id}/resend-invite`),
+  resendPendingTeacherInvites: () =>
+    api.post('/admin/teachers/resend-pending-invites'),
   deleteUser:    (id)     => api.delete(`/admin/users/${id}`),
 
   listTeacherAssignments: (teacherId) =>
@@ -501,6 +564,7 @@ export const notificationAPI = {
     }),
   triggerLowAttendance: (data = {}) => api.post('/notifications/trigger/low-attendance', data),
   sendTest: (data) => api.post('/notifications/test', data),
+  retry: (outboxId) => api.post(`/notifications/retry/${outboxId}`),
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
@@ -570,6 +634,37 @@ export const extractError = (err) => {
   }
   if (typeof detail === 'object' && detail.msg) return detail.msg
   return JSON.stringify(detail)
+}
+
+export const extractPaymentError = (err) => {
+  const status = err?.response?.status
+  const detail = err?.response?.data?.detail
+
+  if (!err?.response) {
+    return {
+      message: 'Could not reach the payment server. Your account was NOT charged. Check your internet and try again.',
+      charged: false,
+    }
+  }
+  if (status === 409) {
+    return {
+      message: detail || 'This fee is already fully paid.',
+      charged: false,
+    }
+  }
+  if (status === 422) {
+    return {
+      message: `Payment validation failed: ${extractError(err)}. Your account was NOT charged.`,
+      charged: false,
+    }
+  }
+  if (status >= 500) {
+    return {
+      message: 'The payment server encountered an error. Please check your records before retrying because the payment status is unknown.',
+      charged: 'unknown',
+    }
+  }
+  return { message: extractError(err), charged: false }
 }
 
 export default api

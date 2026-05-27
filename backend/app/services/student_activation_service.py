@@ -95,6 +95,8 @@ def _audit(
 
 def _find_student(db: Session, identifier: str, email: str, account_type: str) -> Student | None:
     normalized_identifier = identifier.strip()
+    digits = "".join(ch for ch in normalized_identifier if ch.isdigit())
+    phone_candidate = digits[-10:] if len(digits) >= 10 else digits
     identifier_candidates = {
         normalized_identifier,
         normalized_identifier.upper(),
@@ -106,6 +108,9 @@ def _find_student(db: Session, identifier: str, email: str, account_type: str) -
         or_(
             Student.student_id.in_(identifier_candidates),
             Student.gr_number.in_(identifier_candidates),
+            Student.contact == phone_candidate,
+            Student.student_phone == phone_candidate,
+            Student.guardian_phone == phone_candidate,
         ),
     )
     if account_type == "student":
@@ -282,8 +287,6 @@ def create_activation_invite(
     )
     db.add(invite)
     portal_base = settings.PORTAL_PUBLIC_URL.rstrip("/")
-    if portal_base.endswith("/portal"):
-        portal_base = portal_base[:-7]
     invite_url = f"{portal_base}/activate-account?invite={raw_token}"
     db.add(NotificationOutbox(
         provider="email",

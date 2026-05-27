@@ -135,6 +135,23 @@ export default function Sidebar({ open, onClose }) {
       }))
       .filter(group => group.items.length > 0)
   ), [role])
+  const roleGroups = useMemo(() => {
+    if (role === 'teacher') {
+      return [{
+        label: 'Classroom',
+        items: visibleGroups.flatMap(group => group.items).filter(item => (
+          item.to === '/' || item.to === '/attendance' || item.to === '/marks' || item.to === '/students'
+        )).map(item => item.to === '/students' ? { ...item, label: 'My Classes' } : item.to === '/' ? { ...item, label: 'Today' } : item),
+      }]
+    }
+    if (role === 'admin') {
+      return [
+        { label: 'Operations', items: visibleGroups.flatMap(group => group.items).filter(item => ['/', '/students', '/attendance', '/marks', '/fees', '/reports'].includes(item.to)).map(item => item.to === '/' ? { ...item, label: 'Today' } : item) },
+        { label: 'Settings', items: visibleGroups.flatMap(group => group.items).filter(item => ['/yearend', '/admin/users', '/setup/classes'].includes(item.to)) },
+      ].filter(group => group.items.length > 0)
+    }
+    return visibleGroups
+  }, [role, visibleGroups])
 
   const handleLogout = async () => {
     try {
@@ -174,7 +191,7 @@ export default function Sidebar({ open, onClose }) {
         </div>
 
         <nav className="sidebar-nav" aria-label="Primary navigation">
-          {visibleGroups.map(group => (
+          {roleGroups.map(group => (
             <section key={group.label} className="sidebar-group">
               <div className="sidebar-group-label">{group.label}</div>
               {group.items.map(item => (

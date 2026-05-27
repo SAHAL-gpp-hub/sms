@@ -1,26 +1,30 @@
-// auth.js
-// FIX: Store JWT in sessionStorage so users survive page refreshes within
-// the same browser session. sessionStorage is cleared when the tab closes,
-// preventing long-lived token persistence (better than localStorage for
-// security, better than in-memory for UX). XSS risk is identical to
-// localStorage but acceptable for an internal school admin tool.
-
 const TOKEN_KEY = 'sms_auth_token';
 const USER_KEY = 'sms_auth_user';
+const EXPIRY_KEY = 'sms_auth_expiry';
+const DEFAULT_SESSION_MINUTES = 480;
 
-export const setToken = (t) => {
+let _memToken = null;
+let _memUser = null;
+let _memExpiry = null;
+
+export const getTokenExpiry = () => {
   try {
-    sessionStorage.setItem(TOKEN_KEY, t);
+    const raw = localStorage.getItem(EXPIRY_KEY);
+    return raw ? Number(raw) : _memExpiry;
   } catch {
-    // Fallback to in-memory if sessionStorage blocked (private browsing edge case)
-    _memToken = t;
+    return _memExpiry;
   }
 };
 
-export const setAuthUser = (user) => {
+export const setToken = (t, expiresInMinutes = DEFAULT_SESSION_MINUTES) => {
+  const expiry = Date.now() + expiresInMinutes * 60 * 1000;
   try {
-    sessionStorage.setItem(USER_KEY, JSON.stringify(user || null));
-  } catch { /* */ }
+    localStorage.setItem(TOKEN_KEY, t);
+    localStorage.setItem(EXPIRY_KEY, String(expiry));
+  } catch {
+    _memToken = t;
+    _memExpiry = expiry;
+  }
 };
 
 export const normalizeAuthUser = (data) => ({
@@ -36,29 +40,42 @@ export const normalizeAuthUser = (data) => ({
 
 export const getAuthUser = () => {
   try {
-    const raw = sessionStorage.getItem(USER_KEY);
+    const raw = localStorage.getItem(USER_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch {
-    return null;
+    return _memUser;
   }
 };
 
 export const getRole = () => getAuthUser()?.role || null;
 
-let _memToken = null;
-
 export const getToken = () => {
+  const expiry = getTokenExpiry();
+  if (expiry && Date.now() > expiry) {
+    clearToken();
+    return null;
+  }
   try {
-    return sessionStorage.getItem(TOKEN_KEY) || _memToken;
+    return localStorage.getItem(TOKEN_KEY) || _memToken;
   } catch {
     return _memToken;
   }
 };
 
+export const setAuthUser = (user) => {
+  _memUser = user || null;
+  try {
+    localStorage.setItem(USER_KEY, JSON.stringify(user || null));
+  } catch { /* */ }
+};
+
 export const clearToken = () => {
   try {
-    sessionStorage.removeItem(TOKEN_KEY);
-    sessionStorage.removeItem(USER_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(EXPIRY_KEY);
   } catch { /* */ }
   _memToken = null;
+  _memUser = null;
+  _memExpiry = null;
 };

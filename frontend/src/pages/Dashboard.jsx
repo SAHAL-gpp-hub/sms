@@ -1,8 +1,11 @@
 import { Link } from 'react-router-dom'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { attendanceAPI, formatINR, setupAPI } from '../services/api'
+import { adminAPI, attendanceAPI, formatINR, marksAPI, setupAPI } from '../services/api'
 import { getAuthUser } from '../services/auth'
 import { EmptyState, MetricCard, SectionPanel, Skeleton } from '../components/UI'
+import OnboardingEmptyState from '../components/OnboardingEmptyState'
+import { useAcademicYear } from '../contexts/academicYearContext'
 
 const Icon = ({ children }) => (
   <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -26,6 +29,15 @@ const ADMIN_ACTIONS = [
   { label: 'Fee Structure', to: '/fees', color: 'var(--success-600)', icon: ICONS.fees },
   { label: 'Fee Defaulters', to: '/fees/defaulters', color: 'var(--danger-600)', icon: ICONS.alert },
   { label: 'Reports', to: '/reports', color: '#b45309', icon: ICONS.report },
+]
+
+const ADMIN_WORKFLOWS = [
+  { key: 'today', label: "Today's Work" },
+  { key: 'students', label: 'Students' },
+  { key: 'fees', label: 'Fees' },
+  { key: 'marks', label: 'Marks' },
+  { key: 'reports', label: 'Reports' },
+  { key: 'yearend', label: 'Year-End' },
 ]
 
 function ActionTiles({ actions }) {
@@ -68,19 +80,24 @@ function Hero({ title, copy, today, actions }) {
 
 function TeacherDashboard({ today }) {
   const authUser = getAuthUser()
+  const { selectedYearId, selectedYear } = useAcademicYear()
+  const todayIso = new Date().toISOString().slice(0, 10)
   const classesQuery = useQuery({
-    queryKey: ['classes'],
+    queryKey: ['classes', selectedYearId],
+    enabled: Boolean(selectedYearId),
     queryFn: async () => {
-      const r = await setupAPI.getClasses()
+      const r = await setupAPI.getClasses(selectedYearId)
       return r.data || []
     },
   })
   const classes = classesQuery.data || []
   const loadingClasses = classesQuery.isLoading
+  const currentYearId = selectedYearId
 
   const classTeacherClassIds = authUser?.classTeacherClassIds || []
   const subjectAssignments = authUser?.subjectAssignments || []
   const assignedClassIds = authUser?.assignedClassIds || []
+  const uniqueSubjectClasses = [...new Set(subjectAssignments.map(a => a.class_id))]
 
   const classLabel = (id) => {
     const cls = classes.find(c => c.id === id)
@@ -88,7 +105,51 @@ function TeacherDashboard({ today }) {
     return `Class ${cls.name}${cls.division ? ` - ${cls.division}` : ''}`
   }
 
-  const uniqueSubjectClasses = [...new Set(subjectAssignments.map(a => a.class_id))]
+  const attendanceQuery = useQuery({
+    queryKey: ['teacher-today-attendance', classTeacherClassIds, todayIso, currentYearId],
+    enabled: Boolean(currentYearId) && classTeacherClassIds.length > 0,
+    queryFn: async () => {
+      const rows = await Promise.all(classTeacherClassIds.map(async classId => {
+        const r = await attendanceAPI.getDaily(classId, todayIso)
+        const roster = r.data || []
+        const unmarked = roster.filter(s => !s.status || s.status === 'UNMARKED').length
+        return { classId, total: roster.length, unmarked }
+      }))
+      return rows
+    },
+    staleTime: 60_000,
+  })
+
+  const marksProgressQuery = useQuery({
+    queryKey: ['teacher-marks-progress', uniqueSubjectClasses, currentYearId],
+    enabled: !!currentYearId && uniqueSubjectClasses.length > 0,
+    queryFn: async () => {
+      const rows = await Promise.all(uniqueSubjectClasses.slice(0, 6).map(async classId => {
+        const examsRes = await marksAPI.getExams({ class_id: classId, academic_year_id: currentYearId })
+        const latestExam = (examsRes.data || [])[0]
+        if (!latestExam) return { classId, status: 'no-exam' }
+        const gridRes = await marksAPI.getMarksEntry(latestExam.id, classId)
+        const grid = gridRes.data
+        const teacherSubjectIds = subjectAssignments
+          .filter(assignment => Number(assignment.class_id) === Number(classId))
+          .map(assignment => Number(assignment.subject_id))
+        const subjects = (grid.subjects || []).filter(subject => teacherSubjectIds.includes(Number(subject.id)))
+        let entered = 0
+        let total = 0
+        ;(grid.students || []).forEach(student => {
+          subjects.forEach(subject => {
+            total += 1
+            const marks = student.marks?.[subject.id]
+            if (marks?.is_absent || marks?.theory !== null || marks?.practical !== null) entered += 1
+          })
+        })
+        return { classId, status: 'ready', examName: latestExam.name, entered, total }
+      }))
+      return rows
+    },
+    staleTime: 2 * 60_000,
+  })
+
   const actions = [
     ...(classTeacherClassIds.length ? [{ label: 'Mark Attendance', to: '/attendance', color: '#0f766e', icon: ICONS.clock }] : []),
     ...(subjectAssignments.length ? [{ label: 'Enter Marks', to: '/marks', color: '#0891b2', icon: ICONS.marks }] : []),
@@ -100,7 +161,7 @@ function TeacherDashboard({ today }) {
     <div>
       <Hero
         title={`Good day${authUser?.name ? `, ${authUser.name.split(' ')[0]}` : ''}.`}
-        copy="Your assigned classes, attendance responsibilities, and marks workflows are organized for fast daily work."
+        copy={`Your assigned classes, attendance responsibilities, and marks workflows are organized for ${selectedYear?.label || 'the selected academic year'}.`}
         today={today}
         actions={<ActionTiles actions={actions} />}
       />
@@ -112,6 +173,50 @@ function TeacherDashboard({ today }) {
       </div>
 
       <div className="dashboard-grid">
+        <SectionPanel title="Today's Attendance" subtitle="Start here before the day gets noisy">
+          {attendanceQuery.isLoading ? (
+            <div style={{ display: 'grid', gap: 12 }}>{[1, 2].map(i => <Skeleton key={i} height="18px" width={`${76 + i * 5}%`} />)}</div>
+          ) : classTeacherClassIds.length === 0 ? (
+            <EmptyState icon={ICONS.clock} title="No attendance assignment" description="Attendance controls appear after admin assigns you as class teacher." />
+          ) : (
+            (attendanceQuery.data || []).map(row => (
+              <div key={row.classId} className="list-row">
+                <div>
+                  <div className="list-row-title">{classLabel(row.classId)}</div>
+                  <div className="list-row-meta">
+                    {row.unmarked === 0 ? `${row.total} students marked today` : `${row.unmarked} of ${row.total} students unmarked`}
+                  </div>
+                </div>
+                <Link to="/attendance" className={`btn btn-sm ${row.unmarked === 0 ? 'btn-secondary' : 'btn-primary'}`}>
+                  {row.unmarked === 0 ? 'Review' : 'Mark Now'}
+                </Link>
+              </div>
+            ))
+          )}
+        </SectionPanel>
+
+        <SectionPanel title="Marks Pending" subtitle="Latest exam progress for your assigned subjects">
+          {marksProgressQuery.isLoading ? (
+            <div style={{ display: 'grid', gap: 12 }}>{[1, 2].map(i => <Skeleton key={i} height="18px" width={`${70 + i * 8}%`} />)}</div>
+          ) : subjectAssignments.length === 0 ? (
+            <EmptyState icon={ICONS.marks} title="No marks assignment" description="Marks entry appears after admin assigns subjects to you." />
+          ) : (
+            (marksProgressQuery.data || []).map(row => (
+              <div key={row.classId} className="list-row">
+                <div>
+                  <div className="list-row-title">{classLabel(row.classId)}</div>
+                  <div className="list-row-meta">
+                    {row.status === 'no-exam' ? 'No exam created yet' : `${row.examName} · ${row.entered}/${row.total} entered`}
+                  </div>
+                </div>
+                <Link to="/marks" className="btn btn-secondary btn-sm">{row.status === 'no-exam' ? 'Open' : 'Continue'}</Link>
+              </div>
+            ))
+          )}
+        </SectionPanel>
+      </div>
+
+      <div className="dashboard-grid" style={{ marginTop: 16 }}>
         <SectionPanel title="Attendance Classes" subtitle="Classes where you can mark daily attendance">
           {loadingClasses ? (
             <div style={{ display: 'grid', gap: 12 }}>{[1, 2, 3].map(i => <Skeleton key={i} height="16px" width={`${70 + i * 6}%`} />)}</div>
@@ -158,16 +263,42 @@ function TeacherDashboard({ today }) {
 export default function Dashboard() {
   const authUser = getAuthUser()
   const isTeacher = authUser?.role === 'teacher'
+  const { selectedYearId, selectedYear } = useAcademicYear()
+  const [activeWorkflow, setActiveWorkflow] = useState('today')
   const statsQuery = useQuery({
-    queryKey: ['dashboard-stats'],
-    enabled: !isTeacher,
+    queryKey: ['dashboard-stats', selectedYearId],
+    enabled: !isTeacher && Boolean(selectedYearId),
     queryFn: async () => {
-      const r = await attendanceAPI.getDashboardStats()
+      const r = await attendanceAPI.getDashboardStats(selectedYearId)
       return r.data
     },
     staleTime: 20_000,
   })
   const stats = statsQuery.data
+  const actionQueueQuery = useQuery({
+    queryKey: ['admin-action-queue', selectedYearId],
+    enabled: !isTeacher && Boolean(selectedYearId),
+    queryFn: async () => {
+      const [corrections, otpFailures] = await Promise.all([
+        adminAPI.listCorrectionRequests({ status: 'pending' }).catch(() => ({ data: [] })),
+        adminAPI.getOtpFailures({ status: 'failed', limit: 5 }).catch(() => ({ data: { total: 0 } })),
+      ])
+      const items = []
+      const correctionCount = corrections.data?.length || corrections.data?.items?.length || 0
+      if (correctionCount > 0) {
+        items.push({ severity: 'warning', label: `${correctionCount} profile correction${correctionCount === 1 ? '' : 's'} pending approval`, href: '/admin/users?tab=corrections', action: 'Review' })
+      }
+      const failureCount = otpFailures.data?.total || otpFailures.data?.length || 0
+      if (failureCount > 0) {
+        items.push({ severity: 'error', label: `${failureCount} parent/student activation email${failureCount === 1 ? '' : 's'} failed`, href: '/admin/users?tab=portal', action: 'Check' })
+      }
+      if ((stats?.defaulter_count || 0) > 0) {
+        items.push({ severity: 'danger', label: `${stats.defaulter_count} fee defaulter${stats.defaulter_count === 1 ? '' : 's'} need follow-up`, href: '/fees/defaulters', action: 'Open' })
+      }
+      return items
+    },
+    refetchInterval: 5 * 60 * 1000,
+  })
   const loading = !isTeacher && (statsQuery.isLoading || statsQuery.isFetching)
   const error = !isTeacher && statsQuery.isError
 
@@ -189,10 +320,71 @@ export default function Dashboard() {
     <div>
       <Hero
         title={`Welcome back${authUser?.name ? `, ${authUser.name.split(' ')[0]}` : ''}.`}
-        copy="A calmer command center for student records, attendance, fees, marks, and reports."
+        copy={`Today's work is pulled forward for ${selectedYear?.label || 'the selected academic year'}: fees, student records, reports, and year-end operations.`}
         today={today}
         actions={<Link to="/students/new" className="btn btn-primary">{ICONS.students} Add Student</Link>}
       />
+
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', padding: '10px 12px', border: '1px solid var(--border-default)', borderRadius: 12, background: 'var(--surface-0)', marginBottom: 14 }}>
+        <strong>{formatINR(stats?.fees_this_month ?? 0)} collected this month</strong>
+        <span style={{ color: 'var(--text-tertiary)' }}>|</span>
+        <strong style={{ color: 'var(--danger-600)' }}>{stats?.defaulter_count ?? 0} defaulters</strong>
+        <span style={{ color: 'var(--text-tertiary)' }}>|</span>
+        <strong>{actionQueueQuery.data?.length || 0} pending actions</strong>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8, marginBottom: 12 }}>
+        {ADMIN_WORKFLOWS.map(tab => (
+          <button
+            key={tab.key}
+            type="button"
+            className={`btn btn-sm ${activeWorkflow === tab.key ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setActiveWorkflow(tab.key)}
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeWorkflow === 'today' && (
+        <SectionPanel title="Action Queue" subtitle="Items that need attention today" bodyStyle={{ padding: 16 }}>
+          {actionQueueQuery.isLoading ? (
+            <Skeleton height="18px" width="70%" />
+          ) : !actionQueueQuery.data?.length ? (
+            <EmptyState icon={ICONS.alert} title="No urgent work right now" description="Corrections, failed portal invites, and fee follow-ups will appear here." />
+          ) : (
+            <div style={{ display: 'grid', gap: 8 }}>
+              {actionQueueQuery.data.map(item => (
+                <div key={item.label} className="list-row">
+                  <div>
+                    <div className="list-row-title">{item.label}</div>
+                    <div className="list-row-meta">{item.severity} priority</div>
+                  </div>
+                  <Link className="btn btn-secondary btn-sm" to={item.href}>{item.action}</Link>
+                </div>
+              ))}
+            </div>
+          )}
+        </SectionPanel>
+      )}
+
+      {activeWorkflow !== 'today' && (
+        <SectionPanel title={`${ADMIN_WORKFLOWS.find(tab => tab.key === activeWorkflow)?.label} Workflow`} subtitle="Focused shortcuts for this admin job" bodyStyle={{ padding: 16 }}>
+          {activeWorkflow === 'students' && (stats?.total_students || 0) === 0 ? (
+            <OnboardingEmptyState type="noStudents" />
+          ) : (
+            <ActionTiles actions={ADMIN_ACTIONS.filter(action => {
+              if (activeWorkflow === 'students') return ['/students/new'].includes(action.to)
+              if (activeWorkflow === 'fees') return action.to.startsWith('/fees')
+              if (activeWorkflow === 'marks') return action.to === '/marks'
+              if (activeWorkflow === 'reports') return action.to === '/reports'
+              if (activeWorkflow === 'yearend') return false
+              return true
+            }).concat(activeWorkflow === 'yearend' ? [{ label: 'Open Year-End', to: '/yearend', color: '#7c3aed', icon: ICONS.report }] : [])} />
+          )}
+        </SectionPanel>
+      )}
 
       <div className="metric-grid">
         <MetricCard label="Total Students" value={(stats?.total_students ?? 0).toLocaleString()} sub="Active enrollments" color="var(--brand-600)" icon={ICONS.students} loading={loading} />

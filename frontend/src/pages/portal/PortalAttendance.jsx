@@ -22,10 +22,10 @@ const MONTHS = [
 const DAYS = ['Mo','Tu','We','Th','Fr','Sa','Su']
 
 const STATUS_META = {
-  P:  { color: '#16a34a', bg: '#dcfce7', border: '#bbf7d0', label: 'Present' },
-  A:  { color: '#dc2626', bg: '#fee2e2', border: '#fecaca', label: 'Absent'  },
-  L:  { color: '#d97706', bg: '#fef3c7', border: '#fde68a', label: 'Late'    },
-  OL: { color: '#2563eb', bg: '#dbeafe', border: '#bfdbfe', label: 'Leave'   },
+  P:  { color: '#15803d', bg: '#dcfce7', border: '#16a34a', label: 'Present', letter: 'P', pattern: 'solid' },
+  A:  { color: '#b91c1c', bg: '#fee2e2', border: '#dc2626', label: 'Absent',  letter: 'A', pattern: 'dashed' },
+  L:  { color: '#b45309', bg: '#fef3c7', border: '#d97706', label: 'Late',    letter: 'L', pattern: 'dotted' },
+  OL: { color: '#1d4ed8', bg: '#dbeafe', border: '#2563eb', label: 'Leave',   letter: 'OL', pattern: 'double' },
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ function CalendarGrid({ year, month, records }) {
               style={{
                 aspectRatio: '1/1',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: 8, fontSize: 11.5, fontWeight: 700,
+                borderRadius: 8, fontSize: 12, fontWeight: 900,
                 minHeight: 32,
                 background: meta
                   ? meta.bg
@@ -92,12 +92,12 @@ function CalendarGrid({ year, month, records }) {
                 border: isToday && !meta
                   ? '1.5px solid #0d7377'
                   : meta
-                    ? `1px solid ${meta.border}`
+                    ? `2px ${meta.pattern} ${meta.border}`
                     : '1px solid transparent',
                 transition: 'transform 0.1s',
               }}
             >
-              {day}
+              {meta ? meta.letter : day}
             </div>
           )
         })}
@@ -297,6 +297,7 @@ export default function PortalAttendance() {
             }}>
               <button
                 onClick={prevMonth}
+                aria-label="Previous month"
                 style={{
                   width: 34, height: 34, borderRadius: 10,
                   border: '1px solid #e2e8f0', background: 'white',
@@ -326,6 +327,7 @@ export default function PortalAttendance() {
               <button
                 onClick={nextMonth}
                 disabled={isThisMonth}
+                aria-label="Next month"
                 style={{
                   width: 34, height: 34, borderRadius: 10,
                   border: '1px solid #e2e8f0', background: 'white',

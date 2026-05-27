@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from app.core.database import get_db
-from app.models.base_models import ProfileCorrectionRequest, Student, Class, AcademicYear, Attendance, Exam
+from app.models.base_models import ProfileCorrectionRequest, Student, Class, AcademicYear, Attendance, Exam, Enrollment
 from app.routers.auth import CurrentUser, require_role
 from app.services import fee_service, attendance_service, marks_service, report_card_service
 from app.services.calendar_service import count_working_days_for_month
@@ -65,6 +65,19 @@ def _resolve_student_id(
     return user.linked_student_ids[0]
 
 
+def _resolve_enrollment(db: Session, student_id: int, academic_year_id: Optional[int] = None) -> Enrollment:
+    if academic_year_id is None:
+        year = db.query(AcademicYear).filter_by(is_current=True).first()
+        academic_year_id = year.id if year else None
+    query = db.query(Enrollment).filter(Enrollment.student_id == student_id)
+    if academic_year_id is not None:
+        query = query.filter(Enrollment.academic_year_id == academic_year_id)
+    enrollment = query.order_by(Enrollment.academic_year_id.desc()).first()
+    if not enrollment:
+        raise HTTPException(404, "No enrollment found for this student/year")
+    return enrollment
+
+
 # ── /portal/me/* (student + parent) ──────────────────────────────────────────
 
 @router.get("/me/profile")
@@ -77,7 +90,9 @@ def get_my_profile(
     student = db.query(Student).filter_by(id=sid).first()
     if not student:
         raise HTTPException(404, "Student record not found")
-    cls = db.query(Class).filter_by(id=student.class_id).first() if student.class_id else None
+    enrollment = _resolve_enrollment(db, sid)
+    cls = db.query(Class).filter_by(id=enrollment.class_id).first() if enrollment.class_id else None
+    year = db.query(AcademicYear).filter_by(id=enrollment.academic_year_id).first()
     class_label = f"Class {cls.name} — {cls.division}" if cls else None
     return {
         "id":               student.id,
@@ -87,16 +102,19 @@ def get_my_profile(
         "name_gu":          student.name_gu,
         "dob":              str(student.dob) if student.dob else None,
         "gender":           student.gender,
-        "class_id":         student.class_id,
+        "enrollment_id":    enrollment.id,
+        "class_id":         enrollment.class_id,
         "class_label":      class_label,
-        "roll_number":      student.roll_number,
+        "roll_number":      enrollment.roll_number,
         "father_name":      student.father_name,
         "mother_name":      student.mother_name,
         "contact":          student.contact,
         "address":          student.address,
         "category":         student.category,
         "admission_date":   str(student.admission_date) if student.admission_date else None,
-        "academic_year_id": student.academic_year_id,
+        "academic_year_id": enrollment.academic_year_id,
+        "academic_year_label": year.label if year else None,
+        "enrollment_status": enrollment.status,
         "status":           student.status,
     }
 
@@ -113,12 +131,13 @@ def get_my_results(
     if not student:
         raise HTTPException(404, "Student record not found")
 
-    exams = db.query(Exam).filter_by(class_id=student.class_id).all()
+    enrollment = _resolve_enrollment(db, sid)
+    exams = db.query(Exam).filter_by(class_id=enrollment.class_id, academic_year_id=enrollment.academic_year_id).all()
 
     all_results = []
     for exam in exams:
         try:
-            results = marks_service.get_class_results(db, exam.id, student.class_id)
+            results = marks_service.get_class_results(db, exam.id, enrollment.class_id)
             match = next((r for r in results if r["student_id"] == sid), None)
             if match:
                 match["exam_id"] = exam.id
@@ -150,11 +169,12 @@ def get_my_attendance(
     if not student:
         raise HTTPException(404, "Student record not found")
 
+    enrollment = _resolve_enrollment(db, sid)
     cutoff = date.today() - timedelta(days=92)  # ~3 months
     records = (
         db.query(Attendance)
         .filter(
-            Attendance.student_id == sid,
+            Attendance.enrollment_id == enrollment.id,
             Attendance.date >= cutoff,
         )
         .order_by(Attendance.date.desc())
@@ -194,12 +214,13 @@ def get_my_attendance_summary(
         month_start = date(y, m, 1)
         month_end   = date(y, m, days_in_month)
 
-        working_days = count_working_days_for_month(db, student.academic_year_id, y, m)
+        enrollment = _resolve_enrollment(db, sid)
+        working_days = count_working_days_for_month(db, enrollment.academic_year_id, y, m)
 
         records = (
             db.query(Attendance)
             .filter(
-                Attendance.student_id == sid,
+                Attendance.enrollment_id == enrollment.id,
                 Attendance.date >= month_start,
                 Attendance.date <= month_end,
             )
@@ -254,7 +275,8 @@ def get_my_marksheet(
     if not student:
         raise HTTPException(404, "Student record not found")
 
-    pdf = render_marksheet_pdf(db, exam_id, student.class_id, sid)
+    enrollment = _resolve_enrollment(db, sid)
+    pdf = render_marksheet_pdf(db, exam_id, enrollment.class_id, sid)
     if not pdf:
         raise HTTPException(404, "No marks found for this exam")
     report_card_service.upsert_report_card(
@@ -262,6 +284,13 @@ def get_my_marksheet(
         student_id=sid,
         exam_id=exam_id,
         pdf_path=f"/api/v1/portal/me/marksheet/{exam_id}?student_id={sid}",
+    )
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"inline; filename=marksheet_{student.student_id}_{exam_id}.pdf"
+        },
     )
 
 
@@ -297,15 +326,6 @@ def create_correction_request(
         "requested_value": req.requested_value,
         "created_at": req.created_at,
     }
-    db.commit()
-
-    return Response(
-        content=pdf,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f"inline; filename=marksheet_{student.student_id}_{exam_id}.pdf"
-        },
-    )
 
 
 # ── /portal/me/children/* (parent with multiple children) ────────────────────
@@ -322,9 +342,34 @@ def get_my_children(
     children = db.query(Student).filter(
         Student.id.in_(user.linked_student_ids)
     ).all()
+    current_year = db.query(AcademicYear).filter_by(is_current=True).first()
+    enrollment_query = db.query(Enrollment).filter(Enrollment.student_id.in_([s.id for s in children]))
+    if current_year:
+        enrollment_query = enrollment_query.filter(Enrollment.academic_year_id == current_year.id)
+    enrollments = {
+        e.student_id: e
+        for e in enrollment_query.all()
+    }
+    if len(enrollments) < len(children):
+        fallback_ids = [s.id for s in children if s.id not in enrollments]
+        for enrollment in (
+            db.query(Enrollment)
+            .filter(Enrollment.student_id.in_(fallback_ids))
+            .order_by(Enrollment.academic_year_id.desc())
+            .all()
+        ):
+            enrollments.setdefault(enrollment.student_id, enrollment)
     class_lookup = {
         c.id: f"Class {c.name} — {c.division}"
-        for c in db.query(Class).filter(Class.id.in_([s.class_id for s in children if s.class_id])).all()
+        for c in db.query(Class).filter(Class.id.in_([
+            e.class_id for e in enrollments.values() if e.class_id
+        ])).all()
+    }
+    year_lookup = {
+        y.id: y.label
+        for y in db.query(AcademicYear).filter(AcademicYear.id.in_([
+            e.academic_year_id for e in enrollments.values() if e.academic_year_id
+        ])).all()
     }
 
     return [
@@ -333,9 +378,13 @@ def get_my_children(
             "student_id": s.student_id,
             "name_en":    s.name_en,
             "name_gu":    s.name_gu,
-            "class_id":   s.class_id,
-            "class_label": class_lookup.get(s.class_id),
-            "roll_number":s.roll_number,
+            "enrollment_id": enrollments.get(s.id).id if enrollments.get(s.id) else None,
+            "class_id":   enrollments.get(s.id).class_id if enrollments.get(s.id) else None,
+            "class_label": class_lookup.get(enrollments.get(s.id).class_id) if enrollments.get(s.id) else None,
+            "roll_number":enrollments.get(s.id).roll_number if enrollments.get(s.id) else None,
+            "academic_year_id": enrollments.get(s.id).academic_year_id if enrollments.get(s.id) else None,
+            "academic_year_label": year_lookup.get(enrollments.get(s.id).academic_year_id) if enrollments.get(s.id) else None,
+            "enrollment_status": enrollments.get(s.id).status if enrollments.get(s.id) else None,
             "status":     s.status,
         }
         for s in children

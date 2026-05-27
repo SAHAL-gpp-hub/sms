@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { clearToken } from '../services/auth'
 
 export const SESSION_EXPIRED_EVENT = 'sms:session-expired'
 
@@ -19,6 +20,7 @@ export default function SessionExpiredModal() {
 
   const returnToLogin = () => {
     const next = window.location.pathname + window.location.search
+    clearToken()
     window.location.href = `/login?next=${encodeURIComponent(next)}`
   }
 
@@ -34,7 +36,8 @@ export default function SessionExpiredModal() {
         display: 'grid',
         placeItems: 'center',
         padding: '20px',
-        background: 'rgba(15, 23, 42, 0.52)',
+        background: 'rgba(15, 23, 42, 0.85)',
+        backdropFilter: 'blur(8px)',
       }}
     >
       <section style={{

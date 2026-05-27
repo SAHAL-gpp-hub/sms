@@ -6,12 +6,44 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.base_models import Attendance, Class, Exam, FeePayment, StudentFee
+from app.models.base_models import AcademicYear, Attendance, Class, Exam, FeePayment, StudentFee
 from app.routers.auth import CurrentUser, require_role
 from app.services import attendance_service, marks_service
 
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["Analytics"])
+
+
+@router.get("/summary")
+def analytics_summary(
+    academic_year_id: int = Query(...),
+    _: CurrentUser = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    totals = (
+        db.query(
+            func.coalesce(func.sum(StudentFee.net_amount), 0).label("net_due"),
+            func.coalesce(func.sum(FeePayment.amount_paid), 0).label("collected"),
+        )
+        .outerjoin(FeePayment, FeePayment.student_fee_id == StudentFee.id)
+        .filter(StudentFee.academic_year_id == academic_year_id)
+        .first()
+    )
+    net_due = float(totals.net_due or 0)
+    collected = float(totals.collected or 0)
+    outstanding = max(net_due - collected, 0)
+    collection_rate = (collected / net_due * 100) if net_due > 0 else 0.0
+
+    today = date.today()
+    risk_rows = attendance_service.get_monthly_summary_bulk(db, academic_year_id, today.year, today.month)
+    at_risk_count = sum(1 for row in risk_rows if float(row.get("percentage", 0)) < 75)
+
+    return {
+        "collection_rate": round(collection_rate, 2),
+        "total_collected": round(collected, 2),
+        "outstanding": round(outstanding, 2),
+        "at_risk_count": at_risk_count,
+    }
 
 
 @router.get("/fee-collection")
@@ -170,22 +202,22 @@ def at_risk_students(
     db: Session = Depends(get_db),
 ):
     today = date.today()
-    classes = db.query(Class).order_by(Class.id)
     if academic_year_id:
-        classes = classes.filter(Class.academic_year_id == academic_year_id)
+        summaries = attendance_service.get_monthly_summary_bulk(db, academic_year_id, today.year, today.month)
+    else:
+        current_year = db.query(AcademicYear).filter_by(is_current=True).first()
+        summaries = attendance_service.get_monthly_summary_bulk(db, current_year.id, today.year, today.month) if current_year else []
     rows = []
-    for cls in classes.all():
-        summary = attendance_service.get_monthly_summary(db, cls.id, today.year, today.month)
-        for item in summary:
-            if float(item.get("percentage", 0)) < threshold:
-                rows.append(
-                    {
-                        "student_id": item["student_id"],
-                        "student_name": item["student_name"],
-                        "class_id": cls.id,
-                        "class_name": f"{cls.name}{f'-{cls.division}' if cls.division else ''}",
-                        "attendance_pct": float(item.get("percentage", 0)),
-                    }
-                )
+    for item in summaries:
+        if float(item.get("percentage", 0)) < threshold:
+            rows.append(
+                {
+                    "student_id": item["student_id"],
+                    "student_name": item["student_name"],
+                    "class_id": item["class_id"],
+                    "class_name": item["class_name"],
+                    "attendance_pct": float(item.get("percentage", 0)),
+                }
+            )
     rows.sort(key=lambda item: item["attendance_pct"])
     return {"threshold": threshold, "count": len(rows), "students": rows}

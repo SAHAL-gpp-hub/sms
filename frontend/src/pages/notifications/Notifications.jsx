@@ -107,6 +107,19 @@ export default function Notifications() {
     }
   }
 
+  const retryNotification = async (row) => {
+    try {
+      setBusy(`retry-${row.id}`)
+      await notificationAPI.retry(row.id)
+      toast.success('Notification queued for retry')
+      load()
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setBusy('')
+    }
+  }
+
   return (
     <div>
       <div style={{ display:'flex', justifyContent:'space-between', gap:16, alignItems:'flex-start', marginBottom:18, flexWrap:'wrap' }}>
@@ -207,16 +220,16 @@ export default function Notifications() {
           <table style={{ width:'100%', borderCollapse:'collapse', minWidth:850 }}>
             <thead>
               <tr style={{ background:'#f8fafc' }}>
-                {['Type','Channel','Phone','Status','Message','Created'].map(h => (
+                {['Type','Channel','Phone','Status','Message','Created','Action'].map(h => (
                   <th key={h} style={thStyle}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="6" style={emptyStyle}>Loading…</td></tr>
+                <tr><td colSpan="7" style={emptyStyle}>Loading…</td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan="6" style={emptyStyle}>No notifications yet</td></tr>
+                <tr><td colSpan="7" style={emptyStyle}>No notifications yet</td></tr>
               ) : rows.map(row => (
                 <tr key={row.id} style={{ borderTop:'1px solid #eef2f7' }}>
                   <td style={tdStyle}>{typeLabel[row.notification_type] || row.notification_type}</td>
@@ -228,6 +241,17 @@ export default function Notifications() {
                   </td>
                   <td style={{ ...tdStyle, maxWidth:340 }}>{row.message_preview || row.template_name || '—'}</td>
                   <td style={tdStyle}>{row.created_at ? new Date(row.created_at).toLocaleString() : '—'}</td>
+                  <td style={tdStyle}>
+                    {['failed', 'retry'].includes(row.status) && (
+                      <button
+                        onClick={() => retryNotification(row)}
+                        disabled={busy === `retry-${row.id}`}
+                        style={{ ...buttonStyle('#d97706'), height: 30, padding: '0 10px', fontSize: 11 }}
+                      >
+                        {busy === `retry-${row.id}` ? 'Retrying…' : 'Retry'}
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

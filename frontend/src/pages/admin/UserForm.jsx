@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { adminAPI, extractError } from '../../services/api'
-import { PageHeader, Field } from '../../components/UI'
+import { PageHeader, Field, Skeleton } from '../../components/UI'
 
 const ROLES = [
   { value: 'admin',   label: 'Admin',   color: '#dc2626', desc: 'Full access to everything' },
@@ -18,7 +18,7 @@ const EMPTY_FORM = {
   email: '',
   password: '',
   confirm_password: '',
-  role: 'teacher',
+  role: 'student',
   is_active: true,
 }
 
@@ -61,13 +61,17 @@ export default function UserForm() {
 
   const validate = () => {
     const e = {}
-    if (!form.name.trim())  e.name  = 'Name is required'
-    if (!form.email.trim()) e.email = 'Email is required'
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Invalid email address'
+    const name = form.name.trim()
+    const email = form.email.trim()
+    if (!name)  e.name  = 'Name is required'
+    if (!email) e.email = 'Email is required'
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email = 'Invalid email address'
     if (!isEdit && !form.password) e.password = 'Password is required'
     if (!isEdit && form.password && form.password.length < 8) e.password = 'Minimum 8 characters'
-    if (!isEdit && form.password !== form.confirm_password) e.confirm_password = 'Passwords do not match'
+    if (!isEdit && form.password && !form.confirm_password) e.confirm_password = 'Confirm the password'
+    if (!isEdit && form.password && form.password !== form.confirm_password) e.confirm_password = 'Passwords do not match'
     if (isEdit && form.password && form.password.length < 8) e.password = 'Minimum 8 characters'
+    if (isEdit && form.confirm_password && !form.password) e.confirm_password = 'Enter a new password first'
     if (isEdit && form.password && form.password !== form.confirm_password) e.confirm_password = 'Passwords do not match'
     setErrors(e)
     return Object.keys(e).length === 0
@@ -78,7 +82,7 @@ export default function UserForm() {
     setLoading(true)
     try {
       if (isEdit) {
-        const payload = { name: form.name, email: form.email, role: form.role, is_active: form.is_active }
+        const payload = { name: form.name.trim(), email: form.email.trim(), role: form.role, is_active: form.is_active }
         await adminAPI.updateUser(id, payload)
         if (form.password) {
           await adminAPI.resetPassword(id, form.password)
@@ -86,8 +90,8 @@ export default function UserForm() {
         toast.success('User updated')
       } else {
         await adminAPI.createUser({
-          name: form.name,
-          email: form.email,
+          name: form.name.trim(),
+          email: form.email.trim(),
           password: form.password,
           role: form.role,
           is_active: form.is_active,
@@ -103,11 +107,29 @@ export default function UserForm() {
   }
 
   const selectedRole = ROLES.find(r => r.value === form.role)
+  const availableRoles = isEdit ? ROLES : ROLES.filter(role => ['student', 'parent'].includes(role.value))
 
   if (initialLoading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '300px', gap: '12px', color: 'var(--text-tertiary)', fontSize: '14px' }}>
-        <span className="spinner" /> Loading...
+      <div style={{ maxWidth: '640px' }}>
+        <PageHeader
+          title={isEdit ? 'Edit User' : 'Create User'}
+          subtitle={isEdit ? 'Update account details or reset password' : 'Add a student or parent portal account. Use Teacher Registration for teachers.'}
+          back={() => navigate('/admin/users')}
+        />
+        <div className="card" style={{ padding: '18px' }}>
+          <div style={{ display: 'grid', gap: '12px' }}>
+            <Skeleton width="34%" height="16px" />
+            <Skeleton height="44px" />
+            <Skeleton height="44px" />
+            <Skeleton height="44px" />
+            <Skeleton height="44px" />
+          </div>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '18px', flexWrap: 'wrap' }}>
+            <Skeleton width="160px" height="44px" />
+            <Skeleton width="120px" height="44px" />
+          </div>
+        </div>
       </div>
     )
   }
@@ -116,7 +138,7 @@ export default function UserForm() {
     <div style={{ maxWidth: '640px' }}>
       <PageHeader
         title={isEdit ? 'Edit User' : 'Create User'}
-        subtitle={isEdit ? 'Update account details or reset password' : 'Add an admin, teacher, student, or parent account'}
+        subtitle={isEdit ? 'Update account details or reset password' : 'Add a student or parent portal account. Use Teacher Registration for teachers.'}
         back={() => navigate('/admin/users')}
       />
 
@@ -127,11 +149,17 @@ export default function UserForm() {
           <div style={{ fontSize: '11.5px', color: 'var(--text-tertiary)', marginTop: '2px' }}>Determines what the user can access</div>
         </div>
         <div style={{ padding: '16px 18px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
-          {ROLES.map(role => (
+          {availableRoles.map(role => (
             <button
               key={role.value}
               type="button"
-              onClick={() => { setForm(f => ({ ...f, role: role.value })); setErrors(p => ({ ...p, role: undefined })) }}
+              onClick={() => {
+                setForm(f => ({
+                  ...f,
+                  role: role.value,
+                }))
+                setErrors(p => ({ ...p, role: undefined }))
+              }}
               style={{
                 padding: '12px 10px',
                 borderRadius: '10px',
@@ -184,7 +212,9 @@ export default function UserForm() {
             label={isEdit ? 'New Password' : 'Password'}
             required={!isEdit}
             error={errors.password}
-            hint={isEdit ? 'Leave blank to keep current password' : 'Minimum 8 characters'}
+            hint={isEdit
+              ? 'Leave blank to keep current password'
+              : 'Minimum 8 characters'}
           >
             <input
               type="password"
@@ -214,7 +244,9 @@ export default function UserForm() {
           <div style={{ gridColumn: '1 / -1' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
               <div
-                onClick={() => setForm(f => ({ ...f, is_active: !f.is_active }))}
+                onClick={() => {
+                  setForm(f => ({ ...f, is_active: !f.is_active }))
+                }}
                 style={{
                   width: '44px', height: '24px',
                   borderRadius: '12px',
@@ -268,7 +300,9 @@ export default function UserForm() {
             <circle cx="12" cy="12" r="10" strokeWidth={2} />
             <path strokeLinecap="round" strokeWidth={2} d="M12 8v4m0 4h.01" />
           </svg>
-          {form.role === 'teacher' && 'After creating, assign this teacher to classes from the Assignments tab.'}
+          {form.role === 'teacher' && (isEdit
+            ? 'After creating, assign this teacher to classes from the Assignments tab.'
+            : 'Use Teacher Registration to create teacher accounts.')}
           {form.role === 'student' && 'After creating, link this account to a student record from User Management.'}
           {form.role === 'parent' && 'After creating, link this account to a student record from User Management.'}
           {form.role === 'admin' && 'Admin accounts have full access to all data and settings.'}

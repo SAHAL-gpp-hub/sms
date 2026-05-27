@@ -30,13 +30,15 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
+from jose import JWTError
+
 from app.core.security import (
     create_access_token,
     decode_access_token,
     get_password_hash,
     verify_password,
 )
-from app.models.base_models import AcademicYear, AdminLoginOTPChallenge, AuthRefreshSession, Branch, Class, Student, TeacherClassAssignment, TokenBlocklist, User, YearStatusEnum
+from app.models.base_models import AcademicYear, AdminLoginOTPChallenge, AuthRefreshSession, Branch, Class, Enrollment, Student, TeacherClassAssignment, TokenBlocklist, User, YearStatusEnum
 from app.services.notification_service import notification_service
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
@@ -126,6 +128,11 @@ class LoginResponse(BaseModel):
 class Verify2FARequest(BaseModel):
     challenge_id: str
     otp: str
+
+
+class CompleteStaffRegistrationRequest(BaseModel):
+    registration_token: str
+    password: str = Field(min_length=8)
 
 
 @dataclass
@@ -410,6 +417,12 @@ def ensure_subject_assignment_access(
 ) -> None:
     if current_user.role != "teacher":
         return
+    has_specific_subjects = any(
+        a.get("class_id") == class_id
+        for a in current_user.subject_assignments
+    )
+    if class_id in current_user.class_teacher_class_ids and not has_specific_subjects:
+        return
     if not any(
         a.get("class_id") == class_id and a.get("subject_id") == subject_id
         for a in current_user.subject_assignments
@@ -428,7 +441,12 @@ def ensure_student_access(db: Session, current_user: CurrentUser, student_id: in
     if current_user.role == "admin":
         return student
     if current_user.role == "teacher":
-        ensure_class_access(current_user, student.class_id)
+        has_access = db.query(Enrollment.id).filter(
+            Enrollment.student_id == student.id,
+            Enrollment.class_id.in_(current_user.assigned_class_ids or [-1]),
+        ).first()
+        if not has_access:
+            ensure_class_access(current_user, student.class_id)
         return student
     if current_user.role == "student" and current_user.linked_student_id == student_id:
         return student
@@ -621,6 +639,42 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
     return user
+
+
+@router.post("/complete-registration", response_model=Token, summary="Complete staff registration from an invite link")
+def complete_staff_registration(
+    request: Request,
+    response: Response,
+    data: CompleteStaffRegistrationRequest,
+    db: Session = Depends(get_db),
+):
+    try:
+        payload = decode_access_token(data.registration_token)
+    except JWTError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Registration link is invalid or expired.") from exc
+
+    if payload.get("purpose") != "staff_registration":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Registration link is invalid.")
+
+    try:
+        user_id = int(payload.get("sub"))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Registration link is invalid.") from exc
+
+    user = db.query(User).filter_by(id=user_id).with_for_update().first()
+    if not user or user.role != "teacher":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Teacher account not found.")
+    if payload.get("email") and payload.get("email") != user.email:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Registration link no longer matches this account.")
+    if user.is_active:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This account is already active. Please log in.")
+
+    user.password_hash = get_password_hash(data.password)
+    user.is_active = True
+    token_payload = issue_access_payload(db, user)
+    create_refresh_session(db, response, user.id, request)
+    db.commit()
+    return token_payload
 
 
 @router.get("/register-status", summary="Registration UI status")

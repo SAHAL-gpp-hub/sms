@@ -338,6 +338,9 @@ function ActivationShell({ children }) {
 export default function ActivateAccount() {
   const navigate = useNavigate()
   const location = useLocation()
+  const activationBase = location.pathname.startsWith('/portal/activate-account')
+    ? '/portal/activate-account'
+    : '/activate-account'
   const stored = useMemo(loadState, [])
   const [accountType, setAccountType] = useState(stored.accountType || 'student')
   const [identifier, setIdentifier] = useState(stored.identifier || '')
@@ -374,9 +377,9 @@ export default function ActivateAccount() {
   }, [resendAt])
 
   useEffect(() => {
-    if (step === 'verify' && !activationId) navigate('/activate-account', { replace: true })
-    if (step === 'password' && !activationToken) navigate('/activate-account/verify', { replace: true })
-  }, [step, activationId, activationToken, navigate])
+    if (step === 'verify' && !activationId) navigate(activationBase, { replace: true })
+    if (step === 'password' && !activationToken) navigate(`${activationBase}/verify`, { replace: true })
+  }, [step, activationBase, activationId, activationToken, navigate])
 
   useEffect(() => {
     const inviteToken = new URLSearchParams(location.search).get('invite')
@@ -399,11 +402,11 @@ export default function ActivateAccount() {
           ...next,
         })
         toast.success('Activation code sent. Check the invited email inbox.')
-        navigate('/activate-account/verify', { replace: true })
+        navigate(`${activationBase}/verify`, { replace: true })
       })
       .catch(err => toast.error(extractError(err)))
       .finally(() => setLoading(false))
-  }, [accountType, activationId, activationToken, email, identifier, loading, location.search, navigate])
+  }, [accountType, activationBase, activationId, activationToken, email, identifier, loading, location.search, navigate])
 
   const persist = useCallback(next => {
     const state = {
@@ -438,7 +441,7 @@ export default function ActivateAccount() {
       setResendAt(next.resendAt)
       persist(next)
       toast.success('Activation code sent if the details match school records')
-      navigate('/activate-account/verify')
+      navigate(`${activationBase}/verify`)
     } catch (err) {
       toast.error(extractError(err))
     } finally {
@@ -468,7 +471,7 @@ export default function ActivateAccount() {
       const res = await studentAuthAPI.verifyOtp(activationId, otp)
       setActivationToken(res.data.activation_token)
       persist({ activationToken: res.data.activation_token })
-      navigate('/activate-account/password')
+      navigate(`${activationBase}/password`)
     } catch (err) {
       toast.error(extractError(err))
     } finally {
@@ -492,7 +495,7 @@ export default function ActivateAccount() {
       setToken(res.data.access_token)
       setAuthUser(normalizeAuthUser(res.data))
       sessionStorage.removeItem(STORE_KEY)
-      navigate('/activate-account/success')
+      navigate(`${activationBase}/success`)
     } catch (err) {
       toast.error(extractError(err))
     } finally {
@@ -541,8 +544,11 @@ export default function ActivateAccount() {
             <button type="button" className={accountType === 'parent' ? 'active' : ''} onClick={() => setAccountType('parent')}>Parent</button>
           </div>
           <label className="activation-label">
-            Admission number or student ID
-            <input className="activation-input" value={identifier} onChange={e => setIdentifier(e.target.value)} required />
+            Student ID, GR number, or registered phone number
+            <span style={{ fontSize: 11, color: '#7a5535', marginTop: 4, display: 'block', textTransform: 'none', letterSpacing: 0, fontWeight: 700 }}>
+              Find the Student ID on your fee receipt, or use the GR number from the admission letter.
+            </span>
+            <input className="activation-input" value={identifier} onChange={e => setIdentifier(e.target.value)} placeholder="SMS-2025-042 or GR2025001 or 9876543210" required />
           </label>
           <label className="activation-label">
             {accountType === 'student' ? 'Student email' : 'Guardian email'}

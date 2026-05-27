@@ -2,13 +2,14 @@
 import { Suspense, lazy, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
-import { getRole, getToken, normalizeAuthUser, setAuthUser } from './services/auth'
-import { authAPI } from './services/api'
+import { getRole, getToken, getTokenExpiry, normalizeAuthUser, setAuthUser, setToken } from './services/auth'
+import { authAPI, warmCurrentYearCache, yearendAPI } from './services/api'
 import ErrorBoundary from './components/ErrorBoundary'
 import SessionExpiredModal from './components/SessionExpiredModal'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import ActivateAccount from './pages/ActivateAccount'
+import CompleteRegistration from './pages/CompleteRegistration'
 
 const Layout = lazy(() => import('./components/Layout'))
 const PortalLayout = lazy(() => import('./layouts/PortalLayout'))
@@ -68,10 +69,36 @@ function SmartRoot() {
 
 function AuthHydrator() {
   useEffect(() => {
-    if (!getToken()) return
-    authAPI.me()
-      .then(r => setAuthUser(normalizeAuthUser(r.data)))
-      .catch(() => {})
+    const hydrateSession = () => {
+      if (!getToken()) return
+      Promise.all([
+        authAPI.me(),
+        yearendAPI.getCurrentYear().catch(() => null),
+      ])
+        .then(([meRes, yearRes]) => {
+          setAuthUser(normalizeAuthUser(meRes.data))
+          if (yearRes?.data?.id) warmCurrentYearCache(yearRes.data.id)
+        })
+        .catch(() => {})
+    }
+
+    const refreshBeforeExpiry = () => {
+      if (!getToken()) return
+      const expiry = getTokenExpiry()
+      if (!expiry || expiry - Date.now() > 5 * 60 * 1000) return
+      authAPI.refresh()
+        .then(r => {
+          if (r.data?.access_token) {
+            setToken(r.data.access_token)
+            setAuthUser(normalizeAuthUser(r.data))
+          }
+        })
+        .catch(() => {})
+    }
+    hydrateSession()
+    const timer = window.setInterval(refreshBeforeExpiry, 60 * 1000)
+    refreshBeforeExpiry()
+    return () => window.clearInterval(timer)
   }, [])
   return null
 }
@@ -85,10 +112,16 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/complete-registration" element={<CompleteRegistration />} />
+            <Route path="/portal/complete-registration" element={<CompleteRegistration />} />
             <Route path="/activate-account" element={<ActivateAccount />} />
+            <Route path="/portal/activate-account" element={<ActivateAccount />} />
             <Route path="/activate-account/verify" element={<ActivateAccount />} />
+            <Route path="/portal/activate-account/verify" element={<ActivateAccount />} />
             <Route path="/activate-account/password" element={<ActivateAccount />} />
+            <Route path="/portal/activate-account/password" element={<ActivateAccount />} />
             <Route path="/activate-account/success" element={<ActivateAccount />} />
+            <Route path="/portal/activate-account/success" element={<ActivateAccount />} />
             <Route path="/unauthorized" element={<Unauthorized />} />
 
             {/* ── Admin / Teacher panel ── */}
