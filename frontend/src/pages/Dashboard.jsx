@@ -28,6 +28,7 @@ const ADMIN_ACTIONS = [
   { label: 'Enter Marks', to: '/marks', color: '#0891b2', icon: ICONS.marks },
   { label: 'Fee Structure', to: '/fees', color: 'var(--success-600)', icon: ICONS.fees },
   { label: 'Fee Defaulters', to: '/fees/defaulters', color: 'var(--danger-600)', icon: ICONS.alert },
+  { label: 'Notifications', to: '/admin/notifications', color: '#7c3aed', icon: ICONS.report },
   { label: 'Reports', to: '/reports', color: '#b45309', icon: ICONS.report },
 ]
 

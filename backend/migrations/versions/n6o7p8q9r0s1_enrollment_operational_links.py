@@ -30,7 +30,23 @@ def _constraint_exists(table: str, name: str) -> bool:
     return any(c.get("name") == name for c in constraints)
 
 
+def _index_exists(table: str, name: str) -> bool:
+    bind = op.get_bind()
+    insp = sa.inspect(bind)
+    return any(index.get("name") == name for index in insp.get_indexes(table))
+
+
 def upgrade() -> None:
+    for table, name, columns in (
+        ("attendance", "ix_attendance_class_id_date", ["class_id", "date"]),
+        ("fee_payments", "ix_fee_payments_student_fee_id", ["student_fee_id"]),
+        ("marks", "ix_marks_exam_id_subject_id", ["exam_id", "subject_id"]),
+        ("student_fees", "ix_student_fees_enrollment_id_academic_year_id", ["enrollment_id", "academic_year_id"]),
+        ("enrollments", "ix_enrollments_class_id_academic_year_id_status", ["class_id", "academic_year_id", "status"]),
+    ):
+        if not _index_exists(table, name):
+            op.create_index(name, table, columns)
+
     for table in ("attendance", "marks", "student_fees"):
         if not _column_exists(table, "enrollment_id"):
             op.add_column(table, sa.Column("enrollment_id", sa.Integer(), nullable=True))
@@ -90,6 +106,16 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    for table, name in (
+        ("enrollments", "ix_enrollments_class_id_academic_year_id_status"),
+        ("student_fees", "ix_student_fees_enrollment_id_academic_year_id"),
+        ("marks", "ix_marks_exam_id_subject_id"),
+        ("fee_payments", "ix_fee_payments_student_fee_id"),
+        ("attendance", "ix_attendance_class_id_date"),
+    ):
+        if _index_exists(table, name):
+            op.drop_index(name, table_name=table)
+
     for table, constraint in (
         ("marks", "uq_mark_enrollment_subject_exam"),
         ("attendance", "uq_attendance_enrollment_date"),

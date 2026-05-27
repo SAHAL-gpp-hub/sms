@@ -162,10 +162,11 @@ pytest tests/ -v
 ## 🔁 CI/CD
 
 - CI workflows are under `.github/workflows/ci.yml`:
-  - backend: `pytest`
+  - backend: `pytest --cov=app --cov-fail-under=80`
   - frontend: `npm run lint` + `npm run build`
   - extended API suite: `sms_tests/run_tests.sh --api-only`
 - Manual deployment workflow with rollback checklist is in `.github/workflows/deploy.yml`.
+- Operational notes for coverage, observability, API docs, and database performance are in [`docs/api-observability-and-coverage.md`](docs/api-observability-and-coverage.md).
 
 ---
 

@@ -90,7 +90,7 @@ const navGroups = [
         icon: <Icon><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 3v18m-6-8h12M5 8h8m-8 8h6m6 5l4-4-4-4" /></Icon>,
       },
       {
-        to: '/notifications',
+        to: '/admin/notifications',
         label: 'Notifications',
         roles: ['admin'],
         icon: <Icon><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0a3 3 0 01-6 0" /></Icon>,
@@ -147,7 +147,7 @@ export default function Sidebar({ open, onClose }) {
     if (role === 'admin') {
       return [
         { label: 'Operations', items: visibleGroups.flatMap(group => group.items).filter(item => ['/', '/students', '/attendance', '/marks', '/fees', '/reports'].includes(item.to)).map(item => item.to === '/' ? { ...item, label: 'Today' } : item) },
-        { label: 'Settings', items: visibleGroups.flatMap(group => group.items).filter(item => ['/yearend', '/admin/users', '/setup/classes'].includes(item.to)) },
+        { label: 'Settings', items: visibleGroups.flatMap(group => group.items).filter(item => ['/yearend', '/admin/users', '/admin/notifications', '/setup/classes'].includes(item.to)) },
       ].filter(group => group.items.length > 0)
     }
     return visibleGroups

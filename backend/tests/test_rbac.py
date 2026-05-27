@@ -848,6 +848,18 @@ class TestPublicEndpoints:
     def test_health_endpoint_is_public(self, client):
         res = client.get("/health")
         assert res.status_code == 200
+        assert res.headers.get("X-Request-ID")
+        assert res.headers.get("X-Trace-ID") == res.headers.get("X-Request-ID")
+        assert res.headers.get("X-Request-Time-Ms")
+
+    def test_readiness_and_liveness_endpoints_are_public(self, client):
+        live = client.get("/health/live")
+        ready = client.get("/health/ready")
+
+        assert live.status_code == 200
+        assert live.json()["status"] == "ok"
+        assert ready.status_code == 200
+        assert ready.json()["status"] in {"ok", "degraded"}
 
     def test_root_is_public(self, client):
         res = client.get("/")

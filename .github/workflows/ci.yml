@@ -29,7 +29,16 @@ jobs:
           pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Run backend tests
-        run: pytest
+        run: |
+          mkdir -p reports
+          pytest --cov=app --cov-report=term-missing --cov-report=xml:reports/backend-coverage.xml --cov-fail-under=80
+
+      - name: Upload backend coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/reports
 
   frontend-validate:
     runs-on: ubuntu-latest

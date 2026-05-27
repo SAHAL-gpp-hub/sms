@@ -163,7 +163,8 @@ export default function App() {
 
           {/* Year-end */}
           <Route path="yearend" element={<RoleRoute roles={['admin']}><YearEnd /></RoleRoute>} />
-          <Route path="notifications" element={<RoleRoute roles={['admin']}><Notifications /></RoleRoute>} />
+          <Route path="admin/notifications" element={<RoleRoute roles={['admin']}><Notifications /></RoleRoute>} />
+          <Route path="notifications" element={<Navigate to="/admin/notifications" replace />} />
 
           {/* Admin — User Management */}
           <Route path="admin/users" element={<RoleRoute roles={['admin']}><UserManagement /></RoleRoute>} />

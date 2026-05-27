@@ -8,6 +8,7 @@ Changes vs original:
   - All other behaviour preserved
 """
 
+import json
 import logging
 import asyncio
 import time
@@ -15,6 +16,7 @@ from collections import defaultdict, deque
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
 from pathlib import Path
+import uuid
 
 from alembic import command
 from alembic.config import Config
@@ -55,10 +57,38 @@ from app.routers.auth import get_current_user, limiter, require_role
 from app.services.notification_service import run_notification_worker
 
 logger = logging.getLogger("sms")
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-)
+
+
+class JsonFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        for key in ("request_id", "method", "path", "status_code", "elapsed_ms"):
+            value = getattr(record, key, None)
+            if value is not None:
+                payload[key] = value
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        return json.dumps(payload, default=str)
+
+
+def _configure_logging() -> None:
+    if getattr(logger, "_sms_json_logging_configured", False):
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(JsonFormatter())
+    logger.handlers.clear()
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    logger._sms_json_logging_configured = True  # type: ignore[attr-defined]
+
+
+_configure_logging()
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
@@ -149,6 +179,7 @@ app = FastAPI(
     version="2.0.0",
     description="SMS for Iqra English Medium School — Palanpur, Gujarat",
     lifespan=lifespan,
+    swagger_ui_parameters={"displayRequestDuration": True, "persistAuthorization": True},
 )
 app.state.latency_windows = defaultdict(lambda: deque(maxlen=200))
 
@@ -174,15 +205,41 @@ def _percentile(values: list[float], pct: float) -> float:
 
 
 @app.middleware("http")
-async def request_timing_middleware(request: Request, call_next):
+async def request_context_middleware(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or request.headers.get("X-Trace-ID") or uuid.uuid4().hex
+    request.state.request_id = request_id
     started = time.perf_counter()
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception:
+        elapsed_ms = (time.perf_counter() - started) * 1000
+        logger.exception(
+            "request_failed",
+            extra={
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "elapsed_ms": round(elapsed_ms, 2),
+            },
+        )
+        raise
     elapsed_ms = (time.perf_counter() - started) * 1000
     route_key = request.url.path
     app.state.latency_windows[route_key].append(elapsed_ms)
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Trace-ID"] = request_id
     response.headers["X-Request-Time-Ms"] = f"{elapsed_ms:.2f}"
     if settings.PERF_LOG_REQUESTS and elapsed_ms >= settings.PERF_SLOW_REQUEST_MS:
-        logger.warning("Slow request: %.2f ms | %s %s", elapsed_ms, request.method, route_key)
+        logger.warning(
+            "slow_request",
+            extra={
+                "request_id": request_id,
+                "method": request.method,
+                "path": route_key,
+                "status_code": response.status_code,
+                "elapsed_ms": round(elapsed_ms, 2),
+            },
+        )
     return response
 
 # ── Public routes (no auth required) ─────────────────────────────────────────
@@ -232,6 +289,25 @@ def health():
     }
 
 
+@app.get("/health/live")
+def health_live():
+    return {"status": "ok", "message": "Process is alive."}
+
+
+@app.get("/health/ready")
+def health_ready():
+    db_ok = check_db_connection()
+    return {
+        "status": "ok" if db_ok else "degraded",
+        "db_connected": db_ok,
+        "message": (
+            "All systems operational."
+            if db_ok
+            else "Database unreachable. Check DATABASE_URL."
+        ),
+    }
+
+
 @app.get("/metrics/latency")
 def latency_metrics(_: object = Depends(require_role("admin"))):
     payload = {}
@@ -254,7 +330,10 @@ async def job_status_socket(websocket: WebSocket, job_id: int, token: str):
         payload = decode_access_token(token)
         if payload.get("purpose") not in (None, "access"):
             raise ValueError("Invalid token purpose")
-        user_id = int(payload.get("sub"))
+        subject = payload.get("sub")
+        if subject is None:
+            raise ValueError("Missing token subject")
+        user_id = int(subject)
     except Exception:
         await websocket.close(code=1008)
         return
