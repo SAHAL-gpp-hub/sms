@@ -7,6 +7,19 @@ import { extractPaymentError, paymentAPI, portalAPI } from '../../services/api'
 const fmt = (n) =>
   new Intl.NumberFormat('en-IN', { style:'currency', currency:'INR', minimumFractionDigits:0 }).format(Number(n) || 0)
 
+const fmtCheckout = (n) =>
+  new Intl.NumberFormat('en-IN', { style:'currency', currency:'INR', minimumFractionDigits:2, maximumFractionDigits:2 }).format(Number(n) || 0)
+
+const paymentBreakdown = (amount) => {
+  const feeAmount = Math.round((Number(amount) || 0) * 100) / 100
+  const platformCharge = Math.round(feeAmount * 2) / 100
+  return {
+    feeAmount,
+    platformCharge,
+    totalPayable: Math.round((feeAmount + platformCharge) * 100) / 100,
+  }
+}
+
 let razorpayScriptPromise = null
 
 const loadRazorpay = () => {
@@ -78,6 +91,7 @@ export default function PortalFees() {
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(false)
   const [payingOption, setPayingOption] = useState('')
+  const [pendingPayment, setPendingPayment] = useState(null)
   const [verifyingOrderId, setVerifyingOrderId] = useState('')
   const [paymentHistory, setPaymentHistory] = useState([])
 
@@ -137,6 +151,7 @@ export default function PortalFees() {
         scope: 'current_year',
         payment_option: paymentOption,
       })
+      setPendingPayment(null)
       setVerifyingOrderId(order.order_id)
 
       const options = {
@@ -221,6 +236,7 @@ export default function PortalFees() {
     { key:'half', label:'Pay Half', amount: currentYearBalance / 2 },
     { key:'quarter', label:'Pay Quarter', amount: currentYearBalance / 4 },
   ].filter(option => option.amount > 0)
+  const pendingBreakdown = pendingPayment ? paymentBreakdown(pendingPayment.amount) : null
 
   const renderFeeSection = (title, items, empty, collapsed = false) => {
     const content = items.length === 0 ? (
@@ -325,7 +341,7 @@ export default function PortalFees() {
               <button
                 key={option.key}
                 type="button"
-                onClick={() => handlePayNow(option.key, option.amount)}
+                onClick={() => setPendingPayment(option)}
                 disabled={payingOption === option.key || Boolean(verifyingOrderId)}
                 style={{
                   border:0, borderRadius:'12px', padding:'11px 10px', background:'#0d7377',
@@ -344,6 +360,48 @@ export default function PortalFees() {
             {currentYearBalance > 0 ? 'Select a linked student to pay current-year fees online.' : 'Current-year fees are cleared.'}
           </div>
         )}
+        {pendingPayment && pendingBreakdown && (
+          <div style={{ marginTop:'12px', border:'1px solid #dbeafe', background:'#f8fbff', borderRadius:'14px', padding:'13px 14px' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px', marginBottom:'10px' }}>
+              <div style={{ fontSize:'13px', fontWeight:900, color:'#0f172a' }}>{pendingPayment.label}</div>
+              <button
+                type="button"
+                onClick={() => setPendingPayment(null)}
+                disabled={Boolean(payingOption)}
+                aria-label="Cancel payment"
+                style={{ border:0, background:'transparent', color:'#64748b', fontSize:'20px', lineHeight:1, cursor: payingOption ? 'wait' : 'pointer', padding:'0 2px' }}
+              >
+                x
+              </button>
+            </div>
+            <div style={{ display:'grid', gap:'7px', fontSize:'13px', fontWeight:800, color:'#334155' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', gap:'12px' }}>
+                <span>Tuition Fee</span>
+                <span>{fmtCheckout(pendingBreakdown.feeAmount)}</span>
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', gap:'12px' }}>
+                <span>Platform Charges</span>
+                <span>{fmtCheckout(pendingBreakdown.platformCharge)}</span>
+              </div>
+              <div style={{ borderTop:'1px solid #cbd5e1', marginTop:'2px', paddingTop:'8px', display:'flex', justifyContent:'space-between', gap:'12px', color:'#0f172a', fontSize:'14px' }}>
+                <span>Total Payable</span>
+                <span>{fmtCheckout(pendingBreakdown.totalPayable)}</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => handlePayNow(pendingPayment.key, pendingPayment.amount)}
+              disabled={Boolean(payingOption) || Boolean(verifyingOrderId)}
+              style={{
+                width:'100%', marginTop:'12px', border:0, borderRadius:'12px', padding:'11px 12px',
+                background:'#0f172a', color:'white', fontWeight:900, cursor: payingOption || verifyingOrderId ? 'wait' : 'pointer',
+                opacity: payingOption || verifyingOrderId ? 0.7 : 1,
+              }}
+            >
+              {payingOption === pendingPayment.key ? 'Opening Razorpay…' : `Pay ${fmtCheckout(pendingBreakdown.totalPayable)}`}
+            </button>
+          </div>
+        )}
       </div>
 
       {renderFeeSection('Fee Breakdown', currentItems, 'No current-year fees assigned yet', true)}
@@ -357,7 +415,12 @@ export default function PortalFees() {
           {paymentHistory.slice(0, 5).map(order => (
             <div key={order.id} style={{ display:'flex', justifyContent:'space-between', gap:'10px', padding:'9px 0', borderTop:'1px solid #f1f5f9' }}>
               <div>
-                <div style={{ fontSize:'13px', fontWeight:800, color:'#0f172a' }}>{fmt(order.amount)}</div>
+                <div style={{ fontSize:'13px', fontWeight:800, color:'#0f172a' }}>{fmt(order.gross_amount || order.amount)}</div>
+                {order.platform_charge && Number(order.platform_charge) > 0 && (
+                  <div style={{ fontSize:'11px', color:'#64748b', fontWeight:700 }}>
+                    Fee {fmt(order.net_amount)} · Platform Charges {fmt(order.platform_charge)}
+                  </div>
+                )}
                 <div style={{ fontSize:'11.5px', color:'#64748b' }}>{order.receipt_number || order.razorpay_order_id}</div>
               </div>
               <span style={{

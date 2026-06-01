@@ -174,8 +174,12 @@ export default function FeeStructure() {
     if (structures.length === 0) { toast.error('No fee structure defined. Add fees first.'); return }
     setAssigning(true)
     try {
-      const r = await feeAPI.assignFees(selectedClass, selectedYear)
-      const { assigned } = r.data
+      const selected = classes.find(c => String(c.id) === selectedClass)
+      const classIds = selected
+        ? classes.filter(c => c.name === selected.name && String(c.academic_year_id) === String(selectedYear)).map(c => c.id)
+        : [selectedClass]
+      const results = await Promise.all(classIds.map(classId => feeAPI.assignFees(classId, selectedYear)))
+      const assigned = results.reduce((sum, r) => sum + (r.data?.assigned || 0), 0)
       if (assigned === 0) {
         toast('No new records created — fees may already be assigned.', { icon: 'ℹ️' })
       } else {
@@ -190,7 +194,15 @@ export default function FeeStructure() {
 
   const selectedClassName = classes.find(c => String(c.id) === selectedClass)
   const totalAmount = structures.reduce((s, x) => s + parseFloat(x.amount || 0), 0)
-  const classOptions = classes.map(c => ({ value: String(c.id), label: `Class ${c.name} — Div ${c.division}` }))
+  const classGroups = classes.reduce((groups, cls) => {
+    const key = `${cls.academic_year_id || selectedYearId}:${cls.name}`
+    if (!groups[key]) groups[key] = { ...cls, divisions: [] }
+    if (cls.division && !groups[key].divisions.includes(cls.division)) groups[key].divisions.push(cls.division)
+    return groups
+  }, {})
+  const classOptions = Object.values(classGroups)
+    .sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true }))
+    .map(c => ({ value: String(c.id), label: `Class ${c.name}` }))
   const yearOptions  = years.map(y => ({ value: String(y.id), label: y.label + (y.is_current ? ' (Current)' : '') }))
 
   return (
@@ -301,7 +313,7 @@ export default function FeeStructure() {
             <div className="card-header">
               <div>
                 <div className="card-title">
-                  {selectedClassName ? `Class ${selectedClassName.name} — Div ${selectedClassName.division}` : 'Fee Structure'}
+                  {selectedClassName ? `Class ${selectedClassName.name}` : 'Fee Structure'}
                 </div>
                 {structures.length > 0 && (
                   <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
@@ -388,7 +400,7 @@ export default function FeeStructure() {
             <div>
               <div>
                 Apply fees to <strong>{applyConfirm.preview?.affected_students || 0}</strong> student(s)
-                {selectedClassName ? ` in Class ${selectedClassName.name} ${selectedClassName.division}` : ''}?
+                {selectedClassName ? ` in Class ${selectedClassName.name}` : ''}?
               </div>
               {(applyConfirm.preview?.duplicate_assignments || 0) > 0 && (
                 <div style={{ marginTop: 8, color: 'var(--warning-600)' }}>

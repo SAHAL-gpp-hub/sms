@@ -18,6 +18,7 @@ from app.models.base_models import DataAuditActionEnum
 from app.services.audit_service import log_data_change, model_snapshot
 
 logger = logging.getLogger("sms.payments")
+PLATFORM_CHARGE_RATE = Decimal("0.02")
 
 
 def _money(value: Decimal | int | str) -> Decimal:
@@ -26,6 +27,22 @@ def _money(value: Decimal | int | str) -> Decimal:
 
 def _to_paise(value: Decimal) -> int:
     return int((_money(value) * Decimal("100")).to_integral_value(rounding=ROUND_HALF_UP))
+
+
+def _platform_charge(net_amount: Decimal) -> Decimal:
+    return _money(net_amount * PLATFORM_CHARGE_RATE)
+
+
+def _gross_amount(net_amount: Decimal) -> Decimal:
+    return _money(net_amount + _platform_charge(net_amount))
+
+
+def _order_net_amount(order: OnlinePaymentOrder) -> Decimal:
+    return _money(order.net_amount if order.net_amount is not None else order.amount)
+
+
+def _order_gross_amount(order: OnlinePaymentOrder) -> Decimal:
+    return _money(order.gross_amount if order.gross_amount is not None else order.amount)
 
 
 def _require_razorpay_config() -> None:
@@ -178,7 +195,7 @@ def mark_order_paid_from_webhook(
         _fail_order(db, order, reason)
         raise HTTPException(status_code=400, detail=reason)
 
-    expected_amount = _to_paise(Decimal(str(order.amount)))
+    expected_amount = _to_paise(_order_gross_amount(order))
     if payment_entity.get("amount") != expected_amount:
         reason = "Webhook payment amount does not match the order amount"
         _fail_order(db, order, reason)
@@ -196,6 +213,8 @@ def create_razorpay_order(db: Session, user: CurrentUser, student_fee_id: int, a
     _require_razorpay_config()
     student_fee = _get_accessible_student_fee(db, user, student_fee_id)
     amount = _money(amount)
+    platform_charge = _platform_charge(amount)
+    gross_amount = _gross_amount(amount)
     outstanding = _outstanding_for_student_fee(db, student_fee)
     if outstanding <= 0:
         raise HTTPException(status_code=400, detail="This fee is already fully paid")
@@ -203,12 +222,15 @@ def create_razorpay_order(db: Session, user: CurrentUser, student_fee_id: int, a
         raise HTTPException(status_code=400, detail=f"Amount exceeds outstanding balance of ₹{outstanding}")
 
     order = _create_gateway_order(
-        amount=amount,
+        amount=gross_amount,
         receipt=f"sf_{student_fee_id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
         notes={
             "student_fee_id": str(student_fee_id),
             "student_id": str(student_fee.student_id),
             "student_name": student_fee.student.name_en if student_fee.student else "",
+            "net_amount": f"{amount:.2f}",
+            "platform_charge": f"{platform_charge:.2f}",
+            "gross_amount": f"{gross_amount:.2f}",
         },
     )
 
@@ -217,7 +239,10 @@ def create_razorpay_order(db: Session, user: CurrentUser, student_fee_id: int, a
         student_id=student_fee.student_id,
         scope="single_fee",
         razorpay_order_id=order["id"],
-        amount=amount,
+        amount=gross_amount,
+        net_amount=amount,
+        platform_charge=platform_charge,
+        gross_amount=gross_amount,
         currency=order.get("currency", "INR"),
         status="created",
     )
@@ -231,6 +256,9 @@ def create_razorpay_order(db: Session, user: CurrentUser, student_fee_id: int, a
         "currency": order.get("currency", "INR"),
         "key_id": settings.RAZORPAY_KEY_ID,
         "student_name": student.name_en if student else "",
+        "net_amount": amount,
+        "platform_charge": platform_charge,
+        "gross_amount": gross_amount,
         "contact": student.contact if student else None,
         "email": student.guardian_email if student else None,
     }
@@ -246,6 +274,8 @@ def create_current_year_order(
     _require_razorpay_config()
     student = ensure_student_access(db, user, student_id)
     amount = _money(amount)
+    platform_charge = _platform_charge(amount)
+    gross_amount = _gross_amount(amount)
     payable_items, outstanding = _current_year_outstanding(db, student_id)
     if not payable_items or outstanding <= 0:
         raise HTTPException(status_code=400, detail="Current-year fees are already fully paid")
@@ -253,13 +283,16 @@ def create_current_year_order(
         raise HTTPException(status_code=400, detail=f"Amount exceeds current-year outstanding balance of ₹{outstanding}")
 
     order = _create_gateway_order(
-        amount=amount,
+        amount=gross_amount,
         receipt=f"cy_{student_id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
         notes={
             "student_id": str(student_id),
             "student_name": student.name_en if student else "",
             "scope": "current_year",
             "payment_option": payment_option or "",
+            "net_amount": f"{amount:.2f}",
+            "platform_charge": f"{platform_charge:.2f}",
+            "gross_amount": f"{gross_amount:.2f}",
         },
     )
 
@@ -268,7 +301,10 @@ def create_current_year_order(
         scope="current_year",
         payment_option=payment_option,
         razorpay_order_id=order["id"],
-        amount=amount,
+        amount=gross_amount,
+        net_amount=amount,
+        platform_charge=platform_charge,
+        gross_amount=gross_amount,
         currency=order.get("currency", "INR"),
         status="created",
     )
@@ -281,6 +317,9 @@ def create_current_year_order(
         "currency": order.get("currency", "INR"),
         "key_id": settings.RAZORPAY_KEY_ID,
         "student_name": student.name_en if student else "",
+        "net_amount": amount,
+        "platform_charge": platform_charge,
+        "gross_amount": gross_amount,
         "contact": student.contact if student else None,
         "email": student.guardian_email if student else None,
     }
@@ -311,7 +350,7 @@ def mark_order_paid(
     if order.status == "paid":
         raise HTTPException(status_code=409, detail="Order is paid but receipt is missing")
 
-    amount = _money(order.amount)
+    amount = _order_net_amount(order)
     allocations: list[tuple[StudentFee, Decimal]]
     if order.scope == "current_year":
         if not order.student_id:

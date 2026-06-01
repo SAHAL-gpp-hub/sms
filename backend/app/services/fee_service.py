@@ -123,6 +123,31 @@ def create_fee_structure(db: Session, data: FeeStructureCreate):
     return fs
 
 
+def get_same_standard_class_ids(db: Session, class_id: int, academic_year_id: int) -> list[int]:
+    cls = db.query(Class).filter_by(id=class_id).first()
+    if not cls:
+        return [class_id]
+    class_ids = [
+        cid for (cid,) in (
+            db.query(Class.id)
+            .filter(
+                Class.name == cls.name,
+                Class.academic_year_id == academic_year_id,
+            )
+            .order_by(Class.id)
+            .all()
+        )
+    ]
+    return class_ids or [class_id]
+
+
+def create_fee_structure_for_standard(db: Session, data: FeeStructureCreate) -> list[FeeStructure]:
+    return [
+        create_fee_structure(db, data.model_copy(update={"class_id": class_id}))
+        for class_id in get_same_standard_class_ids(db, data.class_id, data.academic_year_id)
+    ]
+
+
 def get_fee_structures(
     db: Session,
     class_id: Optional[int] = None,
@@ -148,7 +173,14 @@ def get_fee_structure(db: Session, fs_id: int):
 def delete_fee_structure(db: Session, fs_id: int):
     fs = db.query(FeeStructure).filter_by(id=fs_id).first()
     if fs:
-        db.delete(fs)
+        class_ids = get_same_standard_class_ids(db, fs.class_id, fs.academic_year_id)
+        matches = db.query(FeeStructure).filter(
+            FeeStructure.class_id.in_(class_ids),
+            FeeStructure.academic_year_id == fs.academic_year_id,
+            FeeStructure.fee_head_id == fs.fee_head_id,
+        ).all()
+        for match in matches:
+            db.delete(match)
         db.commit()
     return fs
 

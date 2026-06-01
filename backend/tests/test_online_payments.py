@@ -188,6 +188,9 @@ def setup_database():
         student_fee_id=fee.id,
         razorpay_order_id="order_unit_1",
         amount=Decimal("500.00"),
+        net_amount=Decimal("500.00"),
+        platform_charge=Decimal("0.00"),
+        gross_amount=Decimal("500.00"),
         currency="INR",
         status="created",
     ))
@@ -195,6 +198,9 @@ def setup_database():
         student_fee_id=other_fee.id,
         razorpay_order_id="order_other_1",
         amount=Decimal("500.00"),
+        net_amount=Decimal("500.00"),
+        platform_charge=Decimal("0.00"),
+        gross_amount=Decimal("500.00"),
         currency="INR",
         status="created",
     ))
@@ -202,6 +208,9 @@ def setup_database():
         student_fee_id=other_fee.id,
         razorpay_order_id="order_webhook_bad",
         amount=Decimal("300.00"),
+        net_amount=Decimal("300.00"),
+        platform_charge=Decimal("0.00"),
+        gross_amount=Decimal("300.00"),
         currency="INR",
         status="created",
     ))
@@ -209,6 +218,9 @@ def setup_database():
         student_fee_id=other_fee.id,
         razorpay_order_id="order_webhook_ok",
         amount=Decimal("300.00"),
+        net_amount=Decimal("300.00"),
+        platform_charge=Decimal("0.00"),
+        gross_amount=Decimal("300.00"),
         currency="INR",
         status="created",
     ))
@@ -330,7 +342,10 @@ def test_parent_can_create_current_year_order_and_verify_allocates_across_fee_he
         headers=auth(tok),
     )
     assert res.status_code == 200, res.text
-    assert res.json()["amount"] == 90000
+    assert res.json()["amount"] == 91800
+    assert res.json()["net_amount"] == "900.00"
+    assert res.json()["platform_charge"] == "18.00"
+    assert res.json()["gross_amount"] == "918.00"
 
     body = {
         "razorpay_order_id": "order_current_year_1",
@@ -347,6 +362,9 @@ def test_parent_can_create_current_year_order_and_verify_allocates_across_fee_he
         payments = db.query(FeePayment).filter_by(online_order_id=order.id).order_by(FeePayment.id).all()
         assert order.scope == "current_year"
         assert order.payment_option == "half"
+        assert order.net_amount == Decimal("900.00")
+        assert order.platform_charge == Decimal("18.00")
+        assert order.gross_amount == Decimal("918.00")
         assert len(payments) == 2
         assert [p.amount_paid for p in payments] == [Decimal("700.00"), Decimal("200.00")]
         assert db.query(FeePayment).join(StudentFee).filter(
@@ -433,7 +451,7 @@ def test_aggregate_webhook_marks_paid_idempotently(client, monkeypatch):
     )
     assert created.status_code == 200, created.text
 
-    body = _webhook_body("order_webhook_current_year", "pay_webhook_current_year", 80000)
+    body = _webhook_body("order_webhook_current_year", "pay_webhook_current_year", 81600)
     headers = {
         "Content-Type": "application/json",
         "X-Razorpay-Signature": _webhook_signature(body),
@@ -447,6 +465,9 @@ def test_aggregate_webhook_marks_paid_idempotently(client, monkeypatch):
     try:
         order = db.query(OnlinePaymentOrder).filter_by(razorpay_order_id="order_webhook_current_year").one()
         assert order.status == "paid"
+        assert order.net_amount == Decimal("800.00")
+        assert order.platform_charge == Decimal("16.00")
+        assert order.gross_amount == Decimal("816.00")
         assert db.query(FeePayment).filter_by(online_order_id=order.id).count() == 2
     finally:
         db.close()

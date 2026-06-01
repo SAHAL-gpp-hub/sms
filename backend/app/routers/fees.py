@@ -112,8 +112,9 @@ def create_fee_structure(
 
 
 def _preview_fee_plan(db: Session, data: FeePlanRequest) -> dict:
+    class_ids = fee_service.get_same_standard_class_ids(db, data.class_id, data.academic_year_id)
     affected = db.query(Enrollment.id).filter(
-        Enrollment.class_id == data.class_id,
+        Enrollment.class_id.in_(class_ids),
         Enrollment.academic_year_id == data.academic_year_id,
         Enrollment.status.in_([
             EnrollmentStatusEnum.active,
@@ -125,7 +126,7 @@ def _preview_fee_plan(db: Session, data: FeePlanRequest) -> dict:
     existing = 0
     if fee_head_ids:
         existing = db.query(FeeStructure.id).filter(
-            FeeStructure.class_id == data.class_id,
+            FeeStructure.class_id.in_(class_ids),
             FeeStructure.academic_year_id == data.academic_year_id,
             FeeStructure.fee_head_id.in_(fee_head_ids),
         ).count()
@@ -163,14 +164,17 @@ def apply_fee_plan(
     preview = _preview_fee_plan(db, data)
     try:
         for item in data.items:
-            fee_service.create_fee_structure(db, FeeStructureCreate(
+            fee_service.create_fee_structure_for_standard(db, FeeStructureCreate(
                 class_id=data.class_id,
                 fee_head_id=item.fee_head_id,
                 amount=item.amount,
                 due_date=item.due_date,
                 academic_year_id=data.academic_year_id,
             ))
-        assigned = fee_service.assign_fees_to_class(db, data.class_id, data.academic_year_id)
+        assigned = sum(
+            fee_service.assign_fees_to_class(db, class_id, data.academic_year_id)
+            for class_id in fee_service.get_same_standard_class_ids(db, data.class_id, data.academic_year_id)
+        )
         _invalidate_fee_caches()
         return {**preview, "assigned": assigned}
     except ValueError as exc:

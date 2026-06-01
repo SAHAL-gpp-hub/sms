@@ -38,6 +38,9 @@ class CreateOrderResponse(BaseModel):
     currency: str
     key_id: str
     student_name: str
+    net_amount: Decimal
+    platform_charge: Decimal
+    gross_amount: Decimal
     contact: Optional[str] = None
     email: Optional[str] = None
 
@@ -62,6 +65,9 @@ class OnlinePaymentOrderOut(BaseModel):
     razorpay_order_id: str
     razorpay_payment_id: Optional[str] = None
     amount: Decimal
+    net_amount: Decimal
+    platform_charge: Decimal
+    gross_amount: Decimal
     currency: str
     status: str
     created_at: Optional[datetime] = None
@@ -79,6 +85,9 @@ class PaymentOrderStatusResponse(BaseModel):
     payment_option: Optional[str] = None
     status: str
     amount: Decimal
+    net_amount: Decimal
+    platform_charge: Decimal
+    gross_amount: Decimal
     currency: str
     receipt_number: Optional[str] = None
     failure_reason: Optional[str] = None

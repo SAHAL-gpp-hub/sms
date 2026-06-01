@@ -49,6 +49,71 @@ const RESPONSIVE_CSS = `
   /* ───── Base layout helpers ───── */
   .me-root { width: 100%; }
 
+  .me-control-panel {
+    background: var(--surface-0);
+    border: 1px solid var(--border-default);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+  .me-control-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .me-control-title h2 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--text-primary);
+  }
+  .me-control-title span {
+    font-size: 12px;
+    color: var(--text-tertiary);
+  }
+
+  .me-context-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin: 0 0 14px;
+  }
+  .me-stat-card {
+    min-width: 0;
+    border: 1px solid var(--border-default);
+    background: var(--surface-0);
+    border-radius: 10px;
+    padding: 11px 12px;
+  }
+  .me-stat-label {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-tertiary);
+    margin-bottom: 4px;
+  }
+  .me-stat-value {
+    font-size: 17px;
+    line-height: 1.2;
+    font-weight: 800;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .me-stat-note {
+    margin-top: 3px;
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   /* ───── Add-Subject form grid ───── */
   .me-add-grid {
     display: grid;
@@ -117,15 +182,204 @@ const RESPONSIVE_CSS = `
 
   /* ───── Help/info bar above grid ───── */
   .me-info-bar {
-    padding: 10px 20px;
-    background: var(--gray-50);
+    padding: 12px 16px;
+    background: var(--surface-1);
     border-bottom: 1px solid var(--border-subtle);
     font-size: 12px;
     color: var(--text-secondary);
     display: flex;
-    gap: 20px;
+    gap: 8px;
     flex-wrap: wrap;
     align-items: center;
+  }
+  .me-info-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 28px;
+    padding: 4px 9px;
+    border: 1px solid var(--border-default);
+    border-radius: 999px;
+    background: var(--surface-0);
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+  .me-info-chip strong {
+    color: var(--text-primary);
+  }
+  .me-info-chip.success {
+    border-color: var(--success-100);
+    background: var(--success-50);
+    color: var(--success-700);
+  }
+  .me-info-chip.warning {
+    border-color: var(--warning-100);
+    background: var(--warning-50);
+    color: var(--warning-600);
+  }
+  .me-info-chip.brand {
+    border-color: var(--brand-200);
+    background: var(--brand-50);
+    color: var(--brand-700);
+  }
+
+  .me-subject-focus {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    font-weight: 700;
+    color: var(--text-secondary);
+  }
+  .me-subject-focus .input {
+    height: 32px;
+    min-height: 32px;
+    font-size: 12px;
+    padding: 4px 28px 4px 9px;
+  }
+
+  .me-entry-table {
+    border-top: 1px solid var(--border-subtle);
+    background: var(--surface-0);
+  }
+  .me-marks-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 12.5px;
+    min-width: 100%;
+  }
+  .me-marks-table th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--gray-50);
+    border-bottom: 1px solid var(--border-default);
+  }
+  .me-marks-table tbody tr:hover td {
+    background: #f8fbff;
+  }
+  .me-sticky-student {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    box-shadow: 2px 0 6px rgba(15, 23, 42, 0.06);
+  }
+  .me-sticky-roll {
+    position: sticky;
+    left: 190px;
+    z-index: 3;
+    box-shadow: 2px 0 6px rgba(15, 23, 42, 0.04);
+  }
+  .me-student-name-cell {
+    min-width: 190px;
+    max-width: 220px;
+    padding: 9px 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-subtle);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .me-roll-cell {
+    width: 58px;
+    padding: 9px 10px;
+    text-align: center;
+    color: var(--text-tertiary);
+    border-bottom: 1px solid var(--border-subtle);
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .me-subject-head {
+    padding: 9px 10px;
+    font-weight: 800;
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-align: center;
+    min-width: 132px;
+    white-space: nowrap;
+  }
+  .me-subject-head.has-practical { min-width: 184px; }
+  .me-subject-head.custom {
+    background: var(--brand-50);
+    color: var(--brand-700);
+  }
+  .me-subject-name {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+  }
+  .me-subject-max {
+    font-size: 10px;
+    font-weight: 700;
+    margin-top: 2px;
+    color: var(--text-tertiary);
+  }
+  .me-subject-head.custom .me-subject-max {
+    color: var(--brand-600);
+  }
+  .me-cell {
+    padding: 7px 8px;
+    border-bottom: 1px solid var(--border-subtle);
+    text-align: center;
+  }
+  .me-mark-controls {
+    display: grid;
+    grid-template-columns: repeat(2, 56px) 38px;
+    justify-content: center;
+    align-items: end;
+    gap: 6px;
+  }
+  .me-mark-controls.no-practical {
+    grid-template-columns: 64px 38px;
+  }
+  .me-mark-input {
+    width: 100%;
+    height: 34px;
+    padding: 5px 4px;
+    border: 1.5px solid var(--border-default);
+    border-radius: 7px;
+    font-size: 12.5px;
+    text-align: center;
+    outline: none;
+    font-family: var(--font-mono);
+    background: var(--surface-0);
+    color: var(--text-primary);
+    transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
+  }
+  .me-mark-input:focus {
+    border-color: var(--brand-500);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  }
+  .me-mark-input:disabled {
+    background: var(--gray-100);
+    color: var(--text-tertiary);
+    cursor: not-allowed;
+  }
+  .me-mark-input.is-invalid {
+    border-color: var(--danger-500);
+    background: var(--danger-50);
+  }
+  .me-absent-toggle {
+    display: grid;
+    justify-items: center;
+    gap: 2px;
+    cursor: pointer;
+    color: var(--danger-600);
+    font-size: 9.5px;
+    font-weight: 800;
+  }
+  .me-absent-toggle input {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--danger-500);
+  }
+  .me-absent-toggle.disabled {
+    color: var(--text-tertiary);
+    cursor: not-allowed;
   }
 
   /* ───── Footer of grid ───── */
@@ -153,6 +407,9 @@ const RESPONSIVE_CSS = `
      TABLET (≤ 900px)
      ════════════════════════════════════════════════════════════════════ */
   @media (max-width: 900px) {
+    .me-context-strip {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
     .me-add-grid {
       grid-template-columns: 1fr 1fr;
     }
@@ -168,6 +425,14 @@ const RESPONSIVE_CSS = `
      MOBILE (≤ 640px)
      ════════════════════════════════════════════════════════════════════ */
   @media (max-width: 640px) {
+    .me-control-title {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .me-context-strip {
+      grid-template-columns: 1fr;
+    }
     .me-add-grid {
       grid-template-columns: 1fr;
       gap: 8px;
@@ -200,6 +465,15 @@ const RESPONSIVE_CSS = `
       font-size: 11px;
       padding: 10px 12px;
       gap: 8px;
+    }
+    .me-subject-focus {
+      width: 100%;
+      margin-left: 0;
+      justify-content: space-between;
+    }
+    .me-subject-focus .input {
+      flex: 1;
+      min-width: 0;
     }
 
     .me-grid-footer {
@@ -300,6 +574,22 @@ function GradeBadge({ grade }) {
   )
 }
 
+function isMarkInvalid(value, max) {
+  if (value === '' || value === undefined || value === null || Number(max) <= 0) return false
+  const numeric = Number(value)
+  return Number.isNaN(numeric) || numeric < 0 || numeric > Number(max)
+}
+
+function EntryStat({ label, value, note }) {
+  return (
+    <div className="me-stat-card">
+      <div className="me-stat-label">{label}</div>
+      <div className="me-stat-value" title={String(value)}>{value}</div>
+      {note && <div className="me-stat-note" title={note}>{note}</div>}
+    </div>
+  )
+}
+
 function StudentMarksCard({ student, subjects, marks, onChange, canEditSubject }) {
   return (
     <article className="me-student-mark-card">
@@ -331,7 +621,7 @@ function StudentMarksCard({ student, subjects, marks, onChange, canEditSubject }
               <label>
                 <span className="label" style={{ fontSize: 11 }}>Theory</span>
                 <input
-                  className="input"
+                  className={`input me-mark-input ${isMarkInvalid(current.theory, subject.max_theory) ? 'is-invalid' : ''}`}
                   type="number"
                   min="0"
                   max={subject.max_theory}
@@ -345,7 +635,7 @@ function StudentMarksCard({ student, subjects, marks, onChange, canEditSubject }
                 <label>
                   <span className="label" style={{ fontSize: 11 }}>Practical</span>
                   <input
-                    className="input"
+                    className={`input me-mark-input ${isMarkInvalid(current.practical, subject.max_practical) ? 'is-invalid' : ''}`}
                     type="number"
                     min="0"
                     max={subject.max_practical}
@@ -358,14 +648,13 @@ function StudentMarksCard({ student, subjects, marks, onChange, canEditSubject }
               ) : (
                 <div />
               )}
-              <label style={{ display: 'grid', justifyItems: 'center', gap: 4, fontSize: 11, fontWeight: 800, color: 'var(--danger-600)' }}>
+              <label className={`me-absent-toggle ${locked ? 'disabled' : ''}`} style={{ alignSelf: 'end', minHeight: 44 }}>
                 Abs
                 <input
                   type="checkbox"
                   checked={current.is_absent || false}
                   onChange={event => onChange(student.student_id, subject.id, 'is_absent', event.target.checked)}
                   disabled={locked}
-                  style={{ accentColor: 'var(--danger-500)', width: 20, height: 20 }}
                 />
               </label>
             </div>
@@ -1396,6 +1685,50 @@ export default function MarksEntry() {
     )
   ), [hasSpecificSubjectsForSelectedClass, isClassTeacherForSelectedClass, isClosedYear, isTeacher, teacherSubjectIds])
 
+  const selectedClassMeta = classes.find(c => String(c.id) === selectedClass)
+  const selectedClassLabel = selectedClassMeta ? `Class ${selectedClassMeta.name} - ${selectedClassMeta.division}` : 'No class selected'
+  const entryStats = useMemo(() => {
+    if (!gridData) {
+      return { filled: 0, editable: 0, absent: 0, locked: 0, invalid: 0, completion: 0 }
+    }
+    let filled = 0
+    let editable = 0
+    let absent = 0
+    let locked = 0
+    let invalid = 0
+    gridData.students.forEach(student => {
+      visibleSubjects.forEach(subject => {
+        const marks = localMarks[student.student_id]?.[subject.id] || {}
+        const subjectLocked = marks.is_locked || !canEditSubject(subject.id)
+        if (subjectLocked) {
+          locked += 1
+          return
+        }
+        editable += 1
+        if (marks.is_absent) {
+          absent += 1
+          filled += 1
+          return
+        }
+        const hasTheory = marks.theory !== '' && marks.theory !== undefined && marks.theory !== null
+        const needsPractical = Number(subject.max_practical) > 0
+        const hasPractical = marks.practical !== '' && marks.practical !== undefined && marks.practical !== null
+        if (hasTheory && (!needsPractical || hasPractical)) filled += 1
+        if (isMarkInvalid(marks.theory, subject.max_theory) || isMarkInvalid(marks.practical, subject.max_practical)) {
+          invalid += 1
+        }
+      })
+    })
+    return {
+      filled,
+      editable,
+      absent,
+      locked,
+      invalid,
+      completion: editable ? Math.round((filled / editable) * 100) : 0,
+    }
+  }, [canEditSubject, gridData, localMarks, visibleSubjects])
+
   const mainTabs = [
     { value: 'entry',     label: 'Marks Entry' },
     { value: 'results',   label: 'Results' },
@@ -1418,65 +1751,71 @@ export default function MarksEntry() {
       )}
 
       {/* Top filters */}
-      <FilterRow>
-        <Select
-          value={selectedClass}
-          onChange={e => {
-            if (!confirmLoseMarksDraft()) return
-            setSelectedClass(e.target.value)
-            setSelectedExam('')
-            setGridData(null)
-            setSubjectFilter('all')
-            setDirty(false)
-            setView('entry')
-          }}
-          options={classOptions}
-          placeholder="Select class…"
-          style={{ flex: 1, minWidth: '180px' }}
-        />
-        <Select
-          value={selectedYear}
-          onChange={e => {
-            if (!confirmLoseMarksDraft()) return
-            setSelectedYearId(e.target.value)
-            setSelectedExam('')
-            setGridData(null)
-            setSubjectFilter('all')
-            setDirty(false)
-          }}
-          options={yearOptions}
-          placeholder="Select year…"
-          style={{ flex: 1, minWidth: '160px' }}
-        />
-        <div className="me-exam-group">
-          <select
-            className="input"
-            value={selectedExam}
+      <div className="me-control-panel">
+        <div className="me-control-title">
+          <h2>Marks workspace</h2>
+          <span>{dirty ? 'Unsaved changes are kept in an autosaved draft.' : 'Choose a class and exam to load the entry grid.'}</span>
+        </div>
+        <FilterRow>
+          <Select
+            value={selectedClass}
             onChange={e => {
               if (!confirmLoseMarksDraft()) return
-              setSelectedExam(e.target.value)
+              setSelectedClass(e.target.value)
+              setSelectedExam('')
+              setGridData(null)
+              setSubjectFilter('all')
+              setDirty(false)
               setView('entry')
+            }}
+            options={classOptions}
+            placeholder="Select class..."
+            style={{ flex: 1, minWidth: '180px' }}
+          />
+          <Select
+            value={selectedYear}
+            onChange={e => {
+              if (!confirmLoseMarksDraft()) return
+              setSelectedYearId(e.target.value)
+              setSelectedExam('')
               setGridData(null)
               setSubjectFilter('all')
               setDirty(false)
             }}
-            style={{ flex: 1 }}
-          >
-            <option value="">Select exam…</option>
-            {exams.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-          </select>
-          {!isTeacher && (
-            <button
-              className="btn btn-secondary"
-              onClick={() => setShowNewExam(s => !s)}
-              disabled={!selectedClass || isClosedYear}
-              title="Create new exam"
+            options={yearOptions}
+            placeholder="Select year..."
+            style={{ flex: 1, minWidth: '160px' }}
+          />
+          <div className="me-exam-group">
+            <select
+              className="input"
+              value={selectedExam}
+              onChange={e => {
+                if (!confirmLoseMarksDraft()) return
+                setSelectedExam(e.target.value)
+                setView('entry')
+                setGridData(null)
+                setSubjectFilter('all')
+                setDirty(false)
+              }}
+              style={{ flex: 1 }}
             >
-              + New
-            </button>
-          )}
-        </div>
-      </FilterRow>
+              <option value="">Select exam...</option>
+              {exams.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+            </select>
+            {!isTeacher && (
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowNewExam(s => !s)}
+                disabled={!selectedClass || isClosedYear}
+                title="Create new exam"
+              >
+                + New
+              </button>
+            )}
+          </div>
+        </FilterRow>
+      </div>
 
       {/* New exam form */}
       {!isTeacher && showNewExam && selectedClass && (
@@ -1536,6 +1875,29 @@ export default function MarksEntry() {
       {/* Main content — class selected */}
       {selectedClass && (
         <>
+          <div className="me-context-strip">
+            <EntryStat
+              label="Class"
+              value={selectedClassLabel}
+              note={selectedYearMeta?.label || 'Academic year not selected'}
+            />
+            <EntryStat
+              label="Exam"
+              value={selectedExam ? examName : 'No exam selected'}
+              note={selectedExam ? `${exams.length} exam${exams.length !== 1 ? 's' : ''} available` : 'Create or select an exam'}
+            />
+            <EntryStat
+              label="Entry progress"
+              value={gridData ? `${entryStats.completion}%` : '--'}
+              note={gridData ? `${entryStats.filled}/${entryStats.editable} editable cells filled` : 'Load a grid to track progress'}
+            />
+            <EntryStat
+              label="Review"
+              value={gridData ? `${entryStats.invalid}` : '--'}
+              note={gridData ? `${entryStats.absent} absent, ${entryStats.locked} locked or view-only` : 'Out-of-range marks appear here'}
+            />
+          </div>
+
           {/* Tab bar + contextual actions */}
           <div className="me-tab-wrapper">
             <TabBar
@@ -1670,25 +2032,28 @@ export default function MarksEntry() {
                   ) : (
                     <>
                       <div className="me-info-bar">
-                        <span><strong>T</strong> = Theory</span>
-                        <span><strong>P</strong> = Practical (where applicable)</span>
-                        <span>Check <strong>Abs</strong> to mark absent</span>
-                        <span style={{ color: dirty ? 'var(--warning-600)' : 'var(--success-700)', fontWeight: 700 }}>
+                        <span className="me-info-chip"><strong>T</strong> Theory</span>
+                        <span className="me-info-chip"><strong>P</strong> Practical</span>
+                        <span className="me-info-chip"><strong>Abs</strong> Mark absent</span>
+                        <span className={`me-info-chip ${dirty ? 'warning' : 'success'}`}>
                           {dirty ? `Draft autosaved${draftSavedAt ? ` ${new Date(draftSavedAt).toLocaleTimeString()}` : ''}` : 'Saved data loaded'}
                         </span>
                         {hasCustomConfig && (
-                          <span style={{ color: 'var(--brand-700)', fontWeight: 700, background: 'var(--brand-50)', padding: '2px 8px', borderRadius: '6px', border: '1px solid var(--brand-200)' }}>
+                          <span className="me-info-chip brand">
                             Custom max marks active for this exam
                           </span>
                         )}
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
-                          <span style={{ fontWeight: 700 }}>Subject focus</span>
-                          <select className="input" value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)} style={{ height: '30px', minHeight: '30px', fontSize: '12px', padding: '4px 8px' }}>
+                        {entryStats.invalid > 0 && (
+                          <span className="me-info-chip warning">{entryStats.invalid} mark{entryStats.invalid !== 1 ? 's' : ''} need review</span>
+                        )}
+                        <label className="me-subject-focus">
+                          <span>Subject focus</span>
+                          <select className="input" value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)}>
                             <option value="all">All subjects</option>
                             {gridData.subjects.map(subject => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
                           </select>
                         </label>
-                        {subjectFilter === 'all' && <span style={{ color: 'var(--warning-600)', fontWeight: 600 }}>Scroll right to see all subjects</span>}
+                        {subjectFilter === 'all' && <span className="me-info-chip warning">Scroll right for all subjects</span>}
                       </div>
                       <div className="me-mobile-card-list">
                         {gridData.students.map(student => (
@@ -1703,44 +2068,41 @@ export default function MarksEntry() {
                         ))}
                       </div>
                       <div className="me-grid-scroll me-entry-table">
-                        <table style={{ borderCollapse: 'separate', borderSpacing: 0, fontSize: '12.5px', minWidth: '100%' }}>
+                        <table className="me-marks-table">
                           <thead>
                             <tr>
-                              <th style={{
-                                position: 'sticky', left: 0, zIndex: 3,
-                                background: 'var(--gray-50)', padding: '10px 16px',
-                                textAlign: 'left', fontWeight: 700, fontSize: '11px',
-                                textTransform: 'uppercase', letterSpacing: '0.06em',
-                                color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-default)',
-                                whiteSpace: 'nowrap', minWidth: '140px',
-                                boxShadow: '2px 0 4px rgba(0,0,0,0.04)',
+                              <th className="me-sticky-student" style={{
+                                padding: '11px 14px',
+                                textAlign: 'left',
+                                fontSize: '11px',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.06em',
+                                color: 'var(--text-secondary)',
+                                minWidth: '190px',
                               }}>
                                 Student
                               </th>
-                              <th style={{
-                                background: 'var(--gray-50)', padding: '10px 12px',
-                                fontWeight: 700, fontSize: '11px', textTransform: 'uppercase',
-                                letterSpacing: '0.06em', color: 'var(--text-secondary)',
-                                borderBottom: '1px solid var(--border-default)', width: '50px',
+                              <th className="me-sticky-roll" style={{
+                                padding: '11px 10px',
+                                fontWeight: 800,
+                                fontSize: '11px',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.06em',
+                                color: 'var(--text-secondary)',
+                                width: '58px',
                               }}>Roll</th>
                               {visibleSubjects.map(sub => (
-                                <th key={sub.id} style={{
-                                  background: sub.has_custom_config ? 'var(--brand-50)' : 'var(--gray-50)',
-                                  padding: '8px 10px',
-                                  fontWeight: 700, fontSize: '11px',
-                                  color: sub.has_custom_config ? 'var(--brand-700)' : 'var(--text-secondary)',
-                                  borderBottom: '1px solid var(--border-default)',
-                                  textAlign: 'center',
-                                  minWidth: sub.max_practical > 0 ? '160px' : '110px',
-                                  whiteSpace: 'nowrap',
-                                }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                                <th
+                                  key={sub.id}
+                                  className={`me-subject-head ${sub.max_practical > 0 ? 'has-practical' : ''} ${sub.has_custom_config ? 'custom' : ''}`}
+                                >
+                                  <div className="me-subject-name">
                                     {sub.name}
                                     {sub.has_custom_config && (
                                       <span title="Custom marks for this exam" style={{ fontSize: '10px', fontWeight: 800 }}>C</span>
                                     )}
                                   </div>
-                                  <div style={{ fontSize: '10px', fontWeight: 500, marginTop: '2px', color: sub.has_custom_config ? 'var(--brand-600)' : 'var(--text-tertiary)' }}>
+                                  <div className="me-subject-max">
                                     T/{sub.max_theory}{sub.max_practical > 0 ? ` · P/${sub.max_practical}` : ''}
                                     {sub.has_custom_config && (
                                       <span style={{ marginLeft: '3px' }}>(custom)</span>
@@ -1753,24 +2115,22 @@ export default function MarksEntry() {
                           <tbody>
                             {gridData.students.map((student, si) => (
                               <tr key={student.student_id} style={{ background: si % 2 === 0 ? 'var(--surface-0)' : 'var(--gray-25)' }}>
-                                <td style={{
-                                  position: 'sticky', left: 0, zIndex: 2,
+                                <td className="me-sticky-student me-student-name-cell" style={{
                                   background: si % 2 === 0 ? 'var(--surface-0)' : 'var(--gray-25)',
-                                  padding: '8px 16px', fontWeight: 600,
-                                  color: 'var(--text-primary)', borderBottom: '1px solid var(--border-subtle)',
-                                  boxShadow: '2px 0 4px rgba(0,0,0,0.04)', whiteSpace: 'nowrap',
                                 }}>
                                   {student.student_name}
                                 </td>
-                                <td style={{ padding: '8px 12px', textAlign: 'center', color: 'var(--text-tertiary)', borderBottom: '1px solid var(--border-subtle)', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
+                                <td className="me-sticky-roll me-roll-cell" style={{
+                                  background: si % 2 === 0 ? 'var(--surface-0)' : 'var(--gray-25)',
+                                }}>
                                   {student.roll_number || '—'}
                                 </td>
                                 {visibleSubjects.map(sub => {
                                   const m = localMarks[student.student_id]?.[sub.id] || {}
                                   const locked = m.is_locked || !canEditSubject(sub.id)
                                   return (
-                                    <td key={sub.id} style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', textAlign: 'center', background: sub.has_custom_config && si % 2 === 0 ? '#fafbff' : undefined }}>
-                                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center', justifyContent: 'center' }}>
+                                    <td key={sub.id} className="me-cell" style={{ background: sub.has_custom_config && si % 2 === 0 ? '#fafbff' : undefined }}>
+                                      <div className={`me-mark-controls ${sub.max_practical > 0 ? '' : 'no-practical'}`}>
                                         <input
                                           type="number"
                                           min="0"
@@ -1779,18 +2139,7 @@ export default function MarksEntry() {
                                           onChange={e => handleMarkChange(student.student_id, sub.id, 'theory', e.target.value)}
                                           disabled={locked || m.is_absent}
                                           placeholder={`/${sub.max_theory}`}
-                                          style={{
-                                            width: '52px', padding: '5px 4px',
-                                            border: '1.5px solid var(--border-default)',
-                                            borderRadius: '6px', fontSize: '12px',
-                                            textAlign: 'center', outline: 'none',
-                                            fontFamily: 'var(--font-mono)',
-                                            background: (locked || m.is_absent) ? 'var(--gray-100)' : 'var(--surface-0)',
-                                            color: (locked || m.is_absent) ? 'var(--text-tertiary)' : 'var(--text-primary)',
-                                            transition: 'border-color 0.12s',
-                                          }}
-                                          onFocus={e => e.target.style.borderColor = 'var(--brand-500)'}
-                                          onBlur={e => e.target.style.borderColor = 'var(--border-default)'}
+                                          className={`me-mark-input ${isMarkInvalid(m.theory, sub.max_theory) ? 'is-invalid' : ''}`}
                                         />
                                         {sub.max_practical > 0 && (
                                           <input
@@ -1801,28 +2150,17 @@ export default function MarksEntry() {
                                             onChange={e => handleMarkChange(student.student_id, sub.id, 'practical', e.target.value)}
                                             disabled={locked || m.is_absent}
                                             placeholder={`P/${sub.max_practical}`}
-                                            style={{
-                                              width: '52px', padding: '5px 4px',
-                                              border: '1.5px solid var(--border-default)',
-                                              borderRadius: '6px', fontSize: '12px',
-                                              textAlign: 'center', outline: 'none',
-                                              fontFamily: 'var(--font-mono)',
-                                              background: (locked || m.is_absent) ? 'var(--gray-100)' : 'var(--surface-0)',
-                                              color: (locked || m.is_absent) ? 'var(--text-tertiary)' : 'var(--text-primary)',
-                                            }}
-                                            onFocus={e => e.target.style.borderColor = 'var(--brand-500)'}
-                                            onBlur={e => e.target.style.borderColor = 'var(--border-default)'}
+                                            className={`me-mark-input ${isMarkInvalid(m.practical, sub.max_practical) ? 'is-invalid' : ''}`}
                                           />
                                         )}
-                                        <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', gap: '1px' }}>
+                                        <label className={`me-absent-toggle ${locked ? 'disabled' : ''}`}>
                                           <input
                                             type="checkbox"
                                             checked={m.is_absent || false}
                                             onChange={e => handleMarkChange(student.student_id, sub.id, 'is_absent', e.target.checked)}
                                             disabled={locked}
-                                            style={{ accentColor: 'var(--danger-500)', width: '13px', height: '13px' }}
                                           />
-                                          <span style={{ fontSize: '9px', color: locked ? 'var(--text-tertiary)' : 'var(--danger-500)', fontWeight: 700 }}>
+                                          <span>
                                             {m.is_locked ? 'Locked' : !canEditSubject(sub.id) ? 'View' : 'Abs'}
                                           </span>
                                         </label>
