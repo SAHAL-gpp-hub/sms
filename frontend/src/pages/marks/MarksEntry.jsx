@@ -1,6 +1,6 @@
 // MarksEntry.jsx — Full rebuild with Subject Manager + per-exam custom marks
 // Fully responsive across all device sizes (logic unchanged)
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { memo, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { marksAPI, setupAPI, extractError, openSignedPdf } from '../../services/api'
@@ -29,6 +29,8 @@ const EXAM_TYPES = [
   'Practical',
 ]
 const SUBJECT_TYPES = ['Theory', 'Practical', 'Theory+Practical']
+const MARKS_ROW_HEIGHT = 52
+const MARKS_ROW_OVERSCAN = 6
 
 const GRADE_COLORS = {
   A1: { bg: '#dcfce7', color: '#15803d' },
@@ -177,7 +179,11 @@ const RESPONSIVE_CSS = `
   }
 
   /* ───── Marks-entry grid table outer scroll ───── */
-  .me-grid-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .me-grid-scroll {
+    overflow: auto;
+    max-height: min(68vh, 720px);
+    -webkit-overflow-scrolling: touch;
+  }
   .me-mobile-card-list { display: none; }
 
   /* ───── Help/info bar above grid ───── */
@@ -580,6 +586,24 @@ function isMarkInvalid(value, max) {
   return Number.isNaN(numeric) || numeric < 0 || numeric > Number(max)
 }
 
+function useIsCompactMarksLayout() {
+  const [isCompact, setIsCompact] = useState(() => (
+    typeof window !== 'undefined'
+      ? window.matchMedia('(max-width: 820px)').matches
+      : false
+  ))
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 820px)')
+    const handleChange = () => setIsCompact(media.matches)
+    handleChange()
+    media.addEventListener?.('change', handleChange)
+    return () => media.removeEventListener?.('change', handleChange)
+  }, [])
+
+  return isCompact
+}
+
 function EntryStat({ label, value, note }) {
   return (
     <div className="me-stat-card">
@@ -590,7 +614,7 @@ function EntryStat({ label, value, note }) {
   )
 }
 
-function StudentMarksCard({ student, subjects, marks, onChange, canEditSubject }) {
+const StudentMarksCard = memo(function StudentMarksCard({ student, subjects, marks, onChange, canEditSubject }) {
   return (
     <article className="me-student-mark-card">
       <div className="me-student-mark-header">
@@ -663,7 +687,71 @@ function StudentMarksCard({ student, subjects, marks, onChange, canEditSubject }
       })}
     </article>
   )
-}
+})
+
+const MarksGridRow = memo(function MarksGridRow({
+  student,
+  subjects,
+  marks,
+  rowIndex,
+  onChange,
+  canEditSubject,
+}) {
+  const rowBackground = rowIndex % 2 === 0 ? 'var(--surface-0)' : 'var(--gray-25)'
+  return (
+    <tr style={{ background: rowBackground, height: MARKS_ROW_HEIGHT }}>
+      <td className="me-sticky-student me-student-name-cell" style={{ background: rowBackground }}>
+        {student.student_name}
+      </td>
+      <td className="me-sticky-roll me-roll-cell" style={{ background: rowBackground }}>
+        {student.roll_number || '-'}
+      </td>
+      {subjects.map(sub => {
+        const current = marks?.[sub.id] || {}
+        const locked = current.is_locked || !canEditSubject(sub.id)
+        return (
+          <td key={sub.id} className="me-cell" style={{ background: sub.has_custom_config && rowIndex % 2 === 0 ? '#fafbff' : undefined }}>
+            <div className={`me-mark-controls ${sub.max_practical > 0 ? '' : 'no-practical'}`}>
+              <input
+                type="number"
+                min="0"
+                max={sub.max_theory}
+                value={current.theory ?? ''}
+                onChange={event => onChange(student.student_id, sub.id, 'theory', event.target.value)}
+                disabled={locked || current.is_absent}
+                placeholder={`/${sub.max_theory}`}
+                className={`me-mark-input ${isMarkInvalid(current.theory, sub.max_theory) ? 'is-invalid' : ''}`}
+              />
+              {sub.max_practical > 0 && (
+                <input
+                  type="number"
+                  min="0"
+                  max={sub.max_practical}
+                  value={current.practical ?? ''}
+                  onChange={event => onChange(student.student_id, sub.id, 'practical', event.target.value)}
+                  disabled={locked || current.is_absent}
+                  placeholder={`P/${sub.max_practical}`}
+                  className={`me-mark-input ${isMarkInvalid(current.practical, sub.max_practical) ? 'is-invalid' : ''}`}
+                />
+              )}
+              <label className={`me-absent-toggle ${locked ? 'disabled' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={current.is_absent || false}
+                  onChange={event => onChange(student.student_id, sub.id, 'is_absent', event.target.checked)}
+                  disabled={locked}
+                />
+                <span>
+                  {current.is_locked ? 'Locked' : !canEditSubject(sub.id) ? 'View' : 'Abs'}
+                </span>
+              </label>
+            </div>
+          </td>
+        )
+      })}
+    </tr>
+  )
+})
 
 // ── Subject Manager ───────────────────────────────────────────────────────────
 function SubjectManager({ classId, onSubjectsChanged }) {
@@ -1399,11 +1487,15 @@ export default function MarksEntry() {
   const [saving, setSaving]           = useState(false)
   const [saved, setSaved]             = useState(false)
   const [loadingGrid, setLoadingGrid] = useState(false)
+  const [gridScrollTop, setGridScrollTop] = useState(0)
+  const [gridViewportHeight, setGridViewportHeight] = useState(620)
+  const marksGridRef = useRef(null)
 
   const [results, setResults]         = useState([])
   const [loadingResults, setLoadingResults] = useState(false)
 
   const [view, setView]               = useState('entry')
+  const isCompactMarksLayout = useIsCompactMarksLayout()
 
   const [showNewExam, setShowNewExam] = useState(false)
   const [newExam, setNewExam]         = useState({ name: '', exam_date: '' })
@@ -1512,6 +1604,11 @@ export default function MarksEntry() {
   }, [authUser?.id, selectedClass, subjectFilter])
 
   useEffect(() => {
+    setGridScrollTop(0)
+    marksGridRef.current?.scrollTo?.({ top: 0 })
+  }, [gridData, subjectFilter])
+
+  useEffect(() => {
     if (!draftKey || !dirty) return undefined
     const timer = window.setTimeout(() => {
       const savedAt = new Date().toISOString()
@@ -1532,19 +1629,21 @@ export default function MarksEntry() {
   }, [dirty])
 
   // ── Handlers ───────────────────────────────────────────────────────────────
-  const handleMarkChange = (studentId, subjectId, field, value) => {
+  const handleMarkChange = useCallback((studentId, subjectId, field, value) => {
     if (isClosedYear || !canEditSubject(subjectId)) return
-    if (localMarks[studentId]?.[subjectId]?.is_locked) return
     setDirty(true)
-    setLocalMarks(prev => ({
-      ...prev,
-      [studentId]: {
-        ...prev[studentId],
-        [subjectId]: { ...prev[studentId]?.[subjectId], [field]: value },
-      },
-    }))
+    setLocalMarks(prev => {
+      if (prev[studentId]?.[subjectId]?.is_locked) return prev
+      return {
+        ...prev,
+        [studentId]: {
+          ...prev[studentId],
+          [subjectId]: { ...prev[studentId]?.[subjectId], [field]: value },
+        },
+      }
+    })
     setSaved(false)
-  }
+  }, [canEditSubject, isClosedYear])
 
   const validateMarks = () => {
     if (!gridData) return true
@@ -1668,6 +1767,28 @@ export default function MarksEntry() {
     if (subjectFilter === 'all') return gridData.subjects
     return gridData.subjects.filter(subject => String(subject.id) === subjectFilter)
   }, [gridData, subjectFilter])
+  const virtualRows = useMemo(() => {
+    const students = gridData?.students || []
+    if (isCompactMarksLayout || students.length <= 24) {
+      return {
+        topPadding: 0,
+        bottomPadding: 0,
+        rows: students.map((student, index) => ({ student, index })),
+      }
+    }
+    const visibleCount = Math.ceil(gridViewportHeight / MARKS_ROW_HEIGHT) + MARKS_ROW_OVERSCAN * 2
+    const start = Math.max(0, Math.floor(gridScrollTop / MARKS_ROW_HEIGHT) - MARKS_ROW_OVERSCAN)
+    const end = Math.min(students.length, start + visibleCount)
+    return {
+      topPadding: start * MARKS_ROW_HEIGHT,
+      bottomPadding: Math.max(0, (students.length - end) * MARKS_ROW_HEIGHT),
+      rows: students.slice(start, end).map((student, offset) => ({ student, index: start + offset })),
+    }
+  }, [gridData, gridScrollTop, gridViewportHeight, isCompactMarksLayout])
+  const handleGridScroll = useCallback(event => {
+    setGridScrollTop(event.currentTarget.scrollTop)
+    setGridViewportHeight(event.currentTarget.clientHeight || 620)
+  }, [])
   const teacherSubjectIds = useMemo(() => (
     subjectAssignments
       .filter(assignment => Number(assignment.class_id) === Number(selectedClass))
@@ -2055,20 +2176,27 @@ export default function MarksEntry() {
                         </label>
                         {subjectFilter === 'all' && <span className="me-info-chip warning">Scroll right for all subjects</span>}
                       </div>
-                      <div className="me-mobile-card-list">
-                        {gridData.students.map(student => (
-                          <StudentMarksCard
-                            key={student.student_id}
-                            student={student}
-                            subjects={visibleSubjects}
-                            marks={localMarks[student.student_id] || {}}
-                            onChange={handleMarkChange}
-                            canEditSubject={canEditSubject}
-                          />
-                        ))}
-                      </div>
-                      <div className="me-grid-scroll me-entry-table">
-                        <table className="me-marks-table">
+                      {isCompactMarksLayout && (
+                        <div className="me-mobile-card-list">
+                          {gridData.students.map(student => (
+                            <StudentMarksCard
+                              key={student.student_id}
+                              student={student}
+                              subjects={visibleSubjects}
+                              marks={localMarks[student.student_id] || {}}
+                              onChange={handleMarkChange}
+                              canEditSubject={canEditSubject}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      {!isCompactMarksLayout && (
+                        <div
+                          className="me-grid-scroll me-entry-table"
+                          ref={marksGridRef}
+                          onScroll={handleGridScroll}
+                        >
+                          <table className="me-marks-table">
                           <thead>
                             <tr>
                               <th className="me-sticky-student" style={{
@@ -2113,66 +2241,31 @@ export default function MarksEntry() {
                             </tr>
                           </thead>
                           <tbody>
-                            {gridData.students.map((student, si) => (
-                              <tr key={student.student_id} style={{ background: si % 2 === 0 ? 'var(--surface-0)' : 'var(--gray-25)' }}>
-                                <td className="me-sticky-student me-student-name-cell" style={{
-                                  background: si % 2 === 0 ? 'var(--surface-0)' : 'var(--gray-25)',
-                                }}>
-                                  {student.student_name}
-                                </td>
-                                <td className="me-sticky-roll me-roll-cell" style={{
-                                  background: si % 2 === 0 ? 'var(--surface-0)' : 'var(--gray-25)',
-                                }}>
-                                  {student.roll_number || '—'}
-                                </td>
-                                {visibleSubjects.map(sub => {
-                                  const m = localMarks[student.student_id]?.[sub.id] || {}
-                                  const locked = m.is_locked || !canEditSubject(sub.id)
-                                  return (
-                                    <td key={sub.id} className="me-cell" style={{ background: sub.has_custom_config && si % 2 === 0 ? '#fafbff' : undefined }}>
-                                      <div className={`me-mark-controls ${sub.max_practical > 0 ? '' : 'no-practical'}`}>
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          max={sub.max_theory}
-                                          value={m.theory ?? ''}
-                                          onChange={e => handleMarkChange(student.student_id, sub.id, 'theory', e.target.value)}
-                                          disabled={locked || m.is_absent}
-                                          placeholder={`/${sub.max_theory}`}
-                                          className={`me-mark-input ${isMarkInvalid(m.theory, sub.max_theory) ? 'is-invalid' : ''}`}
-                                        />
-                                        {sub.max_practical > 0 && (
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            max={sub.max_practical}
-                                            value={m.practical ?? ''}
-                                            onChange={e => handleMarkChange(student.student_id, sub.id, 'practical', e.target.value)}
-                                            disabled={locked || m.is_absent}
-                                            placeholder={`P/${sub.max_practical}`}
-                                            className={`me-mark-input ${isMarkInvalid(m.practical, sub.max_practical) ? 'is-invalid' : ''}`}
-                                          />
-                                        )}
-                                        <label className={`me-absent-toggle ${locked ? 'disabled' : ''}`}>
-                                          <input
-                                            type="checkbox"
-                                            checked={m.is_absent || false}
-                                            onChange={e => handleMarkChange(student.student_id, sub.id, 'is_absent', e.target.checked)}
-                                            disabled={locked}
-                                          />
-                                          <span>
-                                            {m.is_locked ? 'Locked' : !canEditSubject(sub.id) ? 'View' : 'Abs'}
-                                          </span>
-                                        </label>
-                                      </div>
-                                    </td>
-                                  )
-                                })}
+                            {virtualRows.topPadding > 0 && (
+                              <tr aria-hidden="true">
+                                <td colSpan={visibleSubjects.length + 2} style={{ height: virtualRows.topPadding, padding: 0, border: 0 }} />
                               </tr>
+                            )}
+                            {virtualRows.rows.map(({ student, index }) => (
+                              <MarksGridRow
+                                key={student.student_id}
+                                student={student}
+                                subjects={visibleSubjects}
+                                marks={localMarks[student.student_id] || {}}
+                                rowIndex={index}
+                                onChange={handleMarkChange}
+                                canEditSubject={canEditSubject}
+                              />
                             ))}
+                            {virtualRows.bottomPadding > 0 && (
+                              <tr aria-hidden="true">
+                                <td colSpan={visibleSubjects.length + 2} style={{ height: virtualRows.bottomPadding, padding: 0, border: 0 }} />
+                              </tr>
+                            )}
                           </tbody>
-                        </table>
-                      </div>
+                          </table>
+                        </div>
+                      )}
                       <div className="me-grid-footer">
                         <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
                           {gridData.students.length} student{gridData.students.length !== 1 ? 's' : ''} · {visibleSubjects.length} of {gridData.subjects.length} subject{gridData.subjects.length !== 1 ? 's' : ''}

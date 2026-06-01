@@ -4,6 +4,7 @@ from typing import Optional
 from pydantic import BaseModel
 from app.core.database import get_db
 from app.core.config import settings
+from app.core.cache import response_cache
 from app.models.base_models import AcademicYear, Class
 from app.routers.auth import CurrentUser, require_role
 from app.services.yearend_service import normalize_class_name
@@ -41,6 +42,7 @@ def seed_data(
         if not existing:
             db.add(Class(name=name, division="A", academic_year_id=year.id, branch_id=settings.DEFAULT_BRANCH_ID))
     db.commit()
+    response_cache.invalidate_prefix("setup:")
 
     classes = db.query(Class).filter_by(academic_year_id=year.id).all()
     return {
@@ -54,11 +56,17 @@ def get_classes(
     academic_year_id: Optional[int] = Query(None),
     db: Session = Depends(get_db)
 ):
+    cache_key = f"setup:classes:{academic_year_id or 'all'}"
+    cached = response_cache.get(cache_key)
+    if cached is not None:
+        return cached
     if academic_year_id:
         classes = db.query(Class).filter_by(academic_year_id=academic_year_id).all()
     else:
         classes = db.query(Class).all()   # ← was filtering by current year
-    return [{"id": c.id, "name": c.name, "division": c.division, "academic_year_id": c.academic_year_id, "branch_id": c.branch_id} for c in classes]
+    payload = [{"id": c.id, "name": c.name, "division": c.division, "academic_year_id": c.academic_year_id, "branch_id": c.branch_id} for c in classes]
+    response_cache.set(cache_key, payload, ttl_seconds=300)
+    return payload
 
 @router.post("/classes", status_code=201)
 def create_class(
@@ -84,6 +92,7 @@ def create_class(
     db.add(cls)
     db.commit()
     db.refresh(cls)
+    response_cache.invalidate_prefix("setup:classes:")
     return {"id": cls.id, "name": cls.name, "division": cls.division, "academic_year_id": cls.academic_year_id, "branch_id": cls.branch_id}
 
 @router.delete("/classes/{class_id}")
@@ -97,9 +106,15 @@ def delete_class(
         raise HTTPException(status_code=404, detail="Class not found")
     db.delete(cls)
     db.commit()
+    response_cache.invalidate_prefix("setup:classes:")
     return {"message": "Deleted"}
 
 @router.get("/academic-years")
 def get_academic_years(db: Session = Depends(get_db)):
+    cached = response_cache.get("setup:academic-years")
+    if cached is not None:
+        return cached
     years = db.query(AcademicYear).order_by(AcademicYear.id.desc()).all()
-    return [{"id": y.id, "label": y.label, "is_current": y.is_current} for y in years]
+    payload = [{"id": y.id, "label": y.label, "is_current": y.is_current} for y in years]
+    response_cache.set("setup:academic-years", payload, ttl_seconds=300)
+    return payload

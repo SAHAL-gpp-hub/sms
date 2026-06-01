@@ -114,9 +114,9 @@ def reassign_rolls(
 
 
 def _serialize(db: Session, e: Enrollment) -> dict:
-    student = db.query(Student).filter_by(id=e.student_id).first()
-    class_obj = db.query(Class).filter_by(id=e.class_id).first()
-    year = db.query(AcademicYear).filter_by(id=e.academic_year_id).first()
+    student = e.student or db.query(Student).filter_by(id=e.student_id).first()
+    class_obj = e.class_obj or db.query(Class).filter_by(id=e.class_id).first()
+    year = e.academic_year or db.query(AcademicYear).filter_by(id=e.academic_year_id).first()
     return {
         "id":               e.id,
         "student_id":       e.student_id,

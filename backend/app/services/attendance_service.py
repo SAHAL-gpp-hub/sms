@@ -14,7 +14,7 @@ from datetime import date, timedelta
 from calendar import monthrange
 from typing import Optional
 
-from sqlalchemy import and_, case, func
+from sqlalchemy import and_, case, func, or_, tuple_
 from sqlalchemy.orm import Session
 
 from app.models.base_models import (
@@ -55,30 +55,109 @@ def _resolve_enrollment_for_attendance(db: Session, entry: AttendanceEntry) -> E
 
 
 def mark_attendance_bulk(db: Session, entries: list[AttendanceEntry]):
+    if not entries:
+        return {"marked": 0}
+
+    enrollment_ids = {entry.enrollment_id for entry in entries if entry.enrollment_id is not None}
+    requested_class_ids = {entry.class_id for entry in entries if entry.class_id is not None}
+
+    classes_by_id = {
+        cls.id: cls
+        for cls in db.query(Class).filter(Class.id.in_(requested_class_ids)).all()
+    } if requested_class_ids else {}
+
+    enrollment_filters = []
+    if enrollment_ids:
+        enrollment_filters.append(Enrollment.id.in_(enrollment_ids))
+    student_class_year_keys = []
     for entry in entries:
-        enrollment = _resolve_enrollment_for_attendance(db, entry)
-        cls = db.query(Class).filter_by(id=enrollment.class_id).first()
+        if entry.enrollment_id is not None:
+            continue
+        if entry.student_id is None or entry.class_id is None:
+            raise ValueError("Provide enrollment_id, or both student_id and class_id")
+        cls = classes_by_id.get(entry.class_id)
+        if not cls:
+            raise ValueError(f"Class {entry.class_id} not found")
+        student_class_year_keys.append((entry.student_id, entry.class_id, cls.academic_year_id))
+    if student_class_year_keys:
+        enrollment_filters.append(
+            tuple_(Enrollment.student_id, Enrollment.class_id, Enrollment.academic_year_id).in_(student_class_year_keys)
+        )
+
+    enrollments = (
+        db.query(Enrollment)
+        .filter(or_(*enrollment_filters))
+        .all()
+        if enrollment_filters else []
+    )
+    enrollments_by_id = {enrollment.id: enrollment for enrollment in enrollments}
+    enrollments_by_student_class_year = {
+        (enrollment.student_id, enrollment.class_id, enrollment.academic_year_id): enrollment
+        for enrollment in enrollments
+    }
+
+    class_ids = {enrollment.class_id for enrollment in enrollments}
+    missing_class_ids = class_ids - set(classes_by_id)
+    if missing_class_ids:
+        classes_by_id.update({
+            cls.id: cls
+            for cls in db.query(Class).filter(Class.id.in_(missing_class_ids)).all()
+        })
+    years_by_id = {
+        year.id: year
+        for year in db.query(AcademicYear).filter(
+            AcademicYear.id.in_({cls.academic_year_id for cls in classes_by_id.values()})
+        ).all()
+    } if classes_by_id else {}
+
+    resolved_entries = []
+    for entry in entries:
+        if entry.enrollment_id is not None:
+            enrollment = enrollments_by_id.get(entry.enrollment_id)
+            if not enrollment:
+                raise ValueError(f"Enrollment {entry.enrollment_id} not found")
+        else:
+            cls = classes_by_id[entry.class_id]
+            enrollment = enrollments_by_student_class_year.get(
+                (entry.student_id, entry.class_id, cls.academic_year_id)
+            )
+            if not enrollment:
+                raise ValueError(f"Student {entry.student_id} is not enrolled in class {entry.class_id}")
+        cls = classes_by_id.get(enrollment.class_id)
         if not cls:
             raise ValueError(f"Class {enrollment.class_id} not found")
-        year = db.query(AcademicYear).filter_by(id=cls.academic_year_id).first()
+        year = years_by_id.get(cls.academic_year_id)
         if year and not (year.start_date <= entry.date <= year.end_date):
             raise ValueError(f"{entry.date} is outside academic year {year.label}")
-        existing = db.query(Attendance).filter_by(
-            enrollment_id=enrollment.id,
-            date=entry.date,
-        ).first()
+        resolved_entries.append((entry, enrollment))
+
+    attendance_keys = {(enrollment.id, entry.date) for entry, enrollment in resolved_entries}
+    existing_by_key = {
+        (record.enrollment_id, record.date): record
+        for record in (
+            db.query(Attendance)
+            .filter(tuple_(Attendance.enrollment_id, Attendance.date).in_(list(attendance_keys)))
+            .all()
+            if attendance_keys else []
+        )
+    }
+
+    for entry, enrollment in resolved_entries:
+        existing = existing_by_key.get((enrollment.id, entry.date))
         if existing:
             existing.status = entry.status
             existing.student_id = enrollment.student_id
             existing.class_id = enrollment.class_id
         else:
-            db.add(Attendance(
+            record = Attendance(
                 enrollment_id=enrollment.id,
                 student_id=enrollment.student_id,
                 class_id=enrollment.class_id,
                 date=entry.date,
                 status=entry.status,
-            ))
+            )
+            db.add(record)
+            existing_by_key[(enrollment.id, entry.date)] = record
     db.commit()
     return {"marked": len(entries)}
 

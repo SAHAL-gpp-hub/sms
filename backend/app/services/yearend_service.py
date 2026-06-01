@@ -488,18 +488,69 @@ def generate_candidate_list(db: Session, class_id: int) -> list[dict]:
             except Exception:
                 continue
 
+    student_year_ids = {
+        student.id: enrollment_by_student[student.id].academic_year_id
+        for student in students
+        if student.id in enrollment_by_student
+    }
+    enrollment_ids = [enrollment.id for enrollment in enrollments]
+    legacy_fees = (
+        db.query(StudentFee)
+        .filter(
+            StudentFee.enrollment_id.is_(None),
+            StudentFee.student_id.in_(list(student_year_ids.keys())),
+            StudentFee.academic_year_id.in_(list(set(student_year_ids.values()))),
+        )
+        .all()
+        if student_year_ids else []
+    )
+    for sf in legacy_fees:
+        enrollment = enrollment_by_student.get(sf.student_id)
+        if enrollment and sf.academic_year_id == enrollment.academic_year_id:
+            sf.enrollment_id = enrollment.id
+    if legacy_fees:
+        db.flush()
+
+    all_unpaid_fees = (
+        db.query(StudentFee)
+        .join(Enrollment, Enrollment.id == StudentFee.enrollment_id)
+        .filter(
+            StudentFee.enrollment_id.in_(enrollment_ids),
+            StudentFee.invoice_type == "regular",
+        )
+        .all()
+        if enrollment_ids else []
+    )
+    fee_ids = [sf.id for sf in all_unpaid_fees]
+    paid_by_fee_id = {
+        fee_id: Decimal(str(total_paid or 0))
+        for fee_id, total_paid in (
+            db.query(
+                FeePayment.student_fee_id,
+                func.coalesce(func.sum(FeePayment.amount_paid), 0),
+            )
+            .filter(FeePayment.student_fee_id.in_(fee_ids))
+            .group_by(FeePayment.student_fee_id)
+            .all()
+            if fee_ids else []
+        )
+    }
+    unpaid_fees_by_student: dict[int, list[StudentFee]] = {}
+    for sf in all_unpaid_fees:
+        if student_year_ids.get(sf.student_id) != sf.academic_year_id:
+            continue
+        pending = Decimal(str(sf.net_amount)) - paid_by_fee_id.get(sf.id, Decimal("0"))
+        if pending > 0:
+            unpaid_fees_by_student.setdefault(sf.student_id, []).append(sf)
+
     candidates = []
     for student in students:
         result = results_map.get(student.id, {})
 
-        # Pending dues
-        current_year_id = enrollment_by_student[student.id].academic_year_id
-        unpaid_fees = _get_unpaid_dues(db, student.id, current_year_id)
+        # Pending dues, using the pre-aggregated payment totals above.
+        unpaid_fees = unpaid_fees_by_student.get(student.id, [])
         pending_amount = sum(
-            Decimal(str(sf.net_amount)) - sum(
-                Decimal(str(p.amount_paid))
-                for p in db.query(FeePayment).filter_by(student_fee_id=sf.id).all()
-            )
+            Decimal(str(sf.net_amount)) - paid_by_fee_id.get(sf.id, Decimal("0"))
             for sf in unpaid_fees
         )
 

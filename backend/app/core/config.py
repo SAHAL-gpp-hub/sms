@@ -26,6 +26,8 @@ class Settings(BaseSettings):
 
     # Set to true to print all SQL to stdout — useful when debugging connection issues
     DB_ECHO: bool = False
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
     SQL_TIMING_LOG_ENABLED: bool = True
     SQL_SLOW_QUERY_MS: int = 250
 

@@ -27,7 +27,7 @@ from datetime import date
 from typing import Optional
 
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import joinedload, Session
 
 from app.models.base_models import (
     AcademicYear, Class, Enrollment, EnrollmentStatusEnum, Student,
@@ -36,7 +36,16 @@ from app.models.base_models import (
 
 
 def get_enrollment(db: Session, enrollment_id: int) -> Optional[Enrollment]:
-    return db.query(Enrollment).filter_by(id=enrollment_id).first()
+    return (
+        db.query(Enrollment)
+        .options(
+            joinedload(Enrollment.student),
+            joinedload(Enrollment.academic_year),
+            joinedload(Enrollment.class_obj),
+        )
+        .filter_by(id=enrollment_id)
+        .first()
+    )
 
 
 def get_enrollment_for_student(
@@ -54,7 +63,11 @@ def list_enrollments(
     status: Optional[str] = None,
     student_id: Optional[int] = None,
 ) -> list[Enrollment]:
-    q = db.query(Enrollment)
+    q = db.query(Enrollment).options(
+        joinedload(Enrollment.student),
+        joinedload(Enrollment.academic_year),
+        joinedload(Enrollment.class_obj),
+    )
     if academic_year_id:
         q = q.filter(Enrollment.academic_year_id == academic_year_id)
     if class_id:

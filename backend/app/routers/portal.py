@@ -201,6 +201,7 @@ def get_my_attendance_summary(
 
     today = date.today()
     summaries = []
+    enrollment = _resolve_enrollment(db, sid)
 
     for i in range(months):
         # Walk back month by month
@@ -214,7 +215,6 @@ def get_my_attendance_summary(
         month_start = date(y, m, 1)
         month_end   = date(y, m, days_in_month)
 
-        enrollment = _resolve_enrollment(db, sid)
         working_days = count_working_days_for_month(db, enrollment.academic_year_id, y, m)
 
         records = (

@@ -20,7 +20,7 @@ Updated models:
 import enum
 from sqlalchemy import (
     Boolean, CheckConstraint, Column, Date, DateTime, Enum,
-    ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint,
+    ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -213,6 +213,7 @@ class Enrollment(Base):
     __tablename__ = "enrollments"
     __table_args__ = (
         UniqueConstraint("student_id", "academic_year_id", name="uq_enrollment_student_year"),
+        Index("ix_enrollments_class_id_academic_year_id_status", "class_id", "academic_year_id", "status"),
     )
 
     id               = Column(Integer, primary_key=True)
@@ -236,6 +237,7 @@ class Enrollment(Base):
     # Relationships
     student      = relationship("Student", back_populates="enrollments")
     academic_year = relationship("AcademicYear", back_populates="enrollments")
+    class_obj = relationship("Class")
     report_cards = relationship("ReportCard", back_populates="enrollment",
                                 cascade="all, delete-orphan")
 
@@ -541,6 +543,9 @@ class Attendance(Base):
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("ix_audit_logs_year_operation_created_at", "academic_year_id", "operation", "created_at"),
+    )
 
     id               = Column(Integer, primary_key=True)
     operation        = Column(Enum(AuditOperationEnum), nullable=False)

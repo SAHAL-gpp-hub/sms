@@ -144,42 +144,59 @@ def preview_low_attendance_alerts(
     recipients = []
     excluded = []
 
-    for cls in db.query(Class).all():
-        working_days = count_working_days_for_month(db, cls.academic_year_id, year, month)
+    classes = db.query(Class).all()
+    working_days_by_year = {
+        academic_year_id: count_working_days_for_month(db, academic_year_id, year, month)
+        for academic_year_id in {cls.academic_year_id for cls in classes}
+    }
+    working_days_by_class = {
+        cls.id: working_days_by_year.get(cls.academic_year_id, 0)
+        for cls in classes
+    }
+    active_students = (
+        db.query(Student)
+        .filter(Student.status == StudentStatusEnum.Active)
+        .all()
+    )
+    present_records = (
+        db.query(
+            Attendance.student_id,
+            Attendance.class_id,
+            func.count().label("presentish"),
+        )
+        .filter(
+            Attendance.date >= start,
+            Attendance.date <= end,
+            Attendance.status.in_(["P", "L"] if settings.LATE_COUNTS_AS_PRESENT else ["P"]),
+        )
+        .group_by(Attendance.student_id, Attendance.class_id)
+        .all()
+    )
+    present_by_student_class = {
+        (student_id, class_id): int(count)
+        for student_id, class_id, count in present_records
+    }
+
+    for student in active_students:
+        working_days = working_days_by_class.get(student.class_id, 0)
         if working_days <= 0:
             continue
-        records = (
-            db.query(Student.id, func.count().label("presentish"))
-            .join(Attendance, Attendance.student_id == Student.id)
-            .filter(
-                Student.class_id == cls.id,
-                Student.status == StudentStatusEnum.Active,
-                Attendance.class_id == cls.id,
-                Attendance.date >= start,
-                Attendance.date <= end,
-                Attendance.status.in_(["P", "L"] if settings.LATE_COUNTS_AS_PRESENT else ["P"]),
-            )
-            .group_by(Student.id)
-            .all()
-        )
-        present_by_student = {sid: int(count) for sid, count in records}
-        for student in db.query(Student).filter_by(class_id=cls.id, status=StudentStatusEnum.Active).all():
-            pct = round((present_by_student.get(student.id, 0) / working_days) * 100, 1)
-            if pct >= settings.LOW_ATTENDANCE_THRESHOLD_PERCENT:
-                continue
-            phone = _phone_for(student)
-            message = f"Attendance alert for {student.name_en}: {pct:.1f}% in {month_label}."
-            item = {
-                "student_id": student.id,
-                "student_name": student.name_en,
-                "phone": phone,
-                "channel": "whatsapp",
-                "message_preview": message,
-            }
-            if phone:
-                recipients.append(item)
-            else:
-                excluded.append({**item, "excluded_reason": "No guardian/contact phone"})
+        pct = round((present_by_student_class.get((student.id, student.class_id), 0) / working_days) * 100, 1)
+        if pct >= settings.LOW_ATTENDANCE_THRESHOLD_PERCENT:
+            continue
+        phone = _phone_for(student)
+        message = f"Attendance alert for {student.name_en}: {pct:.1f}% in {month_label}."
+        item = {
+            "student_id": student.id,
+            "student_name": student.name_en,
+            "phone": phone,
+            "channel": "whatsapp",
+            "message_preview": message,
+        }
+        if phone:
+            recipients.append(item)
+        else:
+            excluded.append({**item, "excluded_reason": "No guardian/contact phone"})
     provider_ready, provider_warning = _provider_state()
     return {
         "notification_type": "low_attendance",

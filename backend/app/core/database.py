@@ -33,16 +33,22 @@ logger = logging.getLogger("sms.sql")
 # pool_pre_ping: validate connection before checkout (fixes stale-connection errors)
 # pool_recycle: discard connections older than 30 min (fixes broken-pipe after idle)
 # connect_timeout: fail fast if DB unreachable rather than hanging
-engine = create_engine(
-    settings.DATABASE_URL,
-    pool_pre_ping=True,
-    pool_recycle=1800,
-    echo=settings.DB_ECHO,
-    connect_args={
-        "connect_timeout": 10,          # seconds before giving up on TCP connect
-        "options": "-c statement_timeout=30000",  # 30s max per query
-    },
-)
+engine_kwargs = {
+    "pool_pre_ping": True,
+    "pool_recycle": 1800,
+    "echo": settings.DB_ECHO,
+}
+if settings.DATABASE_URL.startswith("postgresql"):
+    engine_kwargs.update({
+        "pool_size": settings.DB_POOL_SIZE,
+        "max_overflow": settings.DB_MAX_OVERFLOW,
+        "connect_args": {
+            "connect_timeout": 10,          # seconds before giving up on TCP connect
+            "options": "-c statement_timeout=30000",  # 30s max per query
+        },
+    })
+
+engine = create_engine(settings.DATABASE_URL, **engine_kwargs)
 
 
 if settings.SQL_TIMING_LOG_ENABLED:

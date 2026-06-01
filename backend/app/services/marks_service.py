@@ -17,7 +17,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, List
 
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import or_, text, tuple_
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from app.models.base_models import (
@@ -301,14 +301,90 @@ def bulk_save_marks(db: Session, entries: list[MarkEntry]):
     This enforces year-end immutability after lock_marks_for_year() is called.
     """
     ensure_enrollments_for_legacy_students(db)
+    if not entries:
+        return {"saved": 0}
+
+    subject_ids = {entry.subject_id for entry in entries}
+    exam_ids = {entry.exam_id for entry in entries}
+    enrollment_ids = {entry.enrollment_id for entry in entries if entry.enrollment_id is not None}
+    student_ids = {entry.student_id for entry in entries if entry.student_id is not None}
+
+    subjects_by_id = {
+        subject.id: subject
+        for subject in db.query(Subject).filter(Subject.id.in_(subject_ids)).all()
+    }
+    exams_by_id = {
+        exam.id: exam
+        for exam in db.query(Exam).filter(Exam.id.in_(exam_ids)).all()
+    }
+    enrollments_by_id = {
+        enrollment.id: enrollment
+        for enrollment in (
+            db.query(Enrollment)
+            .filter(Enrollment.id.in_(enrollment_ids))
+            .all()
+            if enrollment_ids else []
+        )
+    }
+
+    exam_class_years = {(exam.class_id, exam.academic_year_id) for exam in exams_by_id.values()}
+    enrollment_query = db.query(Enrollment)
+    enrollment_filters = []
+    if student_ids and exam_class_years:
+        enrollment_filters.append(
+            tuple_(Enrollment.student_id, Enrollment.class_id, Enrollment.academic_year_id).in_(
+                [
+                    (student_id, class_id, academic_year_id)
+                    for student_id in student_ids
+                    for class_id, academic_year_id in exam_class_years
+                ]
+            )
+        )
+    if enrollment_ids:
+        enrollment_filters.append(Enrollment.id.in_(enrollment_ids))
+    if enrollment_filters:
+        for enrollment in enrollment_query.filter(or_(*enrollment_filters)).all():
+            enrollments_by_id[enrollment.id] = enrollment
+    enrollments_by_student_class_year = {
+        (enrollment.student_id, enrollment.class_id, enrollment.academic_year_id): enrollment
+        for enrollment in enrollments_by_id.values()
+    }
+
+    configs_by_exam_subject = {
+        (config.exam_id, config.subject_id): config
+        for config in (
+            db.query(ExamSubjectConfig)
+            .filter(
+                ExamSubjectConfig.exam_id.in_(exam_ids),
+                ExamSubjectConfig.subject_id.in_(subject_ids),
+            )
+            .all()
+            if exam_ids and subject_ids else []
+        )
+    }
+
+    resolved_entries = []
     for entry in entries:
-        subject = db.query(Subject).filter_by(id=entry.subject_id).first()
-        exam = db.query(Exam).filter_by(id=entry.exam_id).first()
+        subject = subjects_by_id.get(entry.subject_id)
+        exam = exams_by_id.get(entry.exam_id)
         if subject is None:
             raise ValueError(f"Subject {entry.subject_id} not found")
         if exam is None:
             raise ValueError(f"Exam {entry.exam_id} not found")
-        enrollment = _resolve_mark_enrollment(db, entry, exam)
+        if entry.enrollment_id is not None:
+            enrollment = enrollments_by_id.get(entry.enrollment_id)
+            if not enrollment:
+                raise ValueError(f"Enrollment {entry.enrollment_id} not found")
+            if enrollment.class_id != exam.class_id or enrollment.academic_year_id != exam.academic_year_id:
+                raise ValueError(f"Enrollment {enrollment.id} does not belong to exam class/year")
+        else:
+            if entry.student_id is None:
+                raise ValueError("Provide enrollment_id or student_id")
+            enrollment = enrollments_by_student_class_year.get(
+                (entry.student_id, exam.class_id, exam.academic_year_id)
+            )
+            if not enrollment:
+                raise ValueError(f"Student {entry.student_id} is not enrolled for exam class {exam.class_id}")
         if subject.class_id != exam.class_id:
             raise ValueError(f"Subject {subject.id} does not belong to exam class {exam.class_id}")
 
@@ -318,9 +394,9 @@ def bulk_save_marks(db: Session, entries: list[MarkEntry]):
             if entry.practical_marks is not None and entry.practical_marks < 0:
                 raise ValueError("Practical marks cannot be negative")
 
-            eff_max_theory, eff_max_practical = get_effective_max_marks(
-                db, entry.exam_id, entry.subject_id
-            )
+            config = configs_by_exam_subject.get((entry.exam_id, entry.subject_id))
+            eff_max_theory = config.max_theory if config else subject.max_theory
+            eff_max_practical = config.max_practical if config else subject.max_practical
             if entry.theory_marks > eff_max_theory:
                 raise ValueError(
                     f"Theory marks {entry.theory_marks} exceed max {eff_max_theory} "
@@ -331,20 +407,45 @@ def bulk_save_marks(db: Session, entries: list[MarkEntry]):
                 raise ValueError(
                     f"Practical marks {entry.practical_marks} exceed max {eff_max_practical}"
                 )
+        resolved_entries.append((entry, enrollment))
 
-        existing = db.query(Mark).filter_by(
-            enrollment_id=enrollment.id,
-            subject_id=entry.subject_id,
-            exam_id=entry.exam_id,
-        ).first()
+    mark_keys = {
+        (enrollment.id, entry.subject_id, entry.exam_id)
+        for entry, enrollment in resolved_entries
+    }
+    legacy_mark_keys = {
+        (enrollment.student_id, entry.subject_id, entry.exam_id)
+        for entry, enrollment in resolved_entries
+    }
+    existing_by_key = {
+        (mark.enrollment_id, mark.subject_id, mark.exam_id): mark
+        for mark in (
+            db.query(Mark)
+            .filter(tuple_(Mark.enrollment_id, Mark.subject_id, Mark.exam_id).in_(list(mark_keys)))
+            .all()
+            if mark_keys else []
+        )
+    }
+    legacy_by_key = {
+        (mark.student_id, mark.subject_id, mark.exam_id): mark
+        for mark in (
+            db.query(Mark)
+            .filter(
+                Mark.enrollment_id.is_(None),
+                tuple_(Mark.student_id, Mark.subject_id, Mark.exam_id).in_(list(legacy_mark_keys)),
+            )
+            .all()
+            if legacy_mark_keys else []
+        )
+    }
+
+    for entry, enrollment in resolved_entries:
+        existing = existing_by_key.get((enrollment.id, entry.subject_id, entry.exam_id))
         if not existing:
-            existing = db.query(Mark).filter_by(
-                student_id=enrollment.student_id,
-                subject_id=entry.subject_id,
-                exam_id=entry.exam_id,
-            ).first()
-            if existing and existing.enrollment_id is None:
+            existing = legacy_by_key.get((enrollment.student_id, entry.subject_id, entry.exam_id))
+            if existing:
                 existing.enrollment_id = enrollment.id
+                existing_by_key[(enrollment.id, entry.subject_id, entry.exam_id)] = existing
 
         if existing:
             # LOCK ENFORCEMENT — reject writes to locked marks
@@ -367,6 +468,7 @@ def bulk_save_marks(db: Session, entries: list[MarkEntry]):
             ))
 
     db.commit()
+    db.info.pop("class_results_cache", None)
     return {"saved": len(entries)}
 
 
@@ -453,6 +555,11 @@ def get_marks(db: Session, exam_id: int, class_id: int, subject_ids: Optional[li
 
 
 def get_class_results(db: Session, exam_id: int, class_id: int):
+    cache_key = (exam_id, class_id)
+    request_cache = db.info.setdefault("class_results_cache", {})
+    if cache_key in request_cache:
+        return request_cache[cache_key]
+
     exam = db.query(Exam).filter_by(id=exam_id).first()
     ensure_enrollments_for_legacy_students(db)
     enrollments = (
@@ -464,8 +571,34 @@ def get_class_results(db: Session, exam_id: int, class_id: int):
     )
     students = db.query(Student).filter(Student.id.in_([e.student_id for e in enrollments])).all() if enrollments else []
     enrollment_by_student = {e.student_id: e for e in enrollments}
+    enrollment_ids = [e.id for e in enrollments]
+    student_ids = [e.student_id for e in enrollments]
     subjects = get_subjects(db, class_id)
-    marks    = db.query(Mark).filter_by(exam_id=exam_id).all()
+    subject_ids = [subject.id for subject in subjects]
+    configs_by_subject = {
+        config.subject_id: config
+        for config in (
+            db.query(ExamSubjectConfig)
+            .filter(
+                ExamSubjectConfig.exam_id == exam_id,
+                ExamSubjectConfig.subject_id.in_(subject_ids),
+            )
+            .all()
+            if subject_ids else []
+        )
+    }
+    marks = (
+        db.query(Mark)
+        .filter(
+            Mark.exam_id == exam_id,
+            Mark.subject_id.in_(subject_ids) if subject_ids else False,
+            or_(
+                Mark.enrollment_id.in_(enrollment_ids) if enrollment_ids else False,
+                Mark.enrollment_id.is_(None) & Mark.student_id.in_(student_ids) if student_ids else False,
+            ),
+        )
+        .all()
+    )
     mark_map = {(m.enrollment_id, m.subject_id): m for m in marks if m.enrollment_id is not None}
     for mark in marks:
         if mark.enrollment_id is None and mark.student_id in enrollment_by_student:
@@ -481,7 +614,9 @@ def get_class_results(db: Session, exam_id: int, class_id: int):
         has_fail  = False
 
         for subject in subjects:
-            eff_max_theory, eff_max_practical = get_effective_max_marks(db, exam_id, subject.id)
+            config = configs_by_subject.get(subject.id)
+            eff_max_theory = config.max_theory if config else subject.max_theory
+            eff_max_practical = config.max_practical if config else subject.max_practical
             max_t   = Decimal(str(eff_max_theory))
             max_p   = Decimal(str(eff_max_practical))
             max_sub = max_t + max_p
@@ -546,4 +681,5 @@ def get_class_results(db: Session, exam_id: int, class_id: int):
     for i, r in enumerate(results):
         r["class_rank"] = i + 1
 
+    request_cache[cache_key] = results
     return results
