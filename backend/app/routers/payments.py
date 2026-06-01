@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.base_models import FeePayment, OnlinePaymentOrder, StudentFee
+from app.models.base_models import OnlinePaymentOrder, StudentFee
 from app.routers.auth import CurrentUser, ensure_student_access, require_role
 from app.schemas.payments import (
     CreateOrderRequest,
@@ -26,6 +26,14 @@ def create_order(
     db: Session = Depends(get_db),
     user: CurrentUser = Depends(require_role("admin", "parent")),
 ):
+    if body.scope == "current_year":
+        return payment_service.create_current_year_order(
+            db,
+            user,
+            body.student_id,
+            body.amount,
+            body.payment_option,
+        )
     return payment_service.create_razorpay_order(db, user, body.student_fee_id, body.amount)
 
 
@@ -35,14 +43,14 @@ def verify_payment(
     db: Session = Depends(get_db),
     user: CurrentUser = Depends(require_role("admin", "parent")),
 ):
-    payment = payment_service.verify_payment(
+    payments = payment_service.verify_payment(
         db,
         user,
         body.razorpay_order_id,
         body.razorpay_payment_id,
         body.razorpay_signature,
     )
-    return {"success": True, "receipt_number": payment.receipt_number}
+    return {"success": True, "receipt_number": payment_service._receipt_summary(payments)}
 
 
 @router.get("/order-status/{razorpay_order_id}", response_model=PaymentOrderStatusResponse)
@@ -54,18 +62,23 @@ def get_order_status(
     order = db.query(OnlinePaymentOrder).filter_by(razorpay_order_id=razorpay_order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Payment order not found")
-    student_fee = db.query(StudentFee).filter_by(id=order.student_fee_id).first()
-    if not student_fee:
-        raise HTTPException(status_code=404, detail="Fee record not found")
-    ensure_student_access(db, user, student_fee.student_id)
-    payment = db.query(FeePayment).filter_by(online_order_id=order.id).first()
+    student_id = order.student_id
+    if not student_id and order.student_fee_id:
+        student_fee = db.query(StudentFee).filter_by(id=order.student_fee_id).first()
+        if not student_fee:
+            raise HTTPException(status_code=404, detail="Fee record not found")
+        student_id = student_fee.student_id
+    ensure_student_access(db, user, student_id)
     return {
         "razorpay_order_id": order.razorpay_order_id,
         "student_fee_id": order.student_fee_id,
+        "student_id": student_id,
+        "scope": order.scope,
+        "payment_option": order.payment_option,
         "status": order.status,
         "amount": order.amount,
         "currency": order.currency,
-        "receipt_number": payment.receipt_number if payment else None,
+        "receipt_number": payment_service.get_order_receipt_summary(db, order.id),
         "failure_reason": order.failure_reason,
         "created_at": order.created_at,
         "paid_at": order.paid_at,
@@ -80,18 +93,20 @@ def get_payment_history(
 ):
     ensure_student_access(db, user, student_id)
     orders = (
-        db.query(OnlinePaymentOrder, FeePayment.receipt_number)
-        .join(StudentFee, StudentFee.id == OnlinePaymentOrder.student_fee_id)
-        .outerjoin(FeePayment, FeePayment.online_order_id == OnlinePaymentOrder.id)
-        .filter(StudentFee.student_id == student_id)
+        db.query(OnlinePaymentOrder)
+        .outerjoin(StudentFee, StudentFee.id == OnlinePaymentOrder.student_fee_id)
+        .filter((OnlinePaymentOrder.student_id == student_id) | (StudentFee.student_id == student_id))
         .order_by(OnlinePaymentOrder.created_at.desc(), OnlinePaymentOrder.id.desc())
         .all()
     )
     return [
         OnlinePaymentOrderOut.model_validate(order).model_copy(
-            update={"receipt_number": receipt_number}
+            update={
+                "student_id": order.student_id or (order.student_fee.student_id if order.student_fee else None),
+                "receipt_number": payment_service.get_order_receipt_summary(db, order.id),
+            }
         )
-        for order, receipt_number in orders
+        for order in orders
     ]
 
 

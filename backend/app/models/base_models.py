@@ -488,7 +488,10 @@ class OnlinePaymentOrder(Base):
     )
 
     id                  = Column(Integer, primary_key=True)
-    student_fee_id      = Column(Integer, ForeignKey("student_fees.id"), nullable=False)
+    student_fee_id      = Column(Integer, ForeignKey("student_fees.id"), nullable=True)
+    student_id          = Column(Integer, ForeignKey("students.id"), nullable=True, index=True)
+    scope               = Column(String(30), nullable=False, default="single_fee")
+    payment_option      = Column(String(20), nullable=True)
     razorpay_order_id   = Column(Text, unique=True, nullable=False)
     razorpay_payment_id = Column(Text, nullable=True)
     razorpay_signature  = Column(Text, nullable=True)
@@ -787,4 +790,5 @@ StudentFee.fee_structure = relationship("FeeStructure", foreign_keys=[StudentFee
 StudentFee.payments = relationship("FeePayment", foreign_keys=[FeePayment.student_fee_id])
 StudentFee.source_invoice = relationship("StudentFee", foreign_keys=[StudentFee.source_invoice_id], remote_side=[StudentFee.id])
 OnlinePaymentOrder.student_fee = relationship("StudentFee", foreign_keys=[OnlinePaymentOrder.student_fee_id])
-OnlinePaymentOrder.payment = relationship("FeePayment", foreign_keys=[FeePayment.online_order_id], uselist=False)
+OnlinePaymentOrder.student = relationship("Student", foreign_keys=[OnlinePaymentOrder.student_id])
+OnlinePaymentOrder.payments = relationship("FeePayment", foreign_keys=[FeePayment.online_order_id])

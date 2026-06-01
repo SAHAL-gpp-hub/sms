@@ -31,7 +31,7 @@ const loadRazorpay = () => {
   return razorpayScriptPromise
 }
 
-function FeeItem({ item, canPay, payingId, onPay }) {
+function FeeItem({ item }) {
   const balance = parseFloat(item.balance || 0)
   const paid    = parseFloat(item.paid_amount || 0)
   const total   = parseFloat(item.net_amount || 0)
@@ -66,21 +66,6 @@ function FeeItem({ item, canPay, payingId, onPay }) {
           {fmt(paid)} paid
         </span>
       </div>
-      {!isPaid && canPay && (
-        <button
-          type="button"
-          onClick={() => onPay(item.student_fee_id, balance)}
-          disabled={payingId === item.student_fee_id}
-          style={{
-            marginTop:'10px', width:'100%', border:0, borderRadius:'12px',
-            padding:'10px 12px', background:'#0d7377', color:'white',
-            fontSize:'13px', fontWeight:900, cursor: payingId === item.student_fee_id ? 'wait' : 'pointer',
-            opacity: payingId === item.student_fee_id ? 0.7 : 1,
-          }}
-        >
-          {payingId === item.student_fee_id ? 'Opening checkout…' : `Pay ${fmt(balance)} Online`}
-        </button>
-      )}
     </div>
   )
 }
@@ -92,7 +77,7 @@ export default function PortalFees() {
   const [ledger,  setLedger]  = useState(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(false)
-  const [payingId, setPayingId] = useState(null)
+  const [payingOption, setPayingOption] = useState('')
   const [verifyingOrderId, setVerifyingOrderId] = useState('')
   const [paymentHistory, setPaymentHistory] = useState([])
 
@@ -142,13 +127,15 @@ export default function PortalFees() {
     return null
   }
 
-  const handlePayNow = async (studentFeeId, amount) => {
+  const handlePayNow = async (paymentOption, amount) => {
     try {
-      setPayingId(studentFeeId)
+      setPayingOption(paymentOption)
       await loadRazorpay()
       const { data: order } = await paymentAPI.createOrder({
-        student_fee_id: studentFeeId,
+        student_id: ledger.student_id || selectedChildId,
         amount,
+        scope: 'current_year',
+        payment_option: paymentOption,
       })
       setVerifyingOrderId(order.order_id)
 
@@ -176,13 +163,13 @@ export default function PortalFees() {
           } catch (err) {
             toast.error(extractPaymentError(err).message)
           } finally {
-            setPayingId(null)
+            setPayingOption('')
             setVerifyingOrderId('')
           }
         },
         modal: {
           ondismiss: () => {
-            setPayingId(null)
+            setPayingOption('')
             setVerifyingOrderId('')
           },
         },
@@ -191,12 +178,12 @@ export default function PortalFees() {
       const checkout = new window.Razorpay(options)
       checkout.on('payment.failed', (response) => {
         toast.error(response.error?.description || 'Payment failed')
-        setPayingId(null)
+        setPayingOption('')
       })
       checkout.open()
     } catch (err) {
       toast.error(extractPaymentError(err).message)
-      setPayingId(null)
+      setPayingOption('')
     }
   }
 
@@ -224,30 +211,42 @@ export default function PortalFees() {
   const totalBalance = parseFloat(ledger.total_balance || 0)
   const collPct      = totalDue > 0 ? Math.min((totalPaid / totalDue) * 100, 100) : 0
   const hasBalance   = totalBalance > 0
-  const canPayOnline = ((isParent && Boolean(selectedChildId)) || role === 'student') && hasBalance
   const currentItems = (ledger.items || []).filter(item => item.invoice_type !== 'arrear')
   const arrearItems = (ledger.items || []).filter(item => item.invoice_type === 'arrear')
+  const currentYearBalance = currentItems.reduce((sum, item) => sum + parseFloat(item.balance || 0), 0)
+  const arrearBalance = arrearItems.reduce((sum, item) => sum + parseFloat(item.balance || 0), 0)
+  const canPayOnline = ((isParent && Boolean(selectedChildId)) || role === 'student') && currentYearBalance > 0
+  const paymentOptions = [
+    { key:'full', label:'Pay Full', amount: currentYearBalance },
+    { key:'half', label:'Pay Half', amount: currentYearBalance / 2 },
+    { key:'quarter', label:'Pay Quarter', amount: currentYearBalance / 4 },
+  ].filter(option => option.amount > 0)
 
-  const renderFeeSection = (title, items, empty) => (
+  const renderFeeSection = (title, items, empty, collapsed = false) => {
+    const content = items.length === 0 ? (
+      <div style={{ textAlign:'center', padding:'20px 0', color:'#94a3b8', fontSize:'13px' }}>{empty}</div>
+    ) : (
+      items.map((item, i) => <FeeItem key={`${title}-${item.student_fee_id || i}`} item={item} />)
+    )
+    if (collapsed) {
+      return (
+        <details style={{ background:'white', borderRadius:'16px', padding:'14px 16px', marginBottom:'12px', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
+          <summary style={{ fontSize:'10.5px', fontWeight:800, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.08em', cursor:'pointer' }}>
+            {title} · {items.length} item{items.length === 1 ? '' : 's'}
+          </summary>
+          <div style={{ marginTop:'8px' }}>{content}</div>
+        </details>
+      )
+    }
+    return (
     <div style={{ background:'white', borderRadius:'16px', padding:'14px 16px', marginBottom:'12px', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
       <div style={{ fontSize:'10.5px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'2px' }}>
         {title} · {items.length} item{items.length === 1 ? '' : 's'}
       </div>
-      {items.length === 0 ? (
-        <div style={{ textAlign:'center', padding:'20px 0', color:'#94a3b8', fontSize:'13px' }}>{empty}</div>
-      ) : (
-        items.map((item, i) => (
-          <FeeItem
-            key={`${title}-${item.student_fee_id || i}`}
-            item={item}
-            canPay={canPayOnline}
-            payingId={payingId}
-            onPay={handlePayNow}
-          />
-        ))
-      )}
+      {content}
     </div>
-  )
+    )
+  }
 
   return (
     <>
@@ -302,7 +301,52 @@ export default function PortalFees() {
         </div>
       )}
 
-      {renderFeeSection('Current Year Fees', currentItems, 'No current-year fees assigned yet')}
+      <div style={{ background:'white', borderRadius:'16px', padding:'14px 16px', marginBottom:'12px', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
+        <div style={{ fontSize:'10.5px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'8px' }}>
+          Current Year Payment
+        </div>
+        <div style={{ display:'flex', justifyContent:'space-between', gap:'14px', alignItems:'center', marginBottom:'12px' }}>
+          <div>
+            <div style={{ fontSize:'13px', color:'#64748b', fontWeight:700 }}>Current-year outstanding</div>
+            <div style={{ fontSize:'24px', color: currentYearBalance > 0 ? '#dc2626' : '#16a34a', fontWeight:900, letterSpacing:'-0.03em' }}>
+              {fmt(currentYearBalance)}
+            </div>
+          </div>
+          {arrearBalance > 0 && (
+            <div style={{ textAlign:'right', flexShrink:0 }}>
+              <div style={{ fontSize:'11px', color:'#92400e', fontWeight:800 }}>Arrears separate</div>
+              <div style={{ fontSize:'13px', color:'#92400e', fontWeight:900 }}>{fmt(arrearBalance)}</div>
+            </div>
+          )}
+        </div>
+        {canPayOnline ? (
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))', gap:'8px' }}>
+            {paymentOptions.map(option => (
+              <button
+                key={option.key}
+                type="button"
+                onClick={() => handlePayNow(option.key, option.amount)}
+                disabled={payingOption === option.key || Boolean(verifyingOrderId)}
+                style={{
+                  border:0, borderRadius:'12px', padding:'11px 10px', background:'#0d7377',
+                  color:'white', cursor: payingOption || verifyingOrderId ? 'wait' : 'pointer',
+                  opacity: payingOption === option.key || verifyingOrderId ? 0.7 : 1,
+                  minHeight:'58px',
+                }}
+              >
+                <div style={{ fontSize:'13px', fontWeight:900 }}>{payingOption === option.key ? 'Opening…' : option.label}</div>
+                <div style={{ fontSize:'11px', fontWeight:800, opacity:0.85, marginTop:'2px' }}>{fmt(option.amount)}</div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize:'13px', color:'#64748b', fontWeight:700 }}>
+            {currentYearBalance > 0 ? 'Select a linked student to pay current-year fees online.' : 'Current-year fees are cleared.'}
+          </div>
+        )}
+      </div>
+
+      {renderFeeSection('Fee Breakdown', currentItems, 'No current-year fees assigned yet', true)}
       {renderFeeSection('Arrears From Previous Years', arrearItems, 'No previous-year arrears')}
 
       {paymentHistory.length > 0 && (

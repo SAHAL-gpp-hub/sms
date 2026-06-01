@@ -25,3 +25,6 @@ approval_mode = "approve"
 
 [mcp_servers.code-review-graph.tools.get_review_context_tool]
 approval_mode = "approve"
+
+[mcp_servers.code-review-graph.tools.list_communities_tool]
+approval_mode = "approve"

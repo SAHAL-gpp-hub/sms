@@ -1,13 +1,16 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Literal, Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 
 class CreateOrderRequest(BaseModel):
-    student_fee_id: int
+    student_fee_id: Optional[int] = None
+    student_id: Optional[int] = None
     amount: Decimal
+    scope: Literal["single_fee", "current_year"] = "single_fee"
+    payment_option: Optional[Literal["full", "half", "quarter"]] = None
 
     @field_validator("amount")
     @classmethod
@@ -15,6 +18,18 @@ class CreateOrderRequest(BaseModel):
         if value <= 0:
             raise ValueError("Amount must be greater than 0")
         return value
+
+    @model_validator(mode="after")
+    def validate_target(self):
+        if self.scope == "current_year":
+            if not self.student_id:
+                raise ValueError("student_id is required for current-year payments")
+            if self.student_fee_id is not None:
+                raise ValueError("student_fee_id is not used for current-year payments")
+            return self
+        if not self.student_fee_id:
+            raise ValueError("student_fee_id is required for single-fee payments")
+        return self
 
 
 class CreateOrderResponse(BaseModel):
@@ -40,7 +55,10 @@ class VerifyPaymentResponse(BaseModel):
 
 class OnlinePaymentOrderOut(BaseModel):
     id: int
-    student_fee_id: int
+    student_fee_id: Optional[int] = None
+    student_id: Optional[int] = None
+    scope: str = "single_fee"
+    payment_option: Optional[str] = None
     razorpay_order_id: str
     razorpay_payment_id: Optional[str] = None
     amount: Decimal
@@ -55,7 +73,10 @@ class OnlinePaymentOrderOut(BaseModel):
 
 class PaymentOrderStatusResponse(BaseModel):
     razorpay_order_id: str
-    student_fee_id: int
+    student_fee_id: Optional[int] = None
+    student_id: Optional[int] = None
+    scope: str = "single_fee"
+    payment_option: Optional[str] = None
     status: str
     amount: Decimal
     currency: str

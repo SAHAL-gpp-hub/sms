@@ -1,6 +1,8 @@
 import hashlib
 import hmac
 import json
+import sys
+import types
 from datetime import date
 from decimal import Decimal
 
@@ -238,6 +240,216 @@ def token(client, email):
 
 def auth(tok):
     return {"Authorization": f"Bearer {tok}"}
+
+
+def install_fake_razorpay(monkeypatch, order_id="order_current_year_1"):
+    class FakeOrder:
+        def create(self, payload):
+            return {
+                "id": order_id,
+                "amount": payload["amount"],
+                "currency": payload["currency"],
+            }
+
+    class FakeClient:
+        def __init__(self, auth):
+            self.order = FakeOrder()
+
+    fake_module = types.SimpleNamespace(Client=FakeClient)
+    monkeypatch.setitem(sys.modules, "razorpay", fake_module)
+
+
+def create_current_year_payment_student(email="currentyear@test.com"):
+    db = TestingSessionLocal()
+    try:
+        year = db.query(AcademicYear).filter_by(is_current=True).first()
+        cls = db.query(Class).first()
+        parent = User(
+            name="Current Year Parent",
+            email=email,
+            password_hash=get_password_hash("parent1234"),
+            role="parent",
+            is_active=True,
+        )
+        db.add(parent)
+        db.flush()
+        student = Student(
+            student_id=f"SMS-2025-{parent.id}",
+            name_en="Current Year Student",
+            name_gu="કરન્ટ",
+            dob=date(2015, 1, 1),
+            gender=GenderEnum.M,
+            class_id=cls.id,
+            father_name="Current Father",
+            contact="9876500000",
+            guardian_email="current@example.com",
+            admission_date=date(2025, 6, 1),
+            academic_year_id=year.id,
+            status=StudentStatusEnum.Active,
+            parent_user_id=parent.id,
+        )
+        db.add(student)
+        db.flush()
+
+        tuition = FeeHead(name=f"Tuition {parent.id}", frequency="Monthly", is_active=True)
+        activity = FeeHead(name=f"Activity {parent.id}", frequency="Annual", is_active=True)
+        old = FeeHead(name=f"Old {parent.id}", frequency="Annual", is_active=True)
+        db.add_all([tuition, activity, old])
+        db.flush()
+        structures = [
+            FeeStructure(class_id=cls.id, fee_head_id=tuition.id, amount=Decimal("700.00"), academic_year_id=year.id),
+            FeeStructure(class_id=cls.id, fee_head_id=activity.id, amount=Decimal("500.00"), academic_year_id=year.id),
+            FeeStructure(class_id=cls.id, fee_head_id=old.id, amount=Decimal("300.00"), academic_year_id=year.id),
+        ]
+        db.add_all(structures)
+        db.flush()
+        db.add_all([
+            StudentFee(student_id=student.id, fee_structure_id=structures[0].id, concession=Decimal("0.00"), net_amount=Decimal("700.00"), academic_year_id=year.id),
+            StudentFee(student_id=student.id, fee_structure_id=structures[1].id, concession=Decimal("0.00"), net_amount=Decimal("500.00"), academic_year_id=year.id),
+            StudentFee(student_id=student.id, fee_structure_id=structures[2].id, concession=Decimal("0.00"), net_amount=Decimal("300.00"), academic_year_id=year.id, invoice_type="arrear"),
+        ])
+        db.commit()
+        return student.id
+    finally:
+        db.close()
+
+
+def test_parent_can_create_current_year_order_and_verify_allocates_across_fee_heads(client, monkeypatch):
+    student_id = create_current_year_payment_student()
+    install_fake_razorpay(monkeypatch)
+    tok = token(client, "currentyear@test.com")
+
+    res = client.post(
+        "/api/v1/payments/create-order",
+        json={
+            "student_id": student_id,
+            "amount": "900.00",
+            "scope": "current_year",
+            "payment_option": "half",
+        },
+        headers=auth(tok),
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["amount"] == 90000
+
+    body = {
+        "razorpay_order_id": "order_current_year_1",
+        "razorpay_payment_id": "pay_current_year_1",
+        "razorpay_signature": _signature("order_current_year_1", "pay_current_year_1"),
+    }
+    verified = client.post("/api/v1/payments/verify", json=body, headers=auth(tok))
+    assert verified.status_code == 200, verified.text
+    assert verified.json()["receipt_number"].startswith("RCPT-")
+
+    db = TestingSessionLocal()
+    try:
+        order = db.query(OnlinePaymentOrder).filter_by(razorpay_order_id="order_current_year_1").one()
+        payments = db.query(FeePayment).filter_by(online_order_id=order.id).order_by(FeePayment.id).all()
+        assert order.scope == "current_year"
+        assert order.payment_option == "half"
+        assert len(payments) == 2
+        assert [p.amount_paid for p in payments] == [Decimal("700.00"), Decimal("200.00")]
+        assert db.query(FeePayment).join(StudentFee).filter(
+            StudentFee.student_id == student_id,
+            StudentFee.invoice_type == "arrear",
+        ).count() == 0
+    finally:
+        db.close()
+
+
+def test_parent_cannot_create_current_year_order_for_unlinked_child(client, monkeypatch):
+    student_id = create_current_year_payment_student("blockedcurrentyear@test.com")
+    install_fake_razorpay(monkeypatch, "order_blocked_current_year")
+    tok = token(client, "parentpay@test.com")
+
+    res = client.post(
+        "/api/v1/payments/create-order",
+        json={
+            "student_id": student_id,
+            "amount": "100.00",
+            "scope": "current_year",
+            "payment_option": "quarter",
+        },
+        headers=auth(tok),
+    )
+    assert res.status_code == 403
+
+
+def test_current_year_order_rejects_amount_above_current_year_balance(client, monkeypatch):
+    student_id = create_current_year_payment_student("overcurrentyear@test.com")
+    install_fake_razorpay(monkeypatch, "order_over_current_year")
+    tok = token(client, "overcurrentyear@test.com")
+
+    res = client.post(
+        "/api/v1/payments/create-order",
+        json={
+            "student_id": student_id,
+            "amount": "1300.00",
+            "scope": "current_year",
+            "payment_option": "full",
+        },
+        headers=auth(tok),
+    )
+    assert res.status_code == 400
+    assert "current-year outstanding" in res.json()["detail"]
+
+
+def test_aggregate_payment_history_returns_one_order_row(client, monkeypatch):
+    student_id = create_current_year_payment_student("historycurrentyear@test.com")
+    install_fake_razorpay(monkeypatch, "order_history_current_year")
+    tok = token(client, "historycurrentyear@test.com")
+
+    created = client.post(
+        "/api/v1/payments/create-order",
+        json={"student_id": student_id, "amount": "600.00", "scope": "current_year", "payment_option": "quarter"},
+        headers=auth(tok),
+    )
+    assert created.status_code == 200, created.text
+    body = {
+        "razorpay_order_id": "order_history_current_year",
+        "razorpay_payment_id": "pay_history_current_year",
+        "razorpay_signature": _signature("order_history_current_year", "pay_history_current_year"),
+    }
+    verified = client.post("/api/v1/payments/verify", json=body, headers=auth(tok))
+    assert verified.status_code == 200, verified.text
+
+    history = client.get(f"/api/v1/payments/history/{student_id}", headers=auth(tok))
+    assert history.status_code == 200, history.text
+    rows = [row for row in history.json() if row["razorpay_order_id"] == "order_history_current_year"]
+    assert len(rows) == 1
+    assert rows[0]["scope"] == "current_year"
+    assert rows[0]["receipt_number"].startswith("RCPT-")
+
+
+def test_aggregate_webhook_marks_paid_idempotently(client, monkeypatch):
+    student_id = create_current_year_payment_student("webhookcurrentyear@test.com")
+    install_fake_razorpay(monkeypatch, "order_webhook_current_year")
+    tok = token(client, "webhookcurrentyear@test.com")
+
+    created = client.post(
+        "/api/v1/payments/create-order",
+        json={"student_id": student_id, "amount": "800.00", "scope": "current_year", "payment_option": "full"},
+        headers=auth(tok),
+    )
+    assert created.status_code == 200, created.text
+
+    body = _webhook_body("order_webhook_current_year", "pay_webhook_current_year", 80000)
+    headers = {
+        "Content-Type": "application/json",
+        "X-Razorpay-Signature": _webhook_signature(body),
+    }
+    first = client.post("/api/v1/payments/webhook", content=body, headers=headers)
+    second = client.post("/api/v1/payments/webhook", content=body, headers=headers)
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+
+    db = TestingSessionLocal()
+    try:
+        order = db.query(OnlinePaymentOrder).filter_by(razorpay_order_id="order_webhook_current_year").one()
+        assert order.status == "paid"
+        assert db.query(FeePayment).filter_by(online_order_id=order.id).count() == 2
+    finally:
+        db.close()
 
 
 def test_verify_payment_creates_fee_payment_and_is_idempotent(client):
