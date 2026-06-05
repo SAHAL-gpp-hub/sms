@@ -3,6 +3,10 @@
     {
       "source": "/api/:path*",
       "destination": "https://sms-backend-zs8v.onrender.com/api/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
