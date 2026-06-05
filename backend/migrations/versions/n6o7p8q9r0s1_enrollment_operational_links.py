@@ -37,16 +37,7 @@ def _index_exists(table: str, name: str) -> bool:
 
 
 def upgrade() -> None:
-    for table, name, columns in (
-        ("attendance", "ix_attendance_class_id_date", ["class_id", "date"]),
-        ("fee_payments", "ix_fee_payments_student_fee_id", ["student_fee_id"]),
-        ("marks", "ix_marks_exam_id_subject_id", ["exam_id", "subject_id"]),
-        ("student_fees", "ix_student_fees_enrollment_id_academic_year_id", ["enrollment_id", "academic_year_id"]),
-        ("enrollments", "ix_enrollments_class_id_academic_year_id_status", ["class_id", "academic_year_id", "status"]),
-    ):
-        if not _index_exists(table, name):
-            op.create_index(name, table, columns)
-
+    # First add enrollment_id columns before creating indexes on them
     for table in ("attendance", "marks", "student_fees"):
         if not _column_exists(table, "enrollment_id"):
             op.add_column(table, sa.Column("enrollment_id", sa.Integer(), nullable=True))
@@ -59,6 +50,17 @@ def upgrade() -> None:
                 ["id"],
                 ondelete="CASCADE",
             )
+
+    # Now create indexes (enrollment_id columns exist now)
+    for table, name, columns in (
+        ("attendance", "ix_attendance_class_id_date", ["class_id", "date"]),
+        ("fee_payments", "ix_fee_payments_student_fee_id", ["student_fee_id"]),
+        ("marks", "ix_marks_exam_id_subject_id", ["exam_id", "subject_id"]),
+        ("student_fees", "ix_student_fees_enrollment_id_academic_year_id", ["enrollment_id", "academic_year_id"]),
+        ("enrollments", "ix_enrollments_class_id_academic_year_id_status", ["class_id", "academic_year_id", "status"]),
+    ):
+        if not _index_exists(table, name):
+            op.create_index(name, table, columns)
 
     if not _constraint_exists("attendance", "uq_attendance_enrollment_date"):
         op.create_unique_constraint("uq_attendance_enrollment_date", "attendance", ["enrollment_id", "date"])
