@@ -1,6 +1,7 @@
+
 // frontend/src/pages/admin/UserManagement.jsx — Full rebuild
 // Tabs: Users list | Teacher Assignments | Portal Linking
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { adminAPI, setupAPI, studentAPI, extractError } from '../../services/api'
@@ -28,6 +29,96 @@ function RoleBadge({ role }) {
     }}>
       {m.label}
     </span>
+  )
+}
+
+// ── Reusable Pagination ────────────────────────────────────────────────────────
+const PAGE_SIZE_DEFAULT = 20
+
+function usePagination(items, pageSize = PAGE_SIZE_DEFAULT) {
+  const [page, setPage] = useState(1)
+
+  // Reset to page 1 whenever the source list changes (filter/search applied)
+  const itemsKey = items.length
+  useEffect(() => { setPage(1) }, [itemsKey])
+
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize))
+  const safePage = Math.min(page, totalPages)
+  const pageItems = useMemo(
+    () => items.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [items, safePage, pageSize]
+  )
+
+  return { page: safePage, setPage, pageItems, totalPages, total: items.length }
+}
+
+function Pagination({ page, totalPages, total, pageSize, setPage }) {
+  if (totalPages <= 1) return null
+
+  const from = (page - 1) * pageSize + 1
+  const to   = Math.min(page * pageSize, total)
+
+  // Build page numbers: always show first, last, current ±1, with ellipsis
+  const range = []
+  const add = (n) => { if (!range.includes(n) && n >= 1 && n <= totalPages) range.push(n) }
+  add(1); add(totalPages)
+  for (let i = page - 1; i <= page + 1; i++) add(i)
+  range.sort((a, b) => a - b)
+
+  const pages = []
+  for (let i = 0; i < range.length; i++) {
+    if (i > 0 && range[i] - range[i - 1] > 1) pages.push('…')
+    pages.push(range[i])
+  }
+
+  const btnBase = {
+    minWidth: '30px', height: '30px', padding: '0 6px',
+    borderRadius: '6px', fontSize: '12px', fontWeight: 700,
+    cursor: 'pointer', border: '1px solid var(--border-default)',
+    fontFamily: 'var(--font-sans)', display: 'inline-flex',
+    alignItems: 'center', justifyContent: 'center', transition: 'all .12s',
+  }
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      flexWrap: 'wrap', gap: '8px',
+      padding: '10px 16px', borderTop: '1px solid var(--border-subtle)',
+      fontSize: '12px', color: 'var(--text-tertiary)',
+    }}>
+      <span>Showing {from}–{to} of {total}</span>
+      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <button
+          style={{ ...btnBase, background: page === 1 ? 'var(--gray-50)' : 'var(--surface-0)', color: page === 1 ? 'var(--gray-300)' : 'var(--text-secondary)', cursor: page === 1 ? 'not-allowed' : 'pointer' }}
+          disabled={page === 1}
+          onClick={() => setPage(page - 1)}
+          aria-label="Previous page"
+        >‹</button>
+
+        {pages.map((p, i) =>
+          p === '…'
+            ? <span key={`ellipsis-${i}`} style={{ padding: '0 2px', color: 'var(--text-tertiary)' }}>…</span>
+            : <button
+                key={p}
+                style={{
+                  ...btnBase,
+                  background: p === page ? 'var(--brand-600)' : 'var(--surface-0)',
+                  color: p === page ? 'white' : 'var(--text-secondary)',
+                  border: p === page ? '1px solid var(--brand-600)' : '1px solid var(--border-default)',
+                }}
+                onClick={() => setPage(p)}
+                aria-current={p === page ? 'page' : undefined}
+              >{p}</button>
+        )}
+
+        <button
+          style={{ ...btnBase, background: page === totalPages ? 'var(--gray-50)' : 'var(--surface-0)', color: page === totalPages ? 'var(--gray-300)' : 'var(--text-secondary)', cursor: page === totalPages ? 'not-allowed' : 'pointer' }}
+          disabled={page === totalPages}
+          onClick={() => setPage(page + 1)}
+          aria-label="Next page"
+        >›</button>
+      </div>
+    </div>
   )
 }
 
@@ -117,6 +208,12 @@ function UsersTab() {
       )
     : users
   const visibleUsers = roleFilter ? filtered.filter(user => user.role === roleFilter) : filtered
+
+  // ── Pagination ──
+  const { page, setPage, pageItems: pageUsers, totalPages } = usePagination(visibleUsers, 20)
+
+  // Reset page when filters change
+  useEffect(() => { setPage(1) }, [search, roleFilter, setPage])
 
   const handleDeactivate = async () => {
     if (!deactivateTarget) return
@@ -252,79 +349,77 @@ function UsersTab() {
             action={search || roleFilter ? <button className="btn btn-secondary btn-sm" onClick={clearFilters}>Clear filters</button> : <Link to="/admin/users/new" className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>Add User</Link>}
           />
         ) : (
-          <ResponsiveTable>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleUsers.map(user => (
-                <tr key={user.id}>
-                  <td data-label="Name" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{user.name}</td>
-                  <td data-label="Email" style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{user.email}</td>
-                  <td data-label="Role"><RoleBadge role={user.role} /></td>
-                  <td data-label="Status">
-                    <span style={{
-                      display: 'inline-flex',
-                      fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
-                      background: user.is_active ? 'var(--success-100)' : 'var(--gray-100)',
-                      color: user.is_active ? 'var(--success-700)' : user.role === 'teacher' ? 'var(--warning-700)' : 'var(--gray-500)',
-                    }}>
-                      {user.is_active ? 'Active' : user.role === 'teacher' ? 'Pending invite' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td data-label="Actions" style={{ textAlign: 'right' }}>
-                    <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                      <Link
-                        to={`/admin/users/${user.id}/edit`}
-                        style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--brand-600)', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', textDecoration: 'none' }}
-                      >
-                        Edit
-                      </Link>
-                      <button
-                        onClick={() => setResetTarget(user)}
-                        style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--warning-600)', background: 'var(--warning-50)', border: '1px solid #fde68a', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
-                      >
-                        Reset PW
-                      </button>
-                      {!user.is_active && user.role === 'teacher' ? (
-                        <button
-                          onClick={async () => {
-                            try {
-                              await adminAPI.resendTeacherInvite(user.id)
-                              toast.success(`Invite resent to ${user.name}`)
-                            } catch (err) {
-                              toast.error(extractError(err))
-                            }
-                          }}
-                          style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--brand-700)', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
-                        >
-                          Resend Invite
-                        </button>
-                      ) : user.is_active ? (
-                        <button
-                          onClick={() => setDeactivateTarget(user)}
-                          style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--danger-600)', background: 'var(--danger-50)', border: '1px solid var(--danger-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
-                        >
-                          Deactivate
-                        </button>
-                      ) : null}
-                    </div>
-                  </td>
+          <>
+            <ResponsiveTable>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </ResponsiveTable>
-        )}
-        {!loading && visibleUsers.length > 0 && (
-          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border-subtle)', fontSize: '12px', color: 'var(--text-tertiary)' }}>
-            Showing {visibleUsers.length} of {users.length} user{users.length !== 1 ? 's' : ''}
-          </div>
+              </thead>
+              <tbody>
+                {pageUsers.map(user => (
+                  <tr key={user.id}>
+                    <td data-label="Name" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{user.name}</td>
+                    <td data-label="Email" style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{user.email}</td>
+                    <td data-label="Role"><RoleBadge role={user.role} /></td>
+                    <td data-label="Status">
+                      <span style={{
+                        display: 'inline-flex',
+                        fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
+                        background: user.is_active ? 'var(--success-100)' : 'var(--gray-100)',
+                        color: user.is_active ? 'var(--success-700)' : user.role === 'teacher' ? 'var(--warning-700)' : 'var(--gray-500)',
+                      }}>
+                        {user.is_active ? 'Active' : user.role === 'teacher' ? 'Pending invite' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td data-label="Actions" style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                        <Link
+                          to={`/admin/users/${user.id}/edit`}
+                          style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--brand-600)', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', textDecoration: 'none' }}
+                        >
+                          Edit
+                        </Link>
+                        <button
+                          onClick={() => setResetTarget(user)}
+                          style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--warning-600)', background: 'var(--warning-50)', border: '1px solid #fde68a', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
+                        >
+                          Reset PW
+                        </button>
+                        {!user.is_active && user.role === 'teacher' ? (
+                          <button
+                            onClick={async () => {
+                              try {
+                                await adminAPI.resendTeacherInvite(user.id)
+                                toast.success(`Invite resent to ${user.name}`)
+                              } catch (err) {
+                                toast.error(extractError(err))
+                              }
+                            }}
+                            style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--brand-700)', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
+                          >
+                            Resend Invite
+                          </button>
+                        ) : user.is_active ? (
+                          <button
+                            onClick={() => setDeactivateTarget(user)}
+                            style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--danger-600)', background: 'var(--danger-50)', border: '1px solid var(--danger-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
+                          >
+                            Deactivate
+                          </button>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </ResponsiveTable>
+            <Pagination page={page} totalPages={totalPages} total={visibleUsers.length} pageSize={20} setPage={setPage} />
+          </>
         )}
       </div>
 
@@ -362,6 +457,9 @@ function CorrectionRequestsTab() {
 
   useEffect(() => { load() }, [load])
 
+  // ── Pagination ──
+  const { page, setPage, pageItems: pageRows, totalPages } = usePagination(rows, 15)
+
   const resolve = async (row, status) => {
     const verb = status === 'approved' ? 'approve and apply' : 'reject'
     if (!window.confirm(`${verb} correction for ${row.student_name}?`)) return
@@ -391,37 +489,40 @@ function CorrectionRequestsTab() {
       ) : rows.length === 0 ? (
         <EmptyState title="No pending corrections" description="Parent and student profile requests will appear here." />
       ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table className="data-table" style={{ minWidth: 760 }}>
-            <thead>
-              <tr>
-                <th>Student</th>
-                <th>Field</th>
-                <th>Current</th>
-                <th>Requested</th>
-                <th>Reason</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(row => (
-                <tr key={row.id}>
-                  <td style={{ fontWeight: 700 }}>{row.student_name}</td>
-                  <td>{row.field_name}</td>
-                  <td style={{ color: 'var(--text-tertiary)' }}>{row.current_value || '—'}</td>
-                  <td style={{ fontWeight: 700 }}>{row.requested_value}</td>
-                  <td>{row.reason || '—'}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      <button className="btn btn-success btn-sm" disabled={busy === `${row.id}-approved`} onClick={() => resolve(row, 'approved')}>Approve</button>
-                      <button className="btn btn-secondary btn-sm" disabled={busy === `${row.id}-rejected`} onClick={() => resolve(row, 'rejected')}>Reject</button>
-                    </div>
-                  </td>
+        <>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="data-table" style={{ minWidth: 760 }}>
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Field</th>
+                  <th>Current</th>
+                  <th>Requested</th>
+                  <th>Reason</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {pageRows.map(row => (
+                  <tr key={row.id}>
+                    <td style={{ fontWeight: 700 }}>{row.student_name}</td>
+                    <td>{row.field_name}</td>
+                    <td style={{ color: 'var(--text-tertiary)' }}>{row.current_value || '—'}</td>
+                    <td style={{ fontWeight: 700 }}>{row.requested_value}</td>
+                    <td>{row.reason || '—'}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <button className="btn btn-success btn-sm" disabled={busy === `${row.id}-approved`} onClick={() => resolve(row, 'approved')}>Approve</button>
+                        <button className="btn btn-secondary btn-sm" disabled={busy === `${row.id}-rejected`} onClick={() => resolve(row, 'rejected')}>Reject</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pagination page={page} totalPages={totalPages} total={rows.length} pageSize={15} setPage={setPage} />
+        </>
       )}
     </div>
   )
@@ -535,6 +636,9 @@ function TeacherAssignmentsTab({ selectedTeacherId = '', onTeacherSelected }) {
   const yearOptions    = years.map(y => ({ value: String(y.id), label: y.label + (y.is_current ? ' (Current)' : '') }))
   const subjectOptions = subjects.map(s => ({ value: String(s.id), label: s.name }))
 
+  // ── Pagination for assignments list ──
+  const { page, setPage, pageItems: pageAssignments, totalPages } = usePagination(assignments, 15)
+
   return (
     <div>
       {/* Teacher selector */}
@@ -603,43 +707,46 @@ function TeacherAssignmentsTab({ selectedTeacherId = '', onTeacherSelected }) {
                 description="Use the form above to assign classes"
               />
             ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table className="data-table" style={{ minWidth: '400px' }}>
-                  <thead>
-                    <tr>
-                      <th>Class</th>
-                      <th>Subject</th>
-                      <th>Academic Year</th>
-                      <th style={{ textAlign: 'right' }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {assignments.map(a => (
-                      <tr key={a.id}>
-                        <td style={{ fontWeight: 600 }}>{resolveClassName(a.class_id)}</td>
-                        <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
-                          {a.subject_id
-                            ? subjects.find(s => s.id === a.subject_id)?.name || `Subject #${a.subject_id}`
-                            : <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>All subjects (class teacher)</span>
-                          }
-                        </td>
-                        <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
-                          {years.find(y => y.id === a.academic_year_id)?.label || `Year #${a.academic_year_id}`}
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button
-                            onClick={() => handleRemove(a)}
-                            disabled={removing === a.id}
-                            style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--danger-600)', background: 'var(--danger-50)', border: '1px solid var(--danger-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
-                          >
-                            {removing === a.id ? <span className="spinner" style={{ width: '11px', height: '11px' }} /> : 'Remove'}
-                          </button>
-                        </td>
+              <>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="data-table" style={{ minWidth: '400px' }}>
+                    <thead>
+                      <tr>
+                        <th>Class</th>
+                        <th>Subject</th>
+                        <th>Academic Year</th>
+                        <th style={{ textAlign: 'right' }}>Action</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {pageAssignments.map(a => (
+                        <tr key={a.id}>
+                          <td style={{ fontWeight: 600 }}>{resolveClassName(a.class_id)}</td>
+                          <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
+                            {a.subject_id
+                              ? subjects.find(s => s.id === a.subject_id)?.name || `Subject #${a.subject_id}`
+                              : <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>All subjects (class teacher)</span>
+                            }
+                          </td>
+                          <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
+                            {years.find(y => y.id === a.academic_year_id)?.label || `Year #${a.academic_year_id}`}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button
+                              onClick={() => handleRemove(a)}
+                              disabled={removing === a.id}
+                              style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--danger-600)', background: 'var(--danger-50)', border: '1px solid var(--danger-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
+                            >
+                              {removing === a.id ? <span className="spinner" style={{ width: '11px', height: '11px' }} /> : 'Remove'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <Pagination page={page} totalPages={totalPages} total={assignments.length} pageSize={15} setPage={setPage} />
+              </>
             )}
           </div>
         </>
@@ -802,6 +909,16 @@ function PortalLinkingTab() {
     ? portalUsers.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()))
     : portalUsers
 
+  // ── Pagination for unlinked students list ──
+  const unlinkedStudents = linkStatus?.unlinked_students || []
+  const { page: unlinkedPage, setPage: setUnlinkedPage, pageItems: pageUnlinked, totalPages: unlinkedTotalPages } = usePagination(unlinkedStudents, 10)
+
+  // ── Pagination for portal accounts list ──
+  const { page: portalPage, setPage: setPortalPage, pageItems: pagePortal, totalPages: portalTotalPages } = usePagination(filteredPortal, 15)
+
+  // Reset portal page on search change
+  useEffect(() => { setPortalPage(1) }, [search, setPortalPage])
+
   const studentOptions = students.map(s => ({ value: String(s.id), label: `${s.name_en} (${s.student_id})` }))
   const portalOptions  = portalUsers
     .filter(u => u.role === form.role)
@@ -919,11 +1036,11 @@ function PortalLinkingTab() {
               </div>
             )}
 
-            {/* Per-student unlinked list */}
-            {linkStatus.unlinked_students.length > 0 && (
+            {/* Per-student unlinked list — paginated */}
+            {unlinkedStudents.length > 0 && (
               <div style={{ marginTop: '16px' }}>
                 <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', marginBottom: '8px' }}>
-                  Unlinked Students ({linkStatus.unlinked_students.length})
+                  Unlinked Students ({unlinkedStudents.length})
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                   <table className="data-table" style={{ minWidth: '480px' }}>
@@ -937,7 +1054,7 @@ function PortalLinkingTab() {
                       </tr>
                     </thead>
                     <tbody>
-                      {linkStatus.unlinked_students.map(s => (
+                      {pageUnlinked.map(s => (
                         <tr key={s.id}>
                           <td>
                             <div style={{ fontWeight: 600, fontSize: '13px' }}>{s.name_en}</div>
@@ -1021,6 +1138,7 @@ function PortalLinkingTab() {
                     </tbody>
                   </table>
                 </div>
+                <Pagination page={unlinkedPage} totalPages={unlinkedTotalPages} total={unlinkedStudents.length} pageSize={10} setPage={setUnlinkedPage} />
               </div>
             )}
           </div>
@@ -1083,7 +1201,7 @@ function PortalLinkingTab() {
         </button>
       </div>
 
-      {/* Portal accounts list */}
+      {/* Portal accounts list — paginated */}
       <div className="card">
         <div className="card-header">
           <div className="card-title">All Portal Accounts</div>
@@ -1096,36 +1214,39 @@ function PortalLinkingTab() {
             description="Send invite links above, or create emergency accounts in the Users tab"
           />
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table className="data-table" style={{ minWidth: '400px' }}>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Role</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredPortal.map(u => (
-                  <tr key={u.id}>
-                    <td style={{ fontWeight: 600 }}>{u.name}</td>
-                    <td style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{u.email}</td>
-                    <td><RoleBadge role={u.role} /></td>
-                    <td>
-                      <span style={{
-                        fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
-                        background: u.is_active ? 'var(--success-100)' : 'var(--gray-100)',
-                        color: u.is_active ? 'var(--success-700)' : 'var(--gray-500)',
-                      }}>
-                        {u.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
+          <>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table" style={{ minWidth: '400px' }}>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {pagePortal.map(u => (
+                    <tr key={u.id}>
+                      <td style={{ fontWeight: 600 }}>{u.name}</td>
+                      <td style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{u.email}</td>
+                      <td><RoleBadge role={u.role} /></td>
+                      <td>
+                        <span style={{
+                          fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
+                          background: u.is_active ? 'var(--success-100)' : 'var(--gray-100)',
+                          color: u.is_active ? 'var(--success-700)' : 'var(--gray-500)',
+                        }}>
+                          {u.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination page={portalPage} totalPages={portalTotalPages} total={filteredPortal.length} pageSize={15} setPage={setPortalPage} />
+          </>
         )}
       </div>
     </div>
@@ -1166,6 +1287,9 @@ function TeacherRegistrationTab({ onOpenAssignments }) {
   }, [])
 
   useEffect(() => { loadTeachers() }, [loadTeachers])
+
+  // ── Pagination for teacher list ──
+  const { page, setPage, pageItems: pageTeachers, totalPages } = usePagination(teachers, 15)
 
   const sendInvite = async e => {
     e.preventDefault()
@@ -1321,66 +1445,69 @@ function TeacherRegistrationTab({ onOpenAssignments }) {
           ) : teachers.length === 0 ? (
             <EmptyState title="No teachers yet" description="Send the first registration link from the form." />
           ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table className="data-table" style={{ minWidth: 860 }}>
-                <thead>
-                  <tr>
-                    <th>Teacher</th>
-                    <th>Email</th>
-                    <th>Status</th>
-                    <th>Last Invite</th>
-                    <th style={{ textAlign: 'right' }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {teachers.map(teacher => {
-                    const assignmentCount = assignmentCounts[teacher.id] || 0
-                    const needsAssignment = teacher.is_active && assignmentCount === 0
-                    return (
-                      <tr key={teacher.id}>
-                        <td style={{ fontWeight: 700 }}>{teacher.name}</td>
-                        <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{teacher.email}</td>
-                        <td>
-                          <span style={{
-                            fontSize: 11,
-                            fontWeight: 800,
-                            padding: '3px 8px',
-                            borderRadius: 999,
-                            background: !teacher.is_active ? 'var(--warning-50)' : needsAssignment ? 'var(--brand-50)' : 'var(--success-100)',
-                            color: !teacher.is_active ? 'var(--warning-700)' : needsAssignment ? 'var(--brand-700)' : 'var(--success-700)',
-                          }}>
-                            {!teacher.is_active ? 'Pending invite' : needsAssignment ? 'Active, needs assignment' : 'Active'}
-                          </span>
-                        </td>
-                        <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
-                          {formatInviteDate(teacher.last_invite_sent_at)}
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          {!teacher.is_active ? (
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => resendInvite(teacher)}
-                              disabled={resending === teacher.id}
-                            >
-                              {resending === teacher.id ? <><span className="spinner" style={{ width: 12, height: 12 }} /> Resending...</> : 'Resend Link'}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className={needsAssignment ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
-                              onClick={() => onOpenAssignments(teacher.id)}
-                            >
-                              {needsAssignment ? 'Assign Classes' : `${assignmentCount} Assignment${assignmentCount === 1 ? '' : 's'}`}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="data-table" style={{ minWidth: 860 }}>
+                  <thead>
+                    <tr>
+                      <th>Teacher</th>
+                      <th>Email</th>
+                      <th>Status</th>
+                      <th>Last Invite</th>
+                      <th style={{ textAlign: 'right' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageTeachers.map(teacher => {
+                      const assignmentCount = assignmentCounts[teacher.id] || 0
+                      const needsAssignment = teacher.is_active && assignmentCount === 0
+                      return (
+                        <tr key={teacher.id}>
+                          <td style={{ fontWeight: 700 }}>{teacher.name}</td>
+                          <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{teacher.email}</td>
+                          <td>
+                            <span style={{
+                              fontSize: 11,
+                              fontWeight: 800,
+                              padding: '3px 8px',
+                              borderRadius: 999,
+                              background: !teacher.is_active ? 'var(--warning-50)' : needsAssignment ? 'var(--brand-50)' : 'var(--success-100)',
+                              color: !teacher.is_active ? 'var(--warning-700)' : needsAssignment ? 'var(--brand-700)' : 'var(--success-700)',
+                            }}>
+                              {!teacher.is_active ? 'Pending invite' : needsAssignment ? 'Active, needs assignment' : 'Active'}
+                            </span>
+                          </td>
+                          <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
+                            {formatInviteDate(teacher.last_invite_sent_at)}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            {!teacher.is_active ? (
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => resendInvite(teacher)}
+                                disabled={resending === teacher.id}
+                              >
+                                {resending === teacher.id ? <><span className="spinner" style={{ width: 12, height: 12 }} /> Resending...</> : 'Resend Link'}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className={needsAssignment ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
+                                onClick={() => onOpenAssignments(teacher.id)}
+                              >
+                                {needsAssignment ? 'Assign Classes' : `${assignmentCount} Assignment${assignmentCount === 1 ? '' : 's'}`}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <Pagination page={page} totalPages={totalPages} total={teachers.length} pageSize={15} setPage={setPage} />
+            </>
           )}
         </div>
       </div>
@@ -1444,3 +1571,4 @@ export default function UserManagement() {
     </div>
   )
 }
+
