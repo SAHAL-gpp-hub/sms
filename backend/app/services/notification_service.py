@@ -68,56 +68,56 @@ class EmailOTPProvider:
         return item
 
     def send_outbox(self, item: NotificationOutbox) -> None:
-    logger.info(
-        "SMTP DEBUG → host=%s port=%s user=%s tls=%s ssl=%s to=%s",
-        settings.SMTP_HOST,
-        settings.SMTP_PORT,
-        settings.SMTP_USERNAME,
-        settings.SMTP_USE_TLS,
-        settings.SMTP_USE_SSL,
-        item.destination,
-    )
-
-    if not settings.SMTP_HOST:
-        raise RuntimeError("SMTP_HOST is not configured")
-
-    message = EmailMessage()
-    message["Subject"] = item.subject or "School portal notification"
-    message["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM_EMAIL}>"
-    message["To"] = item.destination
-    message.set_content(item.body)
-
-    try:
-        if settings.SMTP_USE_SSL:
-            smtp = smtplib.SMTP_SSL(
-                settings.SMTP_HOST,
-                settings.SMTP_PORT,
-                timeout=settings.SMTP_TIMEOUT_SECONDS,
-            )
-        else:
-            smtp = smtplib.SMTP(
-                settings.SMTP_HOST,
-                settings.SMTP_PORT,
-                timeout=settings.SMTP_TIMEOUT_SECONDS,
-            )
-
-        with smtp:
-            if settings.SMTP_USE_TLS and not settings.SMTP_USE_SSL:
-                smtp.starttls()
-            if settings.SMTP_USERNAME:
-                smtp.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD or "")
-            smtp.send_message(message)
-            logger.info("SMTP SUCCESS → email sent to %s", item.destination)
-
-    except smtplib.SMTPAuthenticationError as e:
-        logger.error("SMTP AUTH FAILED → %s", e)
-        raise
-    except smtplib.SMTPException as e:
-        logger.error("SMTP ERROR → %s", e)
-        raise
-    except Exception as e:
-        logger.error("SMTP UNEXPECTED ERROR → %s", e)
-        raise
+        logger.info(
+            "SMTP DEBUG → host=%s port=%s user=%s tls=%s ssl=%s to=%s",
+            settings.SMTP_HOST,
+            settings.SMTP_PORT,
+            settings.SMTP_USERNAME,
+            settings.SMTP_USE_TLS,
+            settings.SMTP_USE_SSL,
+            item.destination,
+        )
+    
+        if not settings.SMTP_HOST:
+            raise RuntimeError("SMTP_HOST is not configured")
+    
+        message = EmailMessage()
+        message["Subject"] = item.subject or "School portal notification"
+        message["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM_EMAIL}>"
+        message["To"] = item.destination
+        message.set_content(item.body)
+    
+        try:
+            if settings.SMTP_USE_SSL:
+                smtp = smtplib.SMTP_SSL(
+                    settings.SMTP_HOST,
+                    settings.SMTP_PORT,
+                    timeout=settings.SMTP_TIMEOUT_SECONDS,
+                )
+            else:
+                smtp = smtplib.SMTP(
+                    settings.SMTP_HOST,
+                    settings.SMTP_PORT,
+                    timeout=settings.SMTP_TIMEOUT_SECONDS,
+                )
+    
+            with smtp:
+                if settings.SMTP_USE_TLS and not settings.SMTP_USE_SSL:
+                    smtp.starttls()
+                if settings.SMTP_USERNAME:
+                    smtp.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD or "")
+                smtp.send_message(message)
+                logger.info("SMTP SUCCESS → email sent to %s", item.destination)
+    
+        except smtplib.SMTPAuthenticationError as e:
+            logger.error("SMTP AUTH FAILED → %s", e)
+            raise
+        except smtplib.SMTPException as e:
+            logger.error("SMTP ERROR → %s", e)
+            raise
+        except Exception as e:
+            logger.error("SMTP UNEXPECTED ERROR → %s", e)
+            raise
 
 
 class WhatsAppOTPProvider:
