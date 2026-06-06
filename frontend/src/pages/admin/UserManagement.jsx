@@ -1037,6 +1037,8 @@ function PortalLinkingTab() {
                             <div style={{ fontWeight: 600, fontSize: '13px' }}>{s.name_en}</div>
                             <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{s.student_id}</div>
                           </td>
+
+                          {/* ── FIX: closing </span> was missing in both badge cells ── */}
                           <td>
                             <span style={{
                               fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
@@ -1048,8 +1050,10 @@ function PortalLinkingTab() {
                               {s.has_student_account
                                 ? <><svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Linked</>
                                 : <><svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg> Not linked</>
+                              }
                             </span>
                           </td>
+
                           <td>
                             <span style={{
                               fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
@@ -1061,8 +1065,10 @@ function PortalLinkingTab() {
                               {s.has_parent_account
                                 ? <><svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Linked</>
                                 : <><svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg> Not linked</>
+                              }
                             </span>
                           </td>
+
                           <td style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                             Student email: <strong>{s.has_student_email ? 'Yes' : 'No'}</strong><br />
                             Guardian email: <strong>{s.has_guardian_email ? 'Yes' : 'No'}</strong>
