@@ -76,6 +76,8 @@ class Settings(BaseSettings):
     SMTP_USE_TLS: bool = True
     SMTP_USE_SSL: bool = False
     SMTP_TIMEOUT_SECONDS: int = 10
+    EMAIL_PROVIDER: str = "smtp"
+    RESEND_API_KEY: str | None = None
     NOTIFICATION_WORKER_ENABLED: bool = True
     NOTIFICATION_WORKER_INTERVAL_SECONDS: int = 10
     RESPONSE_CACHE_TTL_SECONDS: int = 20

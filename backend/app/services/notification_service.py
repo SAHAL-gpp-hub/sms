@@ -68,6 +68,41 @@ class EmailOTPProvider:
         return item
 
     def send_outbox(self, item: NotificationOutbox) -> None:
+        if settings.EMAIL_PROVIDER.lower() == "resend":
+            self._send_via_resend(item)
+            return
+        self._send_via_smtp(item)
+
+    def _send_via_resend(self, item: NotificationOutbox) -> None:
+        if not settings.RESEND_API_KEY:
+            raise RuntimeError("RESEND_API_KEY is not configured")
+
+        from_header = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM_EMAIL}>"
+        payload = {
+            "from": from_header,
+            "to": [item.destination],
+            "subject": item.subject or "School portal notification",
+            "text": item.body,
+        }
+        headers = {
+            "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+            "Content-Type": "application/json",
+            "Idempotency-Key": f"notification-outbox-{item.id}",
+        }
+
+        try:
+            with httpx.Client(timeout=settings.SMTP_TIMEOUT_SECONDS) as client:
+                response = client.post("https://api.resend.com/emails", json=payload, headers=headers)
+                response.raise_for_status()
+            logger.info("RESEND SUCCESS → email accepted for %s", item.destination)
+        except httpx.HTTPStatusError as exc:
+            logger.error("RESEND ERROR → %s %s", exc.response.status_code, exc.response.text)
+            raise RuntimeError(f"Resend API error {exc.response.status_code}: {exc.response.text}") from exc
+        except httpx.HTTPError as exc:
+            logger.error("RESEND NETWORK ERROR → %s", exc)
+            raise
+
+    def _send_via_smtp(self, item: NotificationOutbox) -> None:
         logger.info(
             "SMTP DEBUG → host=%s port=%s user=%s tls=%s ssl=%s to=%s",
             settings.SMTP_HOST,
