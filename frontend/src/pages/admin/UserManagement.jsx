@@ -1,17 +1,16 @@
-
 // frontend/src/pages/admin/UserManagement.jsx — Full rebuild
 // Tabs: Users list | Teacher Assignments | Portal Linking
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { adminAPI, setupAPI, studentAPI, extractError } from '../../services/api'
+import { adminAPI, setupAPI, studentAPI, extractError, marksAPI } from '../../services/api'
 import {
   PageHeader, TabBar, EmptyState, TableSkeleton,
   ConfirmModal, SearchInput, Select, FilterRow, Field, ResponsiveTable,
 } from '../../components/UI'
 import { useAcademicYear } from '../../contexts/academicYearContext'
 
-// ── Role colours ──────────────────────────────────────────────────────────────
+// ── Role colours ───────────────────────────────────────────────────────────────
 const ROLE_META = {
   admin:   { color: '#dc2626', bg: '#fff1f2', border: '#fecdd3', label: 'Admin' },
   teacher: { color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', label: 'Teacher' },
@@ -170,9 +169,9 @@ function PasswordResetModal({ user, onClose, onSuccess }) {
   )
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════════
 // TAB 1 — Users List
-// ══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════════
 function UsersTab() {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -208,12 +207,6 @@ function UsersTab() {
       )
     : users
   const visibleUsers = roleFilter ? filtered.filter(user => user.role === roleFilter) : filtered
-
-  // ── Pagination ──
-  const { page, setPage, pageItems: pageUsers, totalPages } = usePagination(visibleUsers, 20)
-
-  // Reset page when filters change
-  useEffect(() => { setPage(1) }, [search, roleFilter, setPage])
 
   const handleDeactivate = async () => {
     if (!deactivateTarget) return
@@ -349,77 +342,79 @@ function UsersTab() {
             action={search || roleFilter ? <button className="btn btn-secondary btn-sm" onClick={clearFilters}>Clear filters</button> : <Link to="/admin/users/new" className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>Add User</Link>}
           />
         ) : (
-          <>
-            <ResponsiveTable>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Role</th>
-                  <th>Status</th>
-                  <th style={{ textAlign: 'right' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pageUsers.map(user => (
-                  <tr key={user.id}>
-                    <td data-label="Name" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{user.name}</td>
-                    <td data-label="Email" style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{user.email}</td>
-                    <td data-label="Role"><RoleBadge role={user.role} /></td>
-                    <td data-label="Status">
-                      <span style={{
-                        display: 'inline-flex',
-                        fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
-                        background: user.is_active ? 'var(--success-100)' : 'var(--gray-100)',
-                        color: user.is_active ? 'var(--success-700)' : user.role === 'teacher' ? 'var(--warning-700)' : 'var(--gray-500)',
-                      }}>
-                        {user.is_active ? 'Active' : user.role === 'teacher' ? 'Pending invite' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td data-label="Actions" style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                        <Link
-                          to={`/admin/users/${user.id}/edit`}
-                          style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--brand-600)', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', textDecoration: 'none' }}
-                        >
-                          Edit
-                        </Link>
+          <ResponsiveTable>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleUsers.map(user => (
+                <tr key={user.id}>
+                  <td data-label="Name" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{user.name}</td>
+                  <td data-label="Email" style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{user.email}</td>
+                  <td data-label="Role"><RoleBadge role={user.role} /></td>
+                  <td data-label="Status">
+                    <span style={{
+                      display: 'inline-flex',
+                      fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
+                      background: user.is_active ? 'var(--success-100)' : 'var(--gray-100)',
+                      color: user.is_active ? 'var(--success-700)' : user.role === 'teacher' ? 'var(--warning-700)' : 'var(--gray-500)',
+                    }}>
+                      {user.is_active ? 'Active' : user.role === 'teacher' ? 'Pending invite' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td data-label="Actions" style={{ textAlign: 'right' }}>
+                    <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                      <Link
+                        to={`/admin/users/${user.id}/edit`}
+                        style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--brand-600)', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', textDecoration: 'none', cursor: 'pointer' }}
+                      >
+                        Edit
+                      </Link>
+                      <button
+                        onClick={() => setResetTarget(user)}
+                        style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--warning-600)', background: 'var(--warning-50)', border: '1px solid #fde68a', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
+                      >
+                        Reset PW
+                      </button>
+                      {!user.is_active && user.role === 'teacher' ? (
                         <button
-                          onClick={() => setResetTarget(user)}
-                          style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--warning-600)', background: 'var(--warning-50)', border: '1px solid #fde68a', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
+                          onClick={async () => {
+                            try {
+                              await adminAPI.resendTeacherInvite(user.id)
+                              toast.success(`Invite resent to ${user.name}`)
+                            } catch (err) {
+                              toast.error(extractError(err))
+                            }
+                          }}
+                          style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--brand-700)', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
                         >
-                          Reset PW
+                          Resend Invite
                         </button>
-                        {!user.is_active && user.role === 'teacher' ? (
-                          <button
-                            onClick={async () => {
-                              try {
-                                await adminAPI.resendTeacherInvite(user.id)
-                                toast.success(`Invite resent to ${user.name}`)
-                              } catch (err) {
-                                toast.error(extractError(err))
-                              }
-                            }}
-                            style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--brand-700)', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
-                          >
-                            Resend Invite
-                          </button>
-                        ) : user.is_active ? (
-                          <button
-                            onClick={() => setDeactivateTarget(user)}
-                            style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--danger-600)', background: 'var(--danger-50)', border: '1px solid var(--danger-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
-                          >
-                            Deactivate
-                          </button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </ResponsiveTable>
-            <Pagination page={page} totalPages={totalPages} total={visibleUsers.length} pageSize={20} setPage={setPage} />
-          </>
+                      ) : user.is_active ? (
+                        <button
+                          onClick={() => setDeactivateTarget(user)}
+                          style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--danger-600)', background: 'var(--danger-50)', border: '1px solid var(--danger-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
+                        >
+                          Deactivate
+                        </button>
+                      ) : null}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </ResponsiveTable>
+        )}
+        {!loading && visibleUsers.length > 0 && (
+          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border-subtle)', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+            Showing {visibleUsers.length} of {users.length} user{users.length !== 1 ? 's' : ''}
+          </div>
         )}
       </div>
 
@@ -457,9 +452,6 @@ function CorrectionRequestsTab() {
 
   useEffect(() => { load() }, [load])
 
-  // ── Pagination ──
-  const { page, setPage, pageItems: pageRows, totalPages } = usePagination(rows, 15)
-
   const resolve = async (row, status) => {
     const verb = status === 'approved' ? 'approve and apply' : 'reject'
     if (!window.confirm(`${verb} correction for ${row.student_name}?`)) return
@@ -489,48 +481,45 @@ function CorrectionRequestsTab() {
       ) : rows.length === 0 ? (
         <EmptyState title="No pending corrections" description="Parent and student profile requests will appear here." />
       ) : (
-        <>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="data-table" style={{ minWidth: 760 }}>
-              <thead>
-                <tr>
-                  <th>Student</th>
-                  <th>Field</th>
-                  <th>Current</th>
-                  <th>Requested</th>
-                  <th>Reason</th>
-                  <th>Actions</th>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="data-table" style={{ minWidth: 760 }}>
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Field</th>
+                <th>Current</th>
+                <th>Requested</th>
+                <th>Reason</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(row => (
+                <tr key={row.id}>
+                  <td style={{ fontWeight: 700 }}>{row.student_name}</td>
+                  <td>{row.field_name}</td>
+                  <td style={{ color: 'var(--text-tertiary)' }}>{row.current_value || '—'}</td>
+                  <td style={{ fontWeight: 700 }}>{row.requested_value}</td>
+                  <td>{row.reason || '—'}</td>
+                  <td>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <button className="btn btn-success btn-sm" disabled={busy === `${row.id}-approved`} onClick={() => resolve(row, 'approved')}>Approve</button>
+                      <button className="btn btn-secondary btn-sm" disabled={busy === `${row.id}-rejected`} onClick={() => resolve(row, 'rejected')}>Reject</button>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {pageRows.map(row => (
-                  <tr key={row.id}>
-                    <td style={{ fontWeight: 700 }}>{row.student_name}</td>
-                    <td>{row.field_name}</td>
-                    <td style={{ color: 'var(--text-tertiary)' }}>{row.current_value || '—'}</td>
-                    <td style={{ fontWeight: 700 }}>{row.requested_value}</td>
-                    <td>{row.reason || '—'}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        <button className="btn btn-success btn-sm" disabled={busy === `${row.id}-approved`} onClick={() => resolve(row, 'approved')}>Approve</button>
-                        <button className="btn btn-secondary btn-sm" disabled={busy === `${row.id}-rejected`} onClick={() => resolve(row, 'rejected')}>Reject</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <Pagination page={page} totalPages={totalPages} total={rows.length} pageSize={15} setPage={setPage} />
-        </>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════════
 // TAB 2 — Teacher Class Assignments
-// ══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════════
 function TeacherAssignmentsTab({ selectedTeacherId = '', onTeacherSelected }) {
   const { selectedYearId, years } = useAcademicYear()
   const [teachers, setTeachers]         = useState([])
@@ -568,9 +557,7 @@ function TeacherAssignmentsTab({ selectedTeacherId = '', onTeacherSelected }) {
   // Load subjects when class changes
   useEffect(() => {
     if (form.class_id) {
-      import('../../services/api').then(({ marksAPI }) => {
-        marksAPI.getSubjects(form.class_id).then(r => setSubjects(r.data || []))
-      })
+      marksAPI.getSubjects(form.class_id).then(r => setSubjects(r.data || []))
     } else {
       setSubjects([])
     }
@@ -702,7 +689,7 @@ function TeacherAssignmentsTab({ selectedTeacherId = '', onTeacherSelected }) {
               <table className="data-table"><TableSkeleton rows={4} cols={4} /></table>
             ) : assignments.length === 0 ? (
               <EmptyState
-                icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 14l9-5-9-5-9 5 9 5z" /></svg>}
+                icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 14l9-5-9-5-9 5 9 5zM12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998" /></svg>}
                 title="No classes assigned"
                 description="Use the form above to assign classes"
               />
@@ -735,7 +722,7 @@ function TeacherAssignmentsTab({ selectedTeacherId = '', onTeacherSelected }) {
                             <button
                               onClick={() => handleRemove(a)}
                               disabled={removing === a.id}
-                              style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--danger-600)', background: 'var(--danger-50)', border: '1px solid var(--danger-100)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
+                              style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--danger-600)', background: 'var(--danger-50)', border: '1px solid var(--danger-100)', cursor: removing === a.id ? 'wait' : 'pointer', fontFamily: 'var(--font-sans)' }}
                             >
                               {removing === a.id ? <span className="spinner" style={{ width: '11px', height: '11px' }} /> : 'Remove'}
                             </button>
@@ -764,9 +751,9 @@ function TeacherAssignmentsTab({ selectedTeacherId = '', onTeacherSelected }) {
   )
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════════
 // TAB 3 — Portal Linking (link student/parent user → student record)
-// ══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════════
 function PortalLinkingTab() {
   const [portalUsers, setPortalUsers] = useState([])
   const [students, setStudents]       = useState([])
@@ -909,16 +896,6 @@ function PortalLinkingTab() {
     ? portalUsers.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()))
     : portalUsers
 
-  // ── Pagination for unlinked students list ──
-  const unlinkedStudents = linkStatus?.unlinked_students || []
-  const { page: unlinkedPage, setPage: setUnlinkedPage, pageItems: pageUnlinked, totalPages: unlinkedTotalPages } = usePagination(unlinkedStudents, 10)
-
-  // ── Pagination for portal accounts list ──
-  const { page: portalPage, setPage: setPortalPage, pageItems: pagePortal, totalPages: portalTotalPages } = usePagination(filteredPortal, 15)
-
-  // Reset portal page on search change
-  useEffect(() => { setPortalPage(1) }, [search, setPortalPage])
-
   const studentOptions = students.map(s => ({ value: String(s.id), label: `${s.name_en} (${s.student_id})` }))
   const portalOptions  = portalUsers
     .filter(u => u.role === form.role)
@@ -1036,11 +1013,11 @@ function PortalLinkingTab() {
               </div>
             )}
 
-            {/* Per-student unlinked list — paginated */}
-            {unlinkedStudents.length > 0 && (
+            {/* Per-student unlinked list */}
+            {linkStatus.unlinked_students.length > 0 && (
               <div style={{ marginTop: '16px' }}>
                 <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', marginBottom: '8px' }}>
-                  Unlinked Students ({unlinkedStudents.length})
+                  Unlinked Students ({linkStatus.unlinked_students.length})
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                   <table className="data-table" style={{ minWidth: '480px' }}>
@@ -1054,7 +1031,7 @@ function PortalLinkingTab() {
                       </tr>
                     </thead>
                     <tbody>
-                      {pageUnlinked.map(s => (
+                      {linkStatus.unlinked_students.map(s => (
                         <tr key={s.id}>
                           <td>
                             <div style={{ fontWeight: 600, fontSize: '13px' }}>{s.name_en}</div>
@@ -1069,8 +1046,8 @@ function PortalLinkingTab() {
                               display: 'inline-flex', alignItems: 'center', gap: '3px',
                             }}>
                               {s.has_student_account
-                                ? <><svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg> Linked</>
-                                : <><svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg> Missing</>}
+                                ? <><svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Linked</>
+                                : <><svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg> Not linked</>
                             </span>
                           </td>
                           <td>
@@ -1082,8 +1059,8 @@ function PortalLinkingTab() {
                               display: 'inline-flex', alignItems: 'center', gap: '3px',
                             }}>
                               {s.has_parent_account
-                                ? <><svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg> Linked</>
-                                : <><svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg> Missing</>}
+                                ? <><svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Linked</>
+                                : <><svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg> Not linked</>
                             </span>
                           </td>
                           <td style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
@@ -1138,7 +1115,6 @@ function PortalLinkingTab() {
                     </tbody>
                   </table>
                 </div>
-                <Pagination page={unlinkedPage} totalPages={unlinkedTotalPages} total={unlinkedStudents.length} pageSize={10} setPage={setUnlinkedPage} />
               </div>
             )}
           </div>
@@ -1147,7 +1123,7 @@ function PortalLinkingTab() {
 
       {/* Explainer */}
       <div style={{ padding: '14px 16px', background: 'var(--brand-50)', border: '1px solid var(--brand-200)', borderRadius: '10px', marginBottom: '16px', fontSize: '13.5px', color: 'var(--brand-700)', lineHeight: 1.6 }}>
-        <strong>How portal activation works:</strong> Admins send invite links first. The invite opens activation directly, then OTP verifies the inbox before the student or parent creates a password. Manual linking remains available for audited emergency repair.
+        <strong>How portal activation works:</strong> Admins send invite links first. The invite opens activation directly, then OTP verifies the inbox before the student or parent creates a password.
       </div>
 
       {/* Link form */}
@@ -1197,11 +1173,12 @@ function PortalLinkingTab() {
         <button className="btn btn-primary" onClick={handleLink} disabled={linking} style={{ width: '100%' }}>
           {linking
             ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Linking…</>
-            : <><svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" style={{ flexShrink: 0 }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg> Link Account to Student</>}
+            : <><svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" style={{ flexShrink: 0 }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg> Link Account</>
+          }
         </button>
       </div>
 
-      {/* Portal accounts list — paginated */}
+      {/* Portal accounts list */}
       <div className="card">
         <div className="card-header">
           <div className="card-title">All Portal Accounts</div>
@@ -1214,39 +1191,36 @@ function PortalLinkingTab() {
             description="Send invite links above, or create emergency accounts in the Users tab"
           />
         ) : (
-          <>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="data-table" style={{ minWidth: '400px' }}>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Role</th>
-                    <th>Status</th>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="data-table" style={{ minWidth: '400px' }}>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredPortal.map(u => (
+                  <tr key={u.id}>
+                    <td style={{ fontWeight: 600 }}>{u.name}</td>
+                    <td style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{u.email}</td>
+                    <td><RoleBadge role={u.role} /></td>
+                    <td>
+                      <span style={{
+                        fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
+                        background: u.is_active ? 'var(--success-100)' : 'var(--gray-100)',
+                        color: u.is_active ? 'var(--success-700)' : 'var(--gray-500)',
+                      }}>
+                        {u.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {pagePortal.map(u => (
-                    <tr key={u.id}>
-                      <td style={{ fontWeight: 600 }}>{u.name}</td>
-                      <td style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{u.email}</td>
-                      <td><RoleBadge role={u.role} /></td>
-                      <td>
-                        <span style={{
-                          fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
-                          background: u.is_active ? 'var(--success-100)' : 'var(--gray-100)',
-                          color: u.is_active ? 'var(--success-700)' : 'var(--gray-500)',
-                        }}>
-                          {u.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <Pagination page={portalPage} totalPages={portalTotalPages} total={filteredPortal.length} pageSize={15} setPage={setPortalPage} />
-          </>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
@@ -1287,9 +1261,6 @@ function TeacherRegistrationTab({ onOpenAssignments }) {
   }, [])
 
   useEffect(() => { loadTeachers() }, [loadTeachers])
-
-  // ── Pagination for teacher list ──
-  const { page, setPage, pageItems: pageTeachers, totalPages } = usePagination(teachers, 15)
 
   const sendInvite = async e => {
     e.preventDefault()
@@ -1408,7 +1379,7 @@ function TeacherRegistrationTab({ onOpenAssignments }) {
             <button className="btn btn-primary btn-lg" disabled={saving}>
               {saving
                 ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Sending link...</>
-                : <><svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg> Send Teacher Registration Link</>
+                : <><svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M3 8l7-4 7 4v10l-7 4-7-4V8z" /></svg> Send Link</>
               }
             </button>
           </div>
@@ -1445,69 +1416,66 @@ function TeacherRegistrationTab({ onOpenAssignments }) {
           ) : teachers.length === 0 ? (
             <EmptyState title="No teachers yet" description="Send the first registration link from the form." />
           ) : (
-            <>
-              <div style={{ overflowX: 'auto' }}>
-                <table className="data-table" style={{ minWidth: 860 }}>
-                  <thead>
-                    <tr>
-                      <th>Teacher</th>
-                      <th>Email</th>
-                      <th>Status</th>
-                      <th>Last Invite</th>
-                      <th style={{ textAlign: 'right' }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pageTeachers.map(teacher => {
-                      const assignmentCount = assignmentCounts[teacher.id] || 0
-                      const needsAssignment = teacher.is_active && assignmentCount === 0
-                      return (
-                        <tr key={teacher.id}>
-                          <td style={{ fontWeight: 700 }}>{teacher.name}</td>
-                          <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{teacher.email}</td>
-                          <td>
-                            <span style={{
-                              fontSize: 11,
-                              fontWeight: 800,
-                              padding: '3px 8px',
-                              borderRadius: 999,
-                              background: !teacher.is_active ? 'var(--warning-50)' : needsAssignment ? 'var(--brand-50)' : 'var(--success-100)',
-                              color: !teacher.is_active ? 'var(--warning-700)' : needsAssignment ? 'var(--brand-700)' : 'var(--success-700)',
-                            }}>
-                              {!teacher.is_active ? 'Pending invite' : needsAssignment ? 'Active, needs assignment' : 'Active'}
-                            </span>
-                          </td>
-                          <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
-                            {formatInviteDate(teacher.last_invite_sent_at)}
-                          </td>
-                          <td style={{ textAlign: 'right' }}>
-                            {!teacher.is_active ? (
-                              <button
-                                type="button"
-                                className="btn btn-secondary btn-sm"
-                                onClick={() => resendInvite(teacher)}
-                                disabled={resending === teacher.id}
-                              >
-                                {resending === teacher.id ? <><span className="spinner" style={{ width: 12, height: 12 }} /> Resending...</> : 'Resend Link'}
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                className={needsAssignment ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
-                                onClick={() => onOpenAssignments(teacher.id)}
-                              >
-                                {needsAssignment ? 'Assign Classes' : `${assignmentCount} Assignment${assignmentCount === 1 ? '' : 's'}`}
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <Pagination page={page} totalPages={totalPages} total={teachers.length} pageSize={15} setPage={setPage} />
-            </>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table" style={{ minWidth: 860 }}>
+                <thead>
+                  <tr>
+                    <th>Teacher</th>
+                    <th>Email</th>
+                    <th>Status</th>
+                    <th>Last Invite</th>
+                    <th style={{ textAlign: 'right' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {teachers.map(teacher => {
+                    const assignmentCount = assignmentCounts[teacher.id] || 0
+                    const needsAssignment = teacher.is_active && assignmentCount === 0
+                    return (
+                      <tr key={teacher.id}>
+                        <td style={{ fontWeight: 700 }}>{teacher.name}</td>
+                        <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{teacher.email}</td>
+                        <td>
+                          <span style={{
+                            fontSize: 11,
+                            fontWeight: 800,
+                            padding: '3px 8px',
+                            borderRadius: 999,
+                            background: !teacher.is_active ? 'var(--warning-50)' : needsAssignment ? 'var(--brand-50)' : 'var(--success-100)',
+                            color: !teacher.is_active ? 'var(--warning-700)' : needsAssignment ? 'var(--brand-700)' : 'var(--success-700)',
+                          }}>
+                            {!teacher.is_active ? 'Pending invite' : needsAssignment ? 'Active, needs assignment' : 'Active'}
+                          </span>
+                        </td>
+                        <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
+                          {formatInviteDate(teacher.last_invite_sent_at)}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          {!teacher.is_active ? (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => resendInvite(teacher)}
+                              disabled={resending === teacher.id}
+                            >
+                              {resending === teacher.id ? <><span className="spinner" style={{ width: 12, height: 12 }} /> Resending...</> : 'Resend Link'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className={needsAssignment ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
+                              onClick={() => onOpenAssignments(teacher.id)}
+                            >
+                              {needsAssignment ? 'Assign Classes' : `${assignmentCount} Assignment${assignmentCount === 1 ? '' : 's'}`}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>
@@ -1515,9 +1483,9 @@ function TeacherRegistrationTab({ onOpenAssignments }) {
   )
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
 // Main UserManagement — tabs wrapper
-// ══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
 const TAB_ICONS = {
   register: (
     <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -1526,7 +1494,7 @@ const TAB_ICONS = {
   ),
   users: (
     <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
     </svg>
   ),
   assignments: (
@@ -1571,4 +1539,3 @@ export default function UserManagement() {
     </div>
   )
 }
-
