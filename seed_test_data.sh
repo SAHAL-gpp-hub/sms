@@ -22,23 +22,8 @@ echo -e "${NC}"
 # =============================================================================
 # STEP 0 — Create admin user
 # =============================================================================
-info "Step 0: Creating admin user..."
-docker compose exec -T backend python3 -c "
-import sys; sys.path.insert(0, '/app')
-from app.core.database import SessionLocal
-from app.models.base_models import User
-from app.core.security import get_password_hash
-db = SessionLocal()
-if db.query(User).filter_by(email='admin@iqraschool.in').first():
-    print('Admin already exists')
-else:
-    db.add(User(name='Admin', email='admin@iqraschool.in',
-                password_hash=get_password_hash('admin123'),
-                role='admin', is_active=True))
-    db.commit()
-    print('Admin created')
-db.close()
-"
+info "Step 0: Admin already exists — skipping creation..."
+
 
 # =============================================================================
 # STEP 1 — Get auth token

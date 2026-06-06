@@ -3,10 +3,10 @@ attendance_service.py — Updated.
 
 Key fixes vs original:
   1. get_monthly_summary() now uses calendar_service.count_working_days_for_month()
-     instead of hardcoded "exclude Sundays" — so holidays are deducted from
-     the denominator correctly.
+    instead of hardcoded "exclude Sundays" — so holidays are deducted from
+    the denominator correctly.
   2. get_attendance_for_date() now accepts academic_year_id so calendar
-     service can look up holidays.
+    service can look up holidays.
   3. All other existing behaviour preserved.
 """
 

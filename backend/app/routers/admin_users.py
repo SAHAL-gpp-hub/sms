@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta, timezone
 import secrets
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -14,6 +14,7 @@ from app.models.base_models import AcademicYear, Branch, Class, CorrectionReques
 from app.routers.auth import CurrentUser, require_role
 from app.services.audit_service import log_data_change, model_snapshot
 from app.services import student_activation_service
+from app.services.notification_service import process_pending_notifications, process_pending_notifications_once
 
 
 router = APIRouter(prefix="/api/v1/admin", tags=["Admin Users"])
@@ -249,6 +250,7 @@ class BranchOut(BaseModel):
 )
 def create_user(
     data: AdminUserCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_role("admin")),
 ):
@@ -278,6 +280,8 @@ def create_user(
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail="User email already exists") from exc
+    if data.send_invite:
+        background_tasks.add_task(process_pending_notifications_once)
     db.refresh(user)
     return _user_out(db, user, invite_url)
 
@@ -342,6 +346,7 @@ def update_user(
 @router.post("/users/{user_id}/resend-invite", response_model=StaffInviteResponse)
 def resend_staff_invite(
     user_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_role("admin")),
 ):
@@ -354,11 +359,13 @@ def resend_staff_invite(
         raise HTTPException(status_code=409, detail="Teacher account is already active")
     invite_url = _queue_staff_invite_for_user(db, user)
     db.commit()
+    background_tasks.add_task(process_pending_notifications_once)
     return StaffInviteResponse(user_id=user.id, email=user.email, invitation_url=invite_url)
 
 
 @router.post("/teachers/resend-pending-invites", response_model=BulkStaffInviteResponse)
 def resend_pending_staff_invites(
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_role("admin")),
 ):
@@ -377,6 +384,7 @@ def resend_pending_staff_invites(
             failures.append(StaffInviteFailure(user_id=teacher.id, email=teacher.email, error=str(exc)))
     if queued:
         db.commit()
+        background_tasks.add_task(process_pending_notifications_once)
     return BulkStaffInviteResponse(
         queued=queued,
         skipped_active=skipped_active,
@@ -777,6 +785,7 @@ def generate_portal_accounts_for_student(
 def resend_activation_for_student(
     student_id: int,
     data: AdminActivationResendRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_role("admin")),
 ):
@@ -786,7 +795,7 @@ def resend_activation_for_student(
     email = student.student_email if data.account_type == "student" else student.guardian_email
     if not email:
         raise HTTPException(status_code=422, detail=f"{data.account_type.title()} email is missing for this student")
-    return student_activation_service.start_activation(
+    result = student_activation_service.start_activation(
         db,
         student.student_id,
         email,
@@ -794,6 +803,8 @@ def resend_activation_for_student(
         None,
         "admin-resend",
     )
+    background_tasks.add_task(process_pending_notifications_once)
+    return result
 
 
 @router.post(
@@ -804,18 +815,21 @@ def resend_activation_for_student(
 def create_activation_invite_for_student(
     student_id: int,
     data: AdminActivationResendRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_role("admin")),
 ):
     student = db.query(Student).filter_by(id=student_id).first()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
-    return student_activation_service.create_activation_invite(
+    result = student_activation_service.create_activation_invite(
         db,
         student,
         data.account_type,
         current_user.id,
     )
+    background_tasks.add_task(process_pending_notifications_once)
+    return result
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -899,6 +913,19 @@ def list_otp_failures(
         for row in rows
     ]
     return OtpOutboxResponse(total=len(items), items=items)
+
+
+@router.post(
+    "/notifications/process-pending",
+    summary="Process pending notification outbox entries immediately",
+)
+def process_pending_notification_outbox(
+    limit: int = Query(20, ge=1, le=200, description="Max number of pending records to process"),
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
+    sent = process_pending_notifications(db, limit=limit)
+    return {"processed": True, "sent": sent}
 
 
 @router.get("/branches", response_model=list[BranchOut])

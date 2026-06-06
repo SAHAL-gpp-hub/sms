@@ -656,6 +656,14 @@ def process_pending_notifications(db: Session, limit: int = 20) -> int:
     return sent
 
 
+def process_pending_notifications_once(limit: int = 20) -> None:
+    try:
+        with SessionLocal() as db:
+            process_pending_notifications(db, limit=limit)
+    except Exception as exc:
+        logger.exception("One-shot notification delivery failed: %s", exc)
+
+
 async def run_notification_worker(stop_event: asyncio.Event) -> None:
     while not stop_event.is_set():
         try:

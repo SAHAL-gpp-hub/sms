@@ -1,12 +1,13 @@
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response
 from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.routers.auth import Token, create_refresh_session, limiter
+from app.services.notification_service import process_pending_notifications_once
 from app.services import student_activation_service
 
 router = APIRouter(prefix="/api/v1/student-auth", tags=["Student Activation"])
@@ -70,9 +71,10 @@ class AcceptInviteRequest(BaseModel):
 def start_activation(
     request: Request,
     data: StartActivationRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    return student_activation_service.start_activation(
+    result = student_activation_service.start_activation(
         db,
         data.identifier,
         str(data.email),
@@ -80,6 +82,8 @@ def start_activation(
         request.client.host if request.client else None,
         request.headers.get("user-agent"),
     )
+    background_tasks.add_task(process_pending_notifications_once)
+    return result
 
 
 @router.post("/accept-invite", response_model=ActivationStartResponse)
@@ -87,14 +91,17 @@ def start_activation(
 def accept_invite(
     request: Request,
     data: AcceptInviteRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    return student_activation_service.accept_activation_invite(
+    result = student_activation_service.accept_activation_invite(
         db,
         data.invite_token,
         request.client.host if request.client else None,
         request.headers.get("user-agent"),
     )
+    background_tasks.add_task(process_pending_notifications_once)
+    return result
 
 
 @router.post("/resend-otp", response_model=ActivationStartResponse)
@@ -102,9 +109,12 @@ def accept_invite(
 def resend_otp(
     request: Request,
     data: ResendOTPRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    return student_activation_service.resend_otp(db, data.activation_id)
+    result = student_activation_service.resend_otp(db, data.activation_id)
+    background_tasks.add_task(process_pending_notifications_once)
+    return result
 
 
 @router.post("/verify-otp", response_model=VerifyOTPResponse)
