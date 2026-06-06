@@ -1474,6 +1474,7 @@ export default function MarksEntry() {
     setSelectedYearId,
   } = useAcademicYear()
   const { user: authUser, isTeacher, subjectAssignments, classTeacherClassIds, subjectClassIds: marksClassIds } = useRoleContext()
+
   const [classes, setClasses]         = useState([])
   const [exams, setExams]             = useState([])
   const [selectedClass, setSelectedClass] = useState('')
@@ -1501,10 +1502,32 @@ export default function MarksEntry() {
   const [newExam, setNewExam]         = useState({ name: '', exam_date: '' })
   const [creatingExam, setCreatingExam] = useState(false)
 
-  // ── draftKey — depends on selectedExam + selectedClass ───────────────────
+  // ── draftKey ─────────────────────────────────────────────────────────────
   const draftKey = selectedExam && selectedClass ? `marks-draft:${selectedClass}:${selectedExam}` : null
 
-  // ── loadGrid — defined BEFORE the useEffects that reference it ────────────
+  // ── Role/permission derived values — MUST be defined before loadGrid and
+  //    handleMarkChange which reference canEditSubject in their dep arrays ───
+  const teacherSubjectIds = useMemo(() => (
+    subjectAssignments
+      .filter(assignment => Number(assignment.class_id) === Number(selectedClass))
+      .map(assignment => Number(assignment.subject_id))
+  ), [selectedClass, subjectAssignments])
+
+  const isClassTeacherForSelectedClass = useMemo(() => (
+    classTeacherClassIds.map(Number).includes(Number(selectedClass))
+  ), [classTeacherClassIds, selectedClass])
+
+  const hasSpecificSubjectsForSelectedClass = teacherSubjectIds.length > 0
+
+  const canEditSubject = useCallback((subjectId) => (
+    !isClosedYear && (
+      !isTeacher ||
+      (!hasSpecificSubjectsForSelectedClass && isClassTeacherForSelectedClass) ||
+      teacherSubjectIds.includes(Number(subjectId))
+    )
+  ), [hasSpecificSubjectsForSelectedClass, isClassTeacherForSelectedClass, isClosedYear, isTeacher, teacherSubjectIds])
+
+  // ── loadGrid — canEditSubject is defined above so this is safe ────────────
   const loadGrid = useCallback(async () => {
     if (!selectedExam || !selectedClass) return
     setLoadingGrid(true)
@@ -1686,7 +1709,7 @@ export default function MarksEntry() {
           const m = localMarks[s.student_id]?.[sub.id]
           if (m?.is_locked) return
           entries.push({
-            enrollment_id:    s.enrollment_id,
+            enrollment_id:   s.enrollment_id,
             student_id:      s.student_id,
             subject_id:      sub.id,
             exam_id:         parseInt(selectedExam),
@@ -1762,11 +1785,13 @@ export default function MarksEntry() {
   const hasStudents  = gridData?.students?.length > 0
   const hasCustomConfig = gridData?.subjects?.some(s => s.has_custom_config)
   const examName     = exams.find(e => String(e.id) === selectedExam)?.name || 'Exam'
+
   const visibleSubjects = useMemo(() => {
     if (!gridData?.subjects) return []
     if (subjectFilter === 'all') return gridData.subjects
     return gridData.subjects.filter(subject => String(subject.id) === subjectFilter)
   }, [gridData, subjectFilter])
+
   const virtualRows = useMemo(() => {
     const students = gridData?.students || []
     if (isCompactMarksLayout || students.length <= 24) {
@@ -1785,29 +1810,15 @@ export default function MarksEntry() {
       rows: students.slice(start, end).map((student, offset) => ({ student, index: start + offset })),
     }
   }, [gridData, gridScrollTop, gridViewportHeight, isCompactMarksLayout])
+
   const handleGridScroll = useCallback(event => {
     setGridScrollTop(event.currentTarget.scrollTop)
     setGridViewportHeight(event.currentTarget.clientHeight || 620)
   }, [])
-  const teacherSubjectIds = useMemo(() => (
-    subjectAssignments
-      .filter(assignment => Number(assignment.class_id) === Number(selectedClass))
-      .map(assignment => Number(assignment.subject_id))
-  ), [selectedClass, subjectAssignments])
-  const isClassTeacherForSelectedClass = useMemo(() => (
-    classTeacherClassIds.map(Number).includes(Number(selectedClass))
-  ), [classTeacherClassIds, selectedClass])
-  const hasSpecificSubjectsForSelectedClass = teacherSubjectIds.length > 0
-  const canEditSubject = useCallback((subjectId) => (
-    !isClosedYear && (
-      !isTeacher ||
-      (!hasSpecificSubjectsForSelectedClass && isClassTeacherForSelectedClass) ||
-      teacherSubjectIds.includes(Number(subjectId))
-    )
-  ), [hasSpecificSubjectsForSelectedClass, isClassTeacherForSelectedClass, isClosedYear, isTeacher, teacherSubjectIds])
 
   const selectedClassMeta = classes.find(c => String(c.id) === selectedClass)
   const selectedClassLabel = selectedClassMeta ? `Class ${selectedClassMeta.name} - ${selectedClassMeta.division}` : 'No class selected'
+
   const entryStats = useMemo(() => {
     if (!gridData) {
       return { filled: 0, editable: 0, absent: 0, locked: 0, invalid: 0, completion: 0 }
@@ -2103,8 +2114,7 @@ export default function MarksEntry() {
                 examId={parseInt(selectedExam)}
                 classId={parseInt(selectedClass)}
                 onConfigSaved={() => {
-                  if (view === 'entry') loadGrid()
-                  else loadGrid()
+                  loadGrid()
                 }}
               />
             </div>
@@ -2197,72 +2207,72 @@ export default function MarksEntry() {
                           onScroll={handleGridScroll}
                         >
                           <table className="me-marks-table">
-                          <thead>
-                            <tr>
-                              <th className="me-sticky-student" style={{
-                                padding: '11px 14px',
-                                textAlign: 'left',
-                                fontSize: '11px',
-                                textTransform: 'uppercase',
-                                letterSpacing: '0.06em',
-                                color: 'var(--text-secondary)',
-                                minWidth: '190px',
-                              }}>
-                                Student
-                              </th>
-                              <th className="me-sticky-roll" style={{
-                                padding: '11px 10px',
-                                fontWeight: 800,
-                                fontSize: '11px',
-                                textTransform: 'uppercase',
-                                letterSpacing: '0.06em',
-                                color: 'var(--text-secondary)',
-                                width: '58px',
-                              }}>Roll</th>
-                              {visibleSubjects.map(sub => (
-                                <th
-                                  key={sub.id}
-                                  className={`me-subject-head ${sub.max_practical > 0 ? 'has-practical' : ''} ${sub.has_custom_config ? 'custom' : ''}`}
-                                >
-                                  <div className="me-subject-name">
-                                    {sub.name}
-                                    {sub.has_custom_config && (
-                                      <span title="Custom marks for this exam" style={{ fontSize: '10px', fontWeight: 800 }}>C</span>
-                                    )}
-                                  </div>
-                                  <div className="me-subject-max">
-                                    T/{sub.max_theory}{sub.max_practical > 0 ? ` · P/${sub.max_practical}` : ''}
-                                    {sub.has_custom_config && (
-                                      <span style={{ marginLeft: '3px' }}>(custom)</span>
-                                    )}
-                                  </div>
+                            <thead>
+                              <tr>
+                                <th className="me-sticky-student" style={{
+                                  padding: '11px 14px',
+                                  textAlign: 'left',
+                                  fontSize: '11px',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.06em',
+                                  color: 'var(--text-secondary)',
+                                  minWidth: '190px',
+                                }}>
+                                  Student
                                 </th>
+                                <th className="me-sticky-roll" style={{
+                                  padding: '11px 10px',
+                                  fontWeight: 800,
+                                  fontSize: '11px',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.06em',
+                                  color: 'var(--text-secondary)',
+                                  width: '58px',
+                                }}>Roll</th>
+                                {visibleSubjects.map(sub => (
+                                  <th
+                                    key={sub.id}
+                                    className={`me-subject-head ${sub.max_practical > 0 ? 'has-practical' : ''} ${sub.has_custom_config ? 'custom' : ''}`}
+                                  >
+                                    <div className="me-subject-name">
+                                      {sub.name}
+                                      {sub.has_custom_config && (
+                                        <span title="Custom marks for this exam" style={{ fontSize: '10px', fontWeight: 800 }}>C</span>
+                                      )}
+                                    </div>
+                                    <div className="me-subject-max">
+                                      T/{sub.max_theory}{sub.max_practical > 0 ? ` · P/${sub.max_practical}` : ''}
+                                      {sub.has_custom_config && (
+                                        <span style={{ marginLeft: '3px' }}>(custom)</span>
+                                      )}
+                                    </div>
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {virtualRows.topPadding > 0 && (
+                                <tr aria-hidden="true">
+                                  <td colSpan={visibleSubjects.length + 2} style={{ height: virtualRows.topPadding, padding: 0, border: 0 }} />
+                                </tr>
+                              )}
+                              {virtualRows.rows.map(({ student, index }) => (
+                                <MarksGridRow
+                                  key={student.student_id}
+                                  student={student}
+                                  subjects={visibleSubjects}
+                                  marks={localMarks[student.student_id] || {}}
+                                  rowIndex={index}
+                                  onChange={handleMarkChange}
+                                  canEditSubject={canEditSubject}
+                                />
                               ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {virtualRows.topPadding > 0 && (
-                              <tr aria-hidden="true">
-                                <td colSpan={visibleSubjects.length + 2} style={{ height: virtualRows.topPadding, padding: 0, border: 0 }} />
-                              </tr>
-                            )}
-                            {virtualRows.rows.map(({ student, index }) => (
-                              <MarksGridRow
-                                key={student.student_id}
-                                student={student}
-                                subjects={visibleSubjects}
-                                marks={localMarks[student.student_id] || {}}
-                                rowIndex={index}
-                                onChange={handleMarkChange}
-                                canEditSubject={canEditSubject}
-                              />
-                            ))}
-                            {virtualRows.bottomPadding > 0 && (
-                              <tr aria-hidden="true">
-                                <td colSpan={visibleSubjects.length + 2} style={{ height: virtualRows.bottomPadding, padding: 0, border: 0 }} />
-                              </tr>
-                            )}
-                          </tbody>
+                              {virtualRows.bottomPadding > 0 && (
+                                <tr aria-hidden="true">
+                                  <td colSpan={visibleSubjects.length + 2} style={{ height: virtualRows.bottomPadding, padding: 0, border: 0 }} />
+                                </tr>
+                              )}
+                            </tbody>
                           </table>
                         </div>
                       )}
