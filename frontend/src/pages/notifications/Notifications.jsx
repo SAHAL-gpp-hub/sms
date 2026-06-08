@@ -242,7 +242,13 @@ function CustomMessageComposer({ onSent }) {
               disabled={loadingClasses}
             >
               <option value="">{loadingClasses ? 'Loading…' : 'Select class'}</option>
-              {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {classes.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.division
+                      ? `${c.name} — ${c.division}`
+                      : c.name}
+                  </option>
+                ))}
             </select>
           </Field>
         )}
