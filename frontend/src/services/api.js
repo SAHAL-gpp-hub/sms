@@ -565,6 +565,8 @@ export const notificationAPI = {
   triggerLowAttendance: (data = {}) => api.post('/notifications/trigger/low-attendance', data),
   sendTest: (data) => api.post('/notifications/test', data),
   retry: (outboxId) => api.post(`/notifications/retry/${outboxId}`),
+  sendRegistrationLink: (data) => api.post('/notifications/send-registration-link', data),
+  sendCustomMessage:     (data) => api.post('/notifications/send-custom', data),
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────

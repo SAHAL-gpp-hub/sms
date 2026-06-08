@@ -179,6 +179,9 @@ class WhatsAppOTPProvider:
                 caption=payload.get("caption"),
             )
             return
+        if payload.get("message_type") == "text":
+            send_whatsapp_text(item.destination, item.body)
+            return
         send_whatsapp_template(
             phone=item.destination,
             template_name=payload.get("template_name", "portal_activation_code"),
@@ -314,6 +317,31 @@ def send_whatsapp_document(
         return response.json()
 
 
+def send_whatsapp_text(phone: str, message: str) -> dict:
+    if not settings.WHATSAPP_TOKEN or not settings.WHATSAPP_PHONE_NUMBER_ID:
+        raise RuntimeError("WhatsApp Cloud API is not configured")
+
+    destination = _normalize_indian_phone(phone)
+    url = (
+        f"https://graph.facebook.com/{settings.WHATSAPP_API_VERSION}/"
+        f"{settings.WHATSAPP_PHONE_NUMBER_ID}/messages"
+    )
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": f"91{destination}",
+        "type": "text",
+        "text": {"preview_url": False, "body": message},
+    }
+    headers = {
+        "Authorization": f"Bearer {settings.WHATSAPP_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    with httpx.Client(timeout=10.0) as client:
+        response = client.post(url, json=payload, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+
 def send_sms(phone: str, message: str) -> dict:
     if settings.SMS_PROVIDER != "msg91":
         raise RuntimeError(f"Unsupported SMS provider: {settings.SMS_PROVIDER}")
@@ -393,6 +421,71 @@ def enqueue_template_notification(
         recipient_phone=destination,
         template_name=template_name,
         message_preview=body,
+        status="queued",
+        idempotency_key=idempotency_key,
+        outbox_id=item.id,
+    )
+    db.add(log)
+    db.flush()
+    return log
+
+
+def enqueue_text_notification(
+    db: Session,
+    *,
+    student_id: int | None,
+    sender_user_id: int | None,
+    sender_name: str | None,
+    notification_type: str,
+    channel: str,
+    phone: str,
+    message: str,
+    idempotency_key: str | None = None,
+    recipients: list[str] | None = None,
+    sent_count: int | None = None,
+    failed_count: int | None = None,
+) -> NotificationLog:
+    destination = _normalize_indian_phone(phone)
+    if idempotency_key:
+        existing = (
+            db.query(NotificationLog)
+            .filter(NotificationLog.idempotency_key == idempotency_key)
+            .first()
+        )
+        if existing:
+            return existing
+
+    item = NotificationOutbox(
+        provider=channel,
+        destination=destination,
+        subject=notification_type,
+        body=message,
+        payload={
+            "student_id": student_id,
+            "sender_user_id": sender_user_id,
+            "sender_name": sender_name,
+            "notification_type": notification_type,
+            "message_type": "text",
+            "recipients": recipients or [destination],
+            "sent_count": sent_count,
+            "failed_count": failed_count,
+        },
+    )
+    db.add(item)
+    db.flush()
+
+    log = NotificationLog(
+        student_id=student_id,
+        sender_user_id=sender_user_id,
+        sender_name=sender_name,
+        notification_type=notification_type,
+        channel=channel,
+        recipient_phone=destination,
+        recipients=recipients or [destination],
+        template_name=None,
+        message_preview=message,
+        sent_count=sent_count,
+        failed_count=failed_count,
         status="queued",
         idempotency_key=idempotency_key,
         outbox_id=item.id,

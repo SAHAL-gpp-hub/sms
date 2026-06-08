@@ -1,10 +1,11 @@
 from datetime import date, datetime, timedelta, timezone
 import secrets
-from typing import Optional
+from typing import Optional, Union
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -74,6 +75,15 @@ class AdminUserOut(BaseModel):
     can_resend_invite: bool = False
 
     model_config = {"from_attributes": True}
+
+
+class AdminUserPageOut(BaseModel):
+    items: list[AdminUserOut]
+    total: int
+    total_pages: int
+    page: int
+    page_size: int
+    role_counts: dict[str, int]
 
 
 class StaffInviteResponse(BaseModel):
@@ -286,10 +296,13 @@ def create_user(
     return _user_out(db, user, invite_url)
 
 
-@router.get("/users", response_model=list[AdminUserOut])
+@router.get("/users", response_model=Union[AdminUserPageOut, list[AdminUserOut]])
 def list_users(
     role: Optional[str] = Query(None),
     is_active: Optional[bool] = Query(None),
+    search: Optional[str] = Query(None),
+    page: Optional[int] = Query(None, ge=1),
+    page_size: Optional[int] = Query(None, ge=1),
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_role("admin")),
 ):
@@ -298,6 +311,36 @@ def list_users(
         query = query.filter(User.role == role)
     if is_active is not None:
         query = query.filter(User.is_active == is_active)
+    if search:
+        search_query = f"%{search.strip()}%"
+        query = query.filter(
+            (User.name.ilike(search_query)) | (User.email.ilike(search_query))
+        )
+
+    if page is not None or page_size is not None:
+        p = page or 1
+        ps = page_size or 20
+
+        total = query.count()
+        total_pages = (total + ps - 1) // ps if total > 0 else 0
+
+        items = query.order_by(User.name).offset((p - 1) * ps).limit(ps).all()
+
+        role_counts = (
+            db.query(User.role, func.count(User.id))
+            .group_by(User.role)
+            .all()
+        )
+
+        return {
+            "items": [_user_out(db, user) for user in items],
+            "total": total,
+            "total_pages": total_pages,
+            "page": p,
+            "page_size": ps,
+            "role_counts": {role: count for role, count in role_counts},
+        }
+
     return [_user_out(db, user) for user in query.order_by(User.name).all()]
 
 

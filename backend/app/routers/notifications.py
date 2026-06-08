@@ -1,15 +1,19 @@
+import secrets
+import uuid
+import logging
 from calendar import monthrange
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, List
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.base_models import AcademicYear, Attendance, Class, FeePayment, NotificationLog, NotificationOutbox, Student, StudentFee, StudentStatusEnum
+from app.models.base_models import AcademicYear, Attendance, Class, FeePayment, NotificationLog, NotificationOutbox, Student, StudentFee, StudentStatusEnum, PortalActivationInvite
 from app.routers.auth import CurrentUser, require_role
 from app.schemas.notifications import (
     NotificationLogOut,
@@ -22,7 +26,12 @@ from app.services.notification_service import (
     enqueue_fee_due_reminders,
     enqueue_low_attendance_alerts,
     enqueue_template_notification,
+    enqueue_text_notification,
+    process_pending_notifications_once,
 )
+from app.services.student_activation_service import hash_invite_token, normalize_email
+
+logger = logging.getLogger("sms.notifications")
 
 router = APIRouter(prefix="/api/v1/notifications", tags=["Notifications"])
 
@@ -278,3 +287,183 @@ def retry_notification(
     item.last_error = None
     db.commit()
     return {"message": "Notification queued for retry", "id": outbox_id}
+
+
+class SendRegistrationLinkRequest(BaseModel):
+    class_ids: List[int]
+    channel: str
+
+
+@router.post("/send-registration-link")
+def send_registration_link(
+    body: SendRegistrationLinkRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_role("admin")),
+):
+    channel_lower = body.channel.lower().strip()
+    if channel_lower not in {"whatsapp", "sms", "both"}:
+        raise HTTPException(status_code=422, detail="Channel must be whatsapp, sms, or both")
+
+    # Get active students in selected classes
+    students = (
+        db.query(Student)
+        .filter(
+            Student.class_id.in_(body.class_ids),
+            Student.status == StudentStatusEnum.Active,
+        )
+        .all()
+    )
+
+    sent = 0
+    failed = 0
+
+    portal_base = settings.PORTAL_PUBLIC_URL.rstrip("/")
+    now = datetime.now(timezone.utc)
+
+    for student in students:
+        # Skip if parent already has linked account
+        if student.parent_user_id is not None:
+            continue
+
+        # Check for email and phone candidate
+        email = student.guardian_email
+        phone = student.guardian_phone or student.contact
+
+        if not email or not phone:
+            failed += 1
+            continue
+
+        try:
+            # Create PortalActivationInvite
+            raw_token = secrets.token_urlsafe(32)
+            invite = PortalActivationInvite(
+                invite_id=str(uuid.uuid4()),
+                token_hash=hash_invite_token(raw_token),
+                student_id=student.id,
+                account_type="parent",
+                destination=normalize_email(email),
+                created_by_user_id=current_user.id,
+                expires_at=now + timedelta(days=7),
+            )
+            db.add(invite)
+            db.flush()
+
+            invite_url = f"{portal_base}/activate-account?invite={raw_token}"
+            message = (
+                f"Dear Parent,\n\n"
+                f"Use this secure link to activate your school portal account for {student.name_en}:\n"
+                f"{invite_url}\n\n"
+                f"This link expires in 7 days."
+            )
+
+            # Send via chosen channels
+            channels_to_send = []
+            if channel_lower == "both":
+                channels_to_send = ["whatsapp", "sms"]
+            else:
+                channels_to_send = [channel_lower]
+
+            for chan in channels_to_send:
+                enqueue_text_notification(
+                    db,
+                    student_id=student.id,
+                    sender_user_id=current_user.id,
+                    sender_name=current_user.name,
+                    notification_type="registration_invite",
+                    channel=chan,
+                    phone=phone,
+                    message=message,
+                    idempotency_key=f"parent_invite:{invite.invite_id}:{chan}",
+                )
+
+            sent += 1
+
+        except Exception as exc:
+            logger.error("Failed to send registration invite for student %s: %s", student.id, exc)
+            db.rollback()
+            failed += 1
+            continue
+
+    db.commit()
+    background_tasks.add_task(process_pending_notifications_once)
+    return {"sent": sent, "failed": failed}
+
+
+class SendCustomMessageRequest(BaseModel):
+    recipient_type: str          # "all_students" | "all_parents" | "class" | "student"
+    class_id: Optional[int] = None
+    student_id: Optional[int] = None
+    channel: str                 # "whatsapp" | "sms" | "both"
+    message: str
+
+
+@router.post("/send-custom")
+def send_custom_message(
+    body: SendCustomMessageRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_role("admin")),
+):
+    # ── Validate inputs ────────────────────────────────────────────────────────
+    if body.recipient_type not in {"all_students", "all_parents", "class", "student"}:
+        raise HTTPException(status_code=422, detail="recipient_type must be all_students, all_parents, class, or student")
+    channel_lower = body.channel.lower().strip()
+    if channel_lower not in {"whatsapp", "sms", "both"}:
+        raise HTTPException(status_code=422, detail="channel must be whatsapp, sms, or both")
+    message = body.message.strip()
+    if not message:
+        raise HTTPException(status_code=422, detail="message cannot be empty")
+    if len(message) > 1000:
+        raise HTTPException(status_code=422, detail="message exceeds 1000 character limit")
+    if body.recipient_type == "class" and not body.class_id:
+        raise HTTPException(status_code=422, detail="class_id is required when recipient_type is class")
+    if body.recipient_type == "student" and not body.student_id:
+        raise HTTPException(status_code=422, detail="student_id is required when recipient_type is student")
+
+    # ── Resolve target students ────────────────────────────────────────────────
+    query = db.query(Student).filter(Student.status == StudentStatusEnum.Active)
+    if body.recipient_type == "class":
+        query = query.filter(Student.class_id == body.class_id)
+    elif body.recipient_type == "student":
+        query = query.filter(Student.id == body.student_id)
+    students = query.all()
+
+    channels_to_send = ["whatsapp", "sms"] if channel_lower == "both" else [channel_lower]
+
+    sent = 0
+    failed = 0
+
+    for student in students:
+        phone = _phone_for(student)
+        if not phone:
+            failed += 1
+            continue
+
+        try:
+            for chan in channels_to_send:
+                enqueue_text_notification(
+                    db,
+                    student_id=student.id,
+                    sender_user_id=current_user.id,
+                    sender_name=current_user.name,
+                    notification_type="custom_message",
+                    channel=chan,
+                    phone=phone,
+                    message=message,
+                    idempotency_key=f"custom:{current_user.id}:{student.id}:{chan}:{hash(message) & 0xffffffff}",
+                )
+            sent += 1
+        except Exception as exc:
+            logger.error("Failed to enqueue custom message for student %s: %s", student.id, exc)
+            failed += 1
+
+    db.commit()
+    background_tasks.add_task(process_pending_notifications_once)
+
+    logger.info(
+        "Custom message sent by user %s: recipient_type=%s channel=%s sent=%d failed=%d",
+        current_user.id, body.recipient_type, channel_lower, sent, failed,
+    )
+
+    return {"sent": sent, "failed": failed}

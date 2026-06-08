@@ -37,10 +37,6 @@ const PAGE_SIZE_DEFAULT = 20
 function usePagination(items, pageSize = PAGE_SIZE_DEFAULT) {
   const [page, setPage] = useState(1)
 
-  // Reset to page 1 whenever the source list changes (filter/search applied)
-  const itemsKey = items.length
-  useEffect(() => { setPage(1) }, [itemsKey])
-
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize))
   const safePage = Math.min(page, totalPages)
   const pageItems = useMemo(
@@ -51,10 +47,10 @@ function usePagination(items, pageSize = PAGE_SIZE_DEFAULT) {
   return { page: safePage, setPage, pageItems, totalPages, total: items.length }
 }
 
-function Pagination({ page, totalPages, total, pageSize, setPage }) {
-  if (totalPages <= 1) return null
+function Pagination({ page, totalPages, total, pageSize, setPage, pageSizeOptions, onPageSizeChange }) {
+  if (total <= 0) return null
 
-  const from = (page - 1) * pageSize + 1
+  const from = total > 0 ? (page - 1) * pageSize + 1 : 0
   const to   = Math.min(page * pageSize, total)
 
   // Build page numbers: always show first, last, current ±1, with ellipsis
@@ -85,38 +81,66 @@ function Pagination({ page, totalPages, total, pageSize, setPage }) {
       padding: '10px 16px', borderTop: '1px solid var(--border-subtle)',
       fontSize: '12px', color: 'var(--text-tertiary)',
     }}>
-      <span>Showing {from}–{to} of {total}</span>
-      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
-        <button
-          style={{ ...btnBase, background: page === 1 ? 'var(--gray-50)' : 'var(--surface-0)', color: page === 1 ? 'var(--gray-300)' : 'var(--text-secondary)', cursor: page === 1 ? 'not-allowed' : 'pointer' }}
-          disabled={page === 1}
-          onClick={() => setPage(page - 1)}
-          aria-label="Previous page"
-        >‹</button>
-
-        {pages.map((p, i) =>
-          p === '…'
-            ? <span key={`ellipsis-${i}`} style={{ padding: '0 2px', color: 'var(--text-tertiary)' }}>…</span>
-            : <button
-                key={p}
-                style={{
-                  ...btnBase,
-                  background: p === page ? 'var(--brand-600)' : 'var(--surface-0)',
-                  color: p === page ? 'white' : 'var(--text-secondary)',
-                  border: p === page ? '1px solid var(--brand-600)' : '1px solid var(--border-default)',
-                }}
-                onClick={() => setPage(p)}
-                aria-current={p === page ? 'page' : undefined}
-              >{p}</button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+        <span>Showing {from}–{to} of {total}</span>
+        {pageSizeOptions && onPageSizeChange && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span>Show:</span>
+            <select
+              value={pageSize}
+              onChange={e => onPageSizeChange(Number(e.target.value))}
+              style={{
+                padding: '3px 6px',
+                borderRadius: '6px',
+                border: '1px solid var(--border-default)',
+                background: 'var(--surface-0)',
+                color: 'var(--text-secondary)',
+                fontFamily: 'var(--font-sans)',
+                fontWeight: 600,
+                cursor: 'pointer',
+                outline: 'none',
+              }}
+            >
+              {pageSizeOptions.map(opt => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          </div>
         )}
-
-        <button
-          style={{ ...btnBase, background: page === totalPages ? 'var(--gray-50)' : 'var(--surface-0)', color: page === totalPages ? 'var(--gray-300)' : 'var(--text-secondary)', cursor: page === totalPages ? 'not-allowed' : 'pointer' }}
-          disabled={page === totalPages}
-          onClick={() => setPage(page + 1)}
-          aria-label="Next page"
-        >›</button>
       </div>
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            style={{ ...btnBase, background: page === 1 ? 'var(--gray-50)' : 'var(--surface-0)', color: page === 1 ? 'var(--gray-300)' : 'var(--text-secondary)', cursor: page === 1 ? 'not-allowed' : 'pointer' }}
+            disabled={page === 1}
+            onClick={() => setPage(page - 1)}
+            aria-label="Previous page"
+          >‹</button>
+
+          {pages.map((p, i) =>
+            p === '…'
+              ? <span key={`ellipsis-${i}`} style={{ padding: '0 2px', color: 'var(--text-tertiary)' }}>…</span>
+              : <button
+                  key={p}
+                  style={{
+                    ...btnBase,
+                    background: p === page ? 'var(--brand-600)' : 'var(--surface-0)',
+                    color: p === page ? 'white' : 'var(--text-secondary)',
+                    border: p === page ? '1px solid var(--brand-600)' : '1px solid var(--border-default)',
+                  }}
+                  onClick={() => setPage(p)}
+                  aria-current={p === page ? 'page' : undefined}
+                >{p}</button>
+          )}
+
+          <button
+            style={{ ...btnBase, background: page === totalPages ? 'var(--gray-50)' : 'var(--surface-0)', color: page === totalPages ? 'var(--gray-300)' : 'var(--text-secondary)', cursor: page === totalPages ? 'not-allowed' : 'pointer' }}
+            disabled={page === totalPages}
+            onClick={() => setPage(page + 1)}
+            aria-label="Next page"
+          >›</button>
+        </div>
+      )}
     </div>
   )
 }
@@ -178,6 +202,14 @@ function UsersTab() {
   const [loadError, setLoadError] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
   const [search, setSearch] = useState('')
+  
+  // Pagination & Server-side state
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+  const [roleCounts, setRoleCounts] = useState({})
+
   const [resetTarget, setResetTarget] = useState(null)
   const [deactivateTarget, setDeactivateTarget] = useState(null)
   const [deactivating, setDeactivating] = useState(false)
@@ -186,8 +218,35 @@ function UsersTab() {
     setLoading(true)
     setLoadError('')
     try {
-      const res = await adminAPI.listUsers()
-      setUsers(res.data || [])
+      const params = {
+        page,
+        page_size: pageSize,
+        search: search.trim() || undefined,
+        role: roleFilter || undefined,
+      }
+      const res = await adminAPI.listUsers(params)
+      if (res.data && res.data.items) {
+        setUsers(res.data.items)
+        setTotal(res.data.total)
+        setTotalPages(res.data.total_pages)
+        
+        if (res.data.role_counts) {
+        setRoleCounts(res.data.role_counts)
+      }
+    }
+        else {
+        const all = res.data || []
+        setUsers(all)
+        setTotal(all.length)
+        setTotalPages(1)
+
+        const nextRoleCounts = all.reduce((acc, user) => {
+              acc[user.role] = (acc[user.role] || 0) + 1
+              return acc
+            }, {})
+
+        setRoleCounts(nextRoleCounts)
+      }
     } catch (err) {
       const message = extractError(err)
       setLoadError(message)
@@ -195,18 +254,26 @@ function UsersTab() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [page, pageSize, search, roleFilter])
 
-  useEffect(() => { fetchUsers() }, [fetchUsers])
+  useEffect(() => {
+    fetchUsers()
+  }, [fetchUsers])
 
-  const normalizedSearch = search.trim().toLowerCase()
-  const filtered = normalizedSearch
-    ? users.filter(user =>
-        user.name.toLowerCase().includes(normalizedSearch) ||
-        user.email.toLowerCase().includes(normalizedSearch)
-      )
-    : users
-  const visibleUsers = roleFilter ? filtered.filter(user => user.role === roleFilter) : filtered
+  
+  const totalUsersCount = Object.values(roleCounts).reduce(
+  (a, b) => a + b,
+  0
+)
+  const handleSearchChange = (value) => {
+    setSearch(value)
+    setPage(1)
+  }
+
+  const handleRoleFilterChange = (value) => {
+    setRoleFilter(value)
+    setPage(1)
+  }
 
   const handleDeactivate = async () => {
     if (!deactivateTarget) return
@@ -223,27 +290,27 @@ function UsersTab() {
     }
   }
 
-  const counts = users.reduce((acc, user) => {
-    acc[user.role] = (acc[user.role] || 0) + 1
-    return acc
-  }, {})
-
   const roleFilters = [
-    { value: '', label: 'All roles', count: users.length },
-    ...Object.entries(ROLE_META).map(([value, meta]) => ({ value, label: meta.label, count: counts[value] || 0 })),
+    { value: '', label: 'All roles', count: totalUsersCount },
+    ...Object.entries(ROLE_META).map(([value, meta]) => ({
+      value,
+      label: meta.label,
+      count: roleCounts[value] || 0,
+    })),
   ]
 
   const clearFilters = () => {
     setSearch('')
     setRoleFilter('')
+    setPage(1)
   }
 
   return (
     <div>
-      {!loading && users.length > 0 && (
+      {!loading && totalUsersCount > 0 && (
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '14px' }}>
           {Object.entries(ROLE_META).map(([role, meta]) => (
-            counts[role] ? (
+            roleCounts[role] ? (
               <div key={role} style={{
                 display: 'flex', alignItems: 'center', gap: '6px',
                 padding: '5px 12px', borderRadius: '20px',
@@ -251,7 +318,7 @@ function UsersTab() {
                 fontSize: '12px', fontWeight: 700, color: meta.color,
               }}>
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: meta.color }} />
-                {counts[role]} {meta.label}{counts[role] !== 1 ? 's' : ''}
+                {roleCounts[role]} {meta.label}{roleCounts[role] !== 1 ? 's' : ''}
               </div>
             ) : null
           ))}
@@ -259,7 +326,7 @@ function UsersTab() {
       )}
 
       <FilterRow>
-        <SearchInput value={search} onChange={setSearch} placeholder="Search name or email…" style={{ flex: 1, minWidth: '180px' }} />
+        <SearchInput value={search} onChange={handleSearchChange} placeholder="Search name or email…" style={{ flex: 1, minWidth: '180px' }} />
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
           {roleFilters.map(role => {
             const active = roleFilter === role.value
@@ -268,7 +335,7 @@ function UsersTab() {
               <button
                 key={role.value || 'all'}
                 type="button"
-                onClick={() => setRoleFilter(role.value)}
+                onClick={() => handleRoleFilterChange(role.value)}
                 aria-pressed={active}
                 disabled={loading}
                 style={{
@@ -334,7 +401,7 @@ function UsersTab() {
             </thead>
             <TableSkeleton rows={6} cols={5} />
           </ResponsiveTable>
-        ) : visibleUsers.length === 0 ? (
+        ) : users.length === 0 ? (
           <EmptyState
             icon={<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>}
             title={search || roleFilter ? 'No users match the current filters' : 'No users found'}
@@ -353,7 +420,7 @@ function UsersTab() {
               </tr>
             </thead>
             <tbody>
-              {visibleUsers.map(user => (
+              {users.map(user => (
                 <tr key={user.id}>
                   <td data-label="Name" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{user.name}</td>
                   <td data-label="Email" style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{user.email}</td>
@@ -411,14 +478,18 @@ function UsersTab() {
             </tbody>
           </ResponsiveTable>
         )}
-        {!loading && visibleUsers.length > 0 && (
-          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border-subtle)', fontSize: '12px', color: 'var(--text-tertiary)' }}>
-            Showing {visibleUsers.length} of {users.length} user{users.length !== 1 ? 's' : ''}
-          </div>
-        )}
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          pageSize={pageSize}
+          setPage={setPage}
+          pageSizeOptions={[10, 20, 50]}
+          onPageSizeChange={setPageSize}
+        />
       </div>
 
-      <PasswordResetModal user={resetTarget} onClose={() => setResetTarget(null)} onSuccess={() => { setResetTarget(null); fetchUsers() }} />
+      <PasswordResetModal user={resetTarget} onClose={() => setResetTarget(null)} onSuccess={() => { setResetTarget(null); fetchUsers(); }} />
       <ConfirmModal
         open={!!deactivateTarget}
         title="Deactivate User"
@@ -761,6 +832,8 @@ function PortalLinkingTab() {
   const [form, setForm]               = useState({ user_id: '', student_id: '', role: 'student' })
   const [linking, setLinking]         = useState(false)
   const [search, setSearch]           = useState('')
+  const [unlinkedPageSize, setUnlinkedPageSize] = useState(10)
+  const [portalPageSize, setPortalPageSize]     = useState(20)
 
   // Activation state
   const [linkStatus, setLinkStatus]     = useState(null)
@@ -895,6 +968,26 @@ function PortalLinkingTab() {
   const filteredPortal = search
     ? portalUsers.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()))
     : portalUsers
+  const unlinkedStudents = linkStatus?.unlinked_students || []
+  const {
+    page: unlinkedPage,
+    setPage: setUnlinkedPage,
+    pageItems: pageUnlinkedStudents,
+    totalPages: unlinkedTotalPages,
+    total: unlinkedTotal,
+  } = usePagination(unlinkedStudents, unlinkedPageSize)
+  const {
+    page: portalPage,
+    setPage: setPortalPage,
+    pageItems: pagePortalUsers,
+    totalPages: portalTotalPages,
+    total: portalTotal,
+  } = usePagination(filteredPortal, portalPageSize)
+
+  const handlePortalSearchChange = (value) => {
+    setSearch(value)
+    setPortalPage(1)
+  }
 
   const studentOptions = students.map(s => ({ value: String(s.id), label: `${s.name_en} (${s.student_id})` }))
   const portalOptions  = portalUsers
@@ -1014,10 +1107,10 @@ function PortalLinkingTab() {
             )}
 
             {/* Per-student unlinked list */}
-            {linkStatus.unlinked_students.length > 0 && (
+            {unlinkedStudents.length > 0 && (
               <div style={{ marginTop: '16px' }}>
                 <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', marginBottom: '8px' }}>
-                  Unlinked Students ({linkStatus.unlinked_students.length})
+                  Unlinked Students ({unlinkedStudents.length})
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                   <table className="data-table" style={{ minWidth: '480px' }}>
@@ -1031,7 +1124,7 @@ function PortalLinkingTab() {
                       </tr>
                     </thead>
                     <tbody>
-                      {linkStatus.unlinked_students.map(s => (
+                      {pageUnlinkedStudents.map(s => (
                         <tr key={s.id}>
                           <td>
                             <div style={{ fontWeight: 600, fontSize: '13px' }}>{s.name_en}</div>
@@ -1121,6 +1214,15 @@ function PortalLinkingTab() {
                     </tbody>
                   </table>
                 </div>
+                <Pagination
+                  page={unlinkedPage}
+                  totalPages={unlinkedTotalPages}
+                  total={unlinkedTotal}
+                  pageSize={unlinkedPageSize}
+                  setPage={setUnlinkedPage}
+                  pageSizeOptions={[10, 20, 50]}
+                  onPageSizeChange={setUnlinkedPageSize}
+                />
               </div>
             )}
           </div>
@@ -1188,7 +1290,7 @@ function PortalLinkingTab() {
       <div className="card">
         <div className="card-header">
           <div className="card-title">All Portal Accounts</div>
-          <SearchInput value={search} onChange={setSearch} placeholder="Search…" style={{ width: '200px' }} />
+          <SearchInput value={search} onChange={handlePortalSearchChange} placeholder="Search…" style={{ width: '200px' }} />
         </div>
         {filteredPortal.length === 0 ? (
           <EmptyState
@@ -1208,7 +1310,7 @@ function PortalLinkingTab() {
                 </tr>
               </thead>
               <tbody>
-                {filteredPortal.map(u => (
+                {pagePortalUsers.map(u => (
                   <tr key={u.id}>
                     <td style={{ fontWeight: 600 }}>{u.name}</td>
                     <td style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{u.email}</td>
@@ -1226,6 +1328,15 @@ function PortalLinkingTab() {
                 ))}
               </tbody>
             </table>
+            <Pagination
+              page={portalPage}
+              totalPages={portalTotalPages}
+              total={portalTotal}
+              pageSize={portalPageSize}
+              setPage={setPortalPage}
+              pageSizeOptions={[10, 20, 50]}
+              onPageSizeChange={setPortalPageSize}
+            />
           </div>
         )}
       </div>
