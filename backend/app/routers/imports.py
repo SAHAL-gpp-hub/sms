@@ -8,6 +8,8 @@ from app.services import import_service
 
 router = APIRouter(prefix='/api/v1/imports', tags=['Imports'])
 
+XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
 
 async def _read_upload(file: UploadFile) -> tuple[str, bytes]:
     contents = await file.read()
@@ -17,18 +19,18 @@ async def _read_upload(file: UploadFile) -> tuple[str, bytes]:
 @router.get('/students/template')
 def download_students_template(_: CurrentUser = Depends(require_role('admin'))):
     return Response(
-        content=import_service.get_template_csv(),
-        media_type='text/csv',
-        headers={'Content-Disposition': 'attachment; filename=student-import-template.csv'},
+        content=import_service.get_template_xlsx(),
+        media_type=XLSX_MIME,
+        headers={'Content-Disposition': 'attachment; filename=student-import-template.xlsx'},
     )
 
 
 @router.get('/students/sample')
 def download_students_sample(_: CurrentUser = Depends(require_role('admin'))):
     return Response(
-        content=import_service.get_sample_csv(),
-        media_type='text/csv',
-        headers={'Content-Disposition': 'attachment; filename=student-import-sample.csv'},
+        content=import_service.get_sample_xlsx(),
+        media_type=XLSX_MIME,
+        headers={'Content-Disposition': 'attachment; filename=student-import-sample.xlsx'},
     )
 
 

@@ -512,6 +512,8 @@ export const adminAPI = {
     api.post(`/admin/portal/resend-activation/${studentId}`, { account_type: accountType }),
   createActivationInvite: (studentId, accountType) =>
     api.post(`/admin/portal/invite/${studentId}`, { account_type: accountType }),
+  bulkInvitePortal: (data) =>
+    api.post('/admin/portal/invite-bulk', data),
 
   getOtpFailures: (params = {}) =>
     api.get('/admin/notifications/otp-failures', { params }),

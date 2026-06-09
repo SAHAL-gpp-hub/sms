@@ -826,12 +826,16 @@ function TeacherAssignmentsTab({ selectedTeacherId = '', onTeacherSelected }) {
 // TAB 3 — Portal Linking (link student/parent user → student record)
 // ════════════════════════════════════════════════════════════════════════════════
 function PortalLinkingTab() {
+  const { selectedYearId } = useAcademicYear()
   const [portalUsers, setPortalUsers] = useState([])
   const [students, setStudents]       = useState([])
+  const [classes, setClasses]         = useState([])
   const [loading, setLoading]         = useState(true)
   const [form, setForm]               = useState({ user_id: '', student_id: '', role: 'student' })
   const [linking, setLinking]         = useState(false)
   const [search, setSearch]           = useState('')
+  const [studentFilters, setStudentFilters] = useState({ className: '', section: '', status: 'all' })
+  const [selectedStudents, setSelectedStudents] = useState(() => new Set())
   const [unlinkedPageSize, setUnlinkedPageSize] = useState(10)
   const [portalPageSize, setPortalPageSize]     = useState(20)
 
@@ -840,36 +844,41 @@ function PortalLinkingTab() {
   const [statusLoading, setStatusLoading] = useState(false)
   const [bulkGenerating, setBulkGenerating] = useState(false)
   const [bulkResult, setBulkResult]     = useState(null)
+  const [invitePreview, setInvitePreview] = useState(null)
+  const [inviteRequest, setInviteRequest] = useState(null)
+  const [inviteBusy, setInviteBusy] = useState(false)
   const [generatingFor, setGeneratingFor] = useState(null)
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
     try {
-      const [portalRes, studRes] = await Promise.all([
+      const [portalRes, studRes, classRes] = await Promise.all([
         adminAPI.listPortalAccounts(),
         studentAPI.list({ limit: 200 }),
+        setupAPI.getClasses(selectedYearId),
       ])
       setPortalUsers(portalRes.data || [])
       const rawStudents = studRes.data || []
       setStudents(Array.isArray(rawStudents) ? rawStudents : (rawStudents.items || []))
+      setClasses(classRes.data || [])
     } catch (err) {
       toast.error(extractError(err))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [selectedYearId])
 
   const fetchLinkStatus = useCallback(async () => {
     setStatusLoading(true)
     try {
-      const res = await adminAPI.getLinkStatus()
+      const res = await adminAPI.getLinkStatus(selectedYearId ? { academic_year_id: selectedYearId } : undefined)
       setLinkStatus(res.data)
     } catch {
       toast.error('Failed to load link status')
     } finally {
       setStatusLoading(false)
     }
-  }, [])
+  }, [selectedYearId])
 
   useEffect(() => {
     fetchAll()
@@ -896,42 +905,71 @@ function PortalLinkingTab() {
     }
   }
 
-  const handleBulkGenerate = async () => {
-    setBulkGenerating(true)
+  const buildInviteRequest = (target) => {
+    const base = {
+      target,
+      mode: 'preview',
+      account_types: ['student', 'parent'],
+      ...(selectedYearId ? { academic_year_id: selectedYearId } : {}),
+    }
+    if (target === 'selected_students') {
+      return { ...base, student_ids: Array.from(selectedStudents) }
+    }
+    if (target === 'class') {
+      return { ...base, class_name: studentFilters.className }
+    }
+    if (target === 'section') {
+      return { ...base, class_name: studentFilters.className, section: studentFilters.section }
+    }
+    return base
+  }
+
+  const describeInviteTarget = (request) => {
+    if (!request) return ''
+    if (request.target === 'selected_students') return `${request.student_ids?.length || 0} selected student${request.student_ids?.length === 1 ? '' : 's'}`
+    if (request.target === 'class') return `Class ${request.class_name}`
+    if (request.target === 'section') return `Class ${request.class_name} - Section ${request.section}`
+    if (request.target === 'expired') return 'expired invite links'
+    return 'all pending students'
+  }
+
+  const openInvitePreview = async (target) => {
+    const request = buildInviteRequest(target)
+    if (target === 'selected_students' && !request.student_ids.length) {
+      toast.error('Select at least one student')
+      return
+    }
+    if ((target === 'class' || target === 'section') && !request.class_name) {
+      toast.error('Select a class')
+      return
+    }
+    if (target === 'section' && !request.section) {
+      toast.error('Select a section')
+      return
+    }
+    setInviteBusy(true)
     setBulkResult(null)
     try {
-      let sent = 0
-      let skippedAlreadyLinked = 0
-      let skippedNoEmail = 0
-      const errors = []
-      for (const student of linkStatus?.unlinked_students || []) {
-        for (const accountType of ['student', 'parent']) {
-          const alreadyLinked = accountType === 'student' ? student.has_student_account : student.has_parent_account
-          const hasEmail = accountType === 'student' ? student.has_student_email : student.has_guardian_email
-          if (alreadyLinked) {
-            skippedAlreadyLinked += 1
-            continue
-          }
-          if (!hasEmail) {
-            skippedNoEmail += 1
-            continue
-          }
-          try {
-            await adminAPI.createActivationInvite(student.id, accountType)
-            sent += 1
-          } catch (err) {
-            errors.push(`${student.student_id} ${accountType}: ${extractError(err)}`)
-          }
-        }
-      }
-      setBulkResult({
-        sent,
-        skippedAlreadyLinked,
-        skippedNoEmail,
-        errors,
-        failedStudents: errors.map(error => error.split(':')[0]),
-      })
-      toast.success(`Invite links queued: ${sent}`)
+      const res = await adminAPI.bulkInvitePortal(request)
+      setInviteRequest(request)
+      setInvitePreview(res.data)
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setInviteBusy(false)
+    }
+  }
+
+  const confirmInviteSend = async () => {
+    if (!inviteRequest) return
+    setBulkGenerating(true)
+    try {
+      const res = await adminAPI.bulkInvitePortal({ ...inviteRequest, mode: 'send' })
+      setBulkResult(res.data)
+      toast.success(`Invite links queued: ${res.data.sent}`)
+      setInvitePreview(null)
+      setInviteRequest(null)
+      setSelectedStudents(new Set())
       fetchAll()
       fetchLinkStatus()
     } catch (err) {
@@ -969,13 +1007,45 @@ function PortalLinkingTab() {
     ? portalUsers.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()))
     : portalUsers
   const unlinkedStudents = linkStatus?.unlinked_students || []
+  const classById = useMemo(() => {
+    const next = {}
+    classes.forEach(cls => { next[cls.id] = cls })
+    return next
+  }, [classes])
+  const classOptions = useMemo(
+    () => Array.from(new Set(classes.map(cls => cls.name).filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true })),
+    [classes]
+  )
+  const sectionOptions = useMemo(
+    () => Array.from(new Set(
+      classes
+        .filter(cls => !studentFilters.className || cls.name === studentFilters.className)
+        .map(cls => cls.division)
+        .filter(Boolean)
+    )).sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true })),
+    [classes, studentFilters.className]
+  )
+  const statusForStudent = (student) => {
+    if (student.has_student_account && student.has_parent_account) return 'linked'
+    const statuses = [student.student_activation_status, student.parent_activation_status].filter(Boolean)
+    if (statuses.includes('expired')) return 'expired'
+    if (statuses.includes('pending') || statuses.includes('verified')) return 'pending'
+    return 'pending'
+  }
+  const filteredUnlinkedStudents = unlinkedStudents.filter(student => {
+    const cls = classById[student.class_id]
+    if (studentFilters.className && cls?.name !== studentFilters.className) return false
+    if (studentFilters.section && cls?.division !== studentFilters.section) return false
+    if (studentFilters.status !== 'all' && statusForStudent(student) !== studentFilters.status) return false
+    return true
+  })
   const {
     page: unlinkedPage,
     setPage: setUnlinkedPage,
     pageItems: pageUnlinkedStudents,
     totalPages: unlinkedTotalPages,
     total: unlinkedTotal,
-  } = usePagination(unlinkedStudents, unlinkedPageSize)
+  } = usePagination(filteredUnlinkedStudents, unlinkedPageSize)
   const {
     page: portalPage,
     setPage: setPortalPage,
@@ -987,6 +1057,34 @@ function PortalLinkingTab() {
   const handlePortalSearchChange = (value) => {
     setSearch(value)
     setPortalPage(1)
+  }
+  const setStudentFilter = (key, value) => {
+    setStudentFilters(filters => ({
+      ...filters,
+      [key]: value,
+      ...(key === 'className' ? { section: '' } : {}),
+    }))
+    setUnlinkedPage(1)
+    setSelectedStudents(new Set())
+  }
+  const toggleStudentSelection = (studentId) => {
+    setSelectedStudents(current => {
+      const next = new Set(current)
+      if (next.has(studentId)) next.delete(studentId)
+      else next.add(studentId)
+      return next
+    })
+  }
+  const allPageSelected = pageUnlinkedStudents.length > 0 && pageUnlinkedStudents.every(student => selectedStudents.has(student.id))
+  const togglePageSelection = () => {
+    setSelectedStudents(current => {
+      const next = new Set(current)
+      pageUnlinkedStudents.forEach(student => {
+        if (allPageSelected) next.delete(student.id)
+        else next.add(student.id)
+      })
+      return next
+    })
   }
 
   const studentOptions = students.map(s => ({ value: String(s.id), label: `${s.name_en} (${s.student_id})` }))
@@ -1046,22 +1144,47 @@ function PortalLinkingTab() {
               ))}
             </div>
 
-            {/* Bulk activation */}
-            {unlinkedCount > 0 && (
-              <div style={{ marginBottom: '14px' }}>
-                <button
-                  className="btn btn-primary"
-                  onClick={handleBulkGenerate}
-                  disabled={bulkGenerating}
-                  style={{ width: '100%' }}
-                >
-                  {bulkGenerating
-                    ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Queueing invite links…</>
-                    : `Send Invite Links (${linkStatus.unlinked_students.length} students affected)`
-                  }
-                </button>
+            {/* Targeted activation */}
+            {(
+              <div style={{ marginBottom: '14px', padding: '12px', borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--surface-1)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10, marginBottom: 10 }}>
+                  <Field label="Class">
+                    <select className="input" value={studentFilters.className} onChange={e => setStudentFilter('className', e.target.value)}>
+                      <option value="">All classes</option>
+                      {classOptions.map(name => <option key={name} value={name}>Class {name}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Section">
+                    <select className="input" value={studentFilters.section} onChange={e => setStudentFilter('section', e.target.value)} disabled={!studentFilters.className}>
+                      <option value="">All sections</option>
+                      {sectionOptions.map(section => <option key={section} value={section}>Section {section}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Status">
+                    <select className="input" value={studentFilters.status} onChange={e => setStudentFilter('status', e.target.value)}>
+                      <option value="all">All</option>
+                      <option value="linked">Linked</option>
+                      <option value="pending">Pending</option>
+                      <option value="expired">Expired</option>
+                    </select>
+                  </Field>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  <button className="btn btn-primary" onClick={() => openInvitePreview('selected_students')} disabled={inviteBusy || selectedStudents.size === 0}>
+                    Send to Selected ({selectedStudents.size})
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => openInvitePreview(studentFilters.section ? 'section' : 'class')} disabled={inviteBusy || !studentFilters.className}>
+                    {studentFilters.section ? 'Send to Section' : 'Send to Class'}
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => openInvitePreview('all_pending')} disabled={inviteBusy}>
+                    Send to All Pending
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => openInvitePreview('expired')} disabled={inviteBusy}>
+                    Resend Expired Invites
+                  </button>
+                </div>
                 <div style={{ fontSize: '11.5px', color: 'var(--text-tertiary)', marginTop: '6px', lineHeight: 1.5 }}>
-                  Queues secure invite links for activation-ready student and parent contacts. The invite opens the portal, then OTP verifies the email before account creation.
+                  Preview counts before queueing secure invite links for student and parent portal activation.
                 </div>
               </div>
             )}
@@ -1089,7 +1212,7 @@ function PortalLinkingTab() {
                   Bulk invite complete
                 </div>
                 <div style={{ color: 'var(--text-secondary)' }}>Invite links queued: <strong>{bulkResult.sent}</strong></div>
-                <div style={{ color: 'var(--text-secondary)' }}>{bulkResult.skippedAlreadyLinked || 0} already linked account(s) skipped</div>
+                <div style={{ color: 'var(--text-secondary)' }}>{bulkResult.already_linked_count || 0} already linked account(s) skipped</div>
                 {(bulkResult.skippedNoEmail || 0) > 0 && (
                   <div style={{ color: 'var(--warning-600)' }}>
                     {bulkResult.skippedNoEmail} account(s) skipped because email is missing.{' '}
@@ -1107,15 +1230,18 @@ function PortalLinkingTab() {
             )}
 
             {/* Per-student unlinked list */}
-            {unlinkedStudents.length > 0 && (
+            {filteredUnlinkedStudents.length > 0 && (
               <div style={{ marginTop: '16px' }}>
                 <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', marginBottom: '8px' }}>
-                  Unlinked Students ({unlinkedStudents.length})
+                  Students ({filteredUnlinkedStudents.length})
                 </div>
                 <div style={{ overflowX: 'auto' }}>
-                  <table className="data-table" style={{ minWidth: '480px' }}>
+                  <table className="data-table" style={{ minWidth: '560px' }}>
                     <thead>
                       <tr>
+                        <th style={{ width: 34 }}>
+                          <input type="checkbox" checked={allPageSelected} onChange={togglePageSelection} aria-label="Select visible students" />
+                        </th>
                         <th>Student</th>
                         <th>Student Account</th>
                         <th>Parent Account</th>
@@ -1127,8 +1253,19 @@ function PortalLinkingTab() {
                       {pageUnlinkedStudents.map(s => (
                         <tr key={s.id}>
                           <td>
+                            <input
+                              type="checkbox"
+                              checked={selectedStudents.has(s.id)}
+                              onChange={() => toggleStudentSelection(s.id)}
+                              aria-label={`Select ${s.name_en}`}
+                            />
+                          </td>
+                          <td>
                             <div style={{ fontWeight: 600, fontSize: '13px' }}>{s.name_en}</div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{s.student_id}</div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                              {s.student_id}
+                              {classById[s.class_id] ? ` · Class ${classById[s.class_id].name}-${classById[s.class_id].division || ''}` : ''}
+                            </div>
                           </td>
 
                           {/* ── FIX: closing </span> was missing in both badge cells ── */}
@@ -1340,6 +1477,20 @@ function PortalLinkingTab() {
           </div>
         )}
       </div>
+      <ConfirmModal
+        open={!!invitePreview}
+        title="Confirm Invite Send"
+        message={
+          invitePreview
+            ? `Target: ${describeInviteTarget(inviteRequest)}. Total students: ${invitePreview.total_students}. Already linked accounts: ${invitePreview.already_linked_count}. Invitations to be sent: ${invitePreview.invitations_to_send_count}. Missing email accounts skipped: ${invitePreview.skipped_no_email}.`
+            : ''
+        }
+        confirmLabel={bulkGenerating ? 'Sending...' : 'Send Invites'}
+        confirmVariant="primary"
+        loading={bulkGenerating}
+        onConfirm={confirmInviteSend}
+        onCancel={() => { setInvitePreview(null); setInviteRequest(null) }}
+      />
     </div>
   )
 }

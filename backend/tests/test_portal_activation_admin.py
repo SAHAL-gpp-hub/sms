@@ -156,6 +156,44 @@ def test_old_generation_endpoints_are_gone(client):
     assert single.status_code == 410
 
 
+def test_admin_can_preview_and_send_bulk_invites_by_target(client):
+    token = _token(client, "activation-admin@example.com", "admin1234")
+    preview = client.post(
+        "/api/v1/admin/portal/invite-bulk",
+        json={
+            "target": "selected_students",
+            "mode": "preview",
+            "student_ids": [1],
+            "account_types": ["student", "parent"],
+        },
+        headers=_auth(token),
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["total_students"] == 1
+    assert preview.json()["invitations_to_send_count"] == 2
+
+    send = client.post(
+        "/api/v1/admin/portal/invite-bulk",
+        json={
+            "target": "class",
+            "mode": "send",
+            "class_name": "7",
+            "account_types": ["student", "parent"],
+        },
+        headers=_auth(token),
+    )
+    assert send.status_code == 200, send.text
+    data = send.json()
+    assert data["sent"] == 2
+    assert data["failed"] == 0
+
+    db = TestingSessionLocal()
+    destinations = {row.destination for row in db.query(NotificationOutbox).all()}
+    assert "nina@example.com" in destinations
+    assert "raj@example.com" in destinations
+    db.close()
+
+
 def test_admin_can_queue_activation_email(client):
     token = _token(client, "activation-admin@example.com", "admin1234")
     res = client.post(
