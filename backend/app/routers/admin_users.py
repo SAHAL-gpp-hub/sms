@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.security import create_access_token, get_password_hash
-from app.models.base_models import AcademicYear, ActivationInviteStatusEnum, Branch, Class, CorrectionRequestStatusEnum, DataAuditActionEnum, NotificationOutbox, PortalActivationInvite, ProfileCorrectionRequest, Student, StudentActivationRequest, StudentStatusEnum, Subject, TeacherClassAssignment, User
+from app.models.base_models import AcademicYear, Branch, Class, CorrectionRequestStatusEnum, DataAuditActionEnum, NotificationOutbox, ProfileCorrectionRequest, Student, StudentActivationRequest, StudentStatusEnum, Subject, TeacherClassAssignment, User
 from app.routers.auth import CurrentUser, require_role
 from app.services.audit_service import log_data_change, model_snapshot
 from app.services import student_activation_service
@@ -316,7 +316,9 @@ def list_users(
         query = query.filter(
             (User.name.ilike(search_query)) | (User.email.ilike(search_query))
         )
-
+    
+    query = query.order_by(User.name)
+    
     if page is not None or page_size is not None:
         p = page or 1
         ps = page_size or 20
@@ -324,13 +326,13 @@ def list_users(
         total = query.count()
         total_pages = (total + ps - 1) // ps if total > 0 else 0
 
-        items = query.order_by(User.name).offset((p - 1) * ps).limit(ps).all()
+        items = query.offset((p - 1) * ps).limit(ps).all()
 
         role_counts = (
             db.query(User.role, func.count(User.id))
             .group_by(User.role)
             .all()
-        )
+            )
 
         return {
             "items": [_user_out(db, user) for user in items],
@@ -341,7 +343,7 @@ def list_users(
             "role_counts": {role: count for role, count in role_counts},
         }
 
-    return [_user_out(db, user) for user in query.order_by(User.name).all()]
+    return [_user_out(db, user) for user in query.all()]
 
 
 @router.get("/users/{user_id}", response_model=AdminUserOut)
@@ -698,57 +700,6 @@ class AdminActivationInviteResponse(BaseModel):
     qr_payload: str
 
 
-class BulkInviteRequest(BaseModel):
-    target: str
-    mode: str = "send"
-    academic_year_id: Optional[int] = None
-    class_id: Optional[int] = None
-    class_name: Optional[str] = None
-    section: Optional[str] = None
-    student_ids: list[int] = Field(default_factory=list)
-    account_types: list[str] = Field(default_factory=lambda: ["student", "parent"])
-
-    @field_validator("target")
-    @classmethod
-    def validate_target(cls, value: str) -> str:
-        value = value.lower().strip()
-        if value not in {"all_pending", "class", "section", "selected_students", "expired"}:
-            raise ValueError("Target must be all_pending, class, section, selected_students, or expired")
-        return value
-
-    @field_validator("mode")
-    @classmethod
-    def validate_mode(cls, value: str) -> str:
-        value = value.lower().strip()
-        if value not in {"preview", "send"}:
-            raise ValueError("Mode must be preview or send")
-        return value
-
-    @field_validator("account_types")
-    @classmethod
-    def validate_account_types(cls, value: list[str]) -> list[str]:
-        cleaned = []
-        for item in value:
-            account_type = item.lower().strip()
-            if account_type not in {"student", "parent"}:
-                raise ValueError("Account types must be student or parent")
-            if account_type not in cleaned:
-                cleaned.append(account_type)
-        return cleaned or ["student", "parent"]
-
-
-class BulkInviteResponse(BaseModel):
-    target: str
-    mode: str
-    total_students: int
-    already_linked_count: int
-    invitations_to_send_count: int
-    sent: int = 0
-    failed: int = 0
-    skipped_no_email: int = 0
-    errors: list[str] = Field(default_factory=list)
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # New endpoints
 # ─────────────────────────────────────────────────────────────────────────────
@@ -783,51 +734,18 @@ def get_link_status(
         if students
         else []
     )
-    invite_rows = (
-        db.query(PortalActivationInvite)
-        .filter(PortalActivationInvite.student_id.in_([s.id for s in students]))
-        .order_by(PortalActivationInvite.created_at.desc())
-        .all()
-        if students
-        else []
-    )
     latest_by_student_type: dict[tuple[int, str], StudentActivationRequest] = {}
-    latest_invite_by_student_type: dict[tuple[int, str], PortalActivationInvite] = {}
     failed_by_student: dict[int, int] = {}
     for row in activation_rows:
         latest_by_student_type.setdefault((row.student_id, row.account_type), row)
         if row.status in {"failed", "locked"}:
             failed_by_student[row.student_id] = failed_by_student.get(row.student_id, 0) + 1
-    for row in invite_rows:
-        latest_invite_by_student_type.setdefault((row.student_id, row.account_type), row)
-
-    now = datetime.now(timezone.utc)
-
-    def invite_status(row: PortalActivationInvite | None) -> Optional[str]:
-        if row is None:
-            return None
-        if row.status == ActivationInviteStatusEnum.pending and row.expires_at:
-            expires_at = row.expires_at
-            if expires_at.tzinfo is None:
-                expires_at = expires_at.replace(tzinfo=timezone.utc)
-            if expires_at <= now:
-                return "expired"
-        return row.status.value if hasattr(row.status, "value") else str(row.status)
-
-    def activation_status(student_id: int, account_type: str) -> Optional[str]:
-        activation = latest_by_student_type.get((student_id, account_type))
-        if activation is not None:
-            return activation.status
-        return invite_status(latest_invite_by_student_type.get((student_id, account_type)))
-
     def latest_sent_at(student_id: int) -> Optional[str]:
         values = [
             row.created_at
             for row in (
                 latest_by_student_type.get((student_id, "student")),
                 latest_by_student_type.get((student_id, "parent")),
-                latest_invite_by_student_type.get((student_id, "student")),
-                latest_invite_by_student_type.get((student_id, "parent")),
             )
             if row is not None and row.created_at is not None
         ]
@@ -844,12 +762,21 @@ def get_link_status(
             has_parent_account=s.parent_user_id is not None,
             has_student_email=bool(s.student_email),
             has_guardian_email=bool(s.guardian_email),
-            student_activation_status=activation_status(s.id, "student"),
-            parent_activation_status=activation_status(s.id, "parent"),
+            student_activation_status=(
+                latest_by_student_type.get((s.id, "student")).status
+                if latest_by_student_type.get((s.id, "student"))
+                else None
+            ),
+            parent_activation_status=(
+                latest_by_student_type.get((s.id, "parent")).status
+                if latest_by_student_type.get((s.id, "parent"))
+                else None
+            ),
             failed_activation_attempts=failed_by_student.get(s.id, 0),
             last_activation_sent_at=latest_sent_at(s.id),
         )
         for s in students
+        if s.student_user_id is None or s.parent_user_id is None
     ]
 
     return LinkStatusResponse(
@@ -876,165 +803,6 @@ def bulk_generate_portal_accounts(
         status_code=status.HTTP_410_GONE,
         detail="Portal account auto-generation is deprecated. Use activation emails instead.",
     )
-
-
-def _aware_utc(value: datetime | None) -> datetime | None:
-    if value is None:
-        return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
-
-
-def _student_has_account(student: Student, account_type: str) -> bool:
-    return student.student_user_id is not None if account_type == "student" else student.parent_user_id is not None
-
-
-def _student_has_email(student: Student, account_type: str) -> bool:
-    return bool(student.student_email if account_type == "student" else student.guardian_email)
-
-
-def _latest_invite_statuses(db: Session, students: list[Student]) -> dict[tuple[int, str], str]:
-    if not students:
-        return {}
-    now = datetime.now(timezone.utc)
-    rows = (
-        db.query(PortalActivationInvite)
-        .filter(PortalActivationInvite.student_id.in_([student.id for student in students]))
-        .order_by(PortalActivationInvite.created_at.desc(), PortalActivationInvite.id.desc())
-        .all()
-    )
-    latest: dict[tuple[int, str], str] = {}
-    for row in rows:
-        key = (row.student_id, row.account_type)
-        if key in latest:
-            continue
-        status_value = row.status.value if hasattr(row.status, "value") else str(row.status)
-        expires_at = _aware_utc(row.expires_at)
-        latest[key] = "expired" if status_value == "pending" and expires_at and expires_at <= now else status_value
-    return latest
-
-
-def _resolve_bulk_invite_students(db: Session, data: BulkInviteRequest) -> list[Student]:
-    query = db.query(Student).filter(Student.status == StudentStatusEnum.Active)
-    joined_class = False
-    if data.academic_year_id:
-        query = query.filter(Student.academic_year_id == data.academic_year_id)
-
-    if data.target == "selected_students":
-        if not data.student_ids:
-            raise HTTPException(status_code=422, detail="Select at least one student")
-        query = query.filter(Student.id.in_(data.student_ids))
-    elif data.target in {"class", "section"}:
-        if data.class_id:
-            selected_class = db.query(Class).filter_by(id=data.class_id).first()
-            if not selected_class:
-                raise HTTPException(status_code=404, detail="Class not found")
-            if data.target == "section" or data.section:
-                query = query.filter(Student.class_id == selected_class.id)
-            else:
-                query = query.join(Class, Student.class_id == Class.id).filter(Class.name == selected_class.name)
-                joined_class = True
-        elif data.class_name:
-            query = query.join(Class, Student.class_id == Class.id).filter(Class.name == data.class_name)
-            joined_class = True
-        else:
-            raise HTTPException(status_code=422, detail="Select a class")
-
-        if data.section:
-            if not joined_class:
-                query = query.join(Class, Student.class_id == Class.id)
-                joined_class = True
-            query = query.filter(Class.division == data.section)
-
-    students = query.order_by(Student.name_en).all()
-    if data.target == "expired":
-        latest_statuses = _latest_invite_statuses(db, students)
-        students = [
-            student for student in students
-            if any(
-                latest_statuses.get((student.id, account_type)) == "expired"
-                and not _student_has_account(student, account_type)
-                for account_type in data.account_types
-            )
-        ]
-    elif data.target == "all_pending":
-        students = [
-            student for student in students
-            if any(not _student_has_account(student, account_type) for account_type in data.account_types)
-        ]
-    return students
-
-
-@router.post(
-    "/portal/invite-bulk",
-    response_model=BulkInviteResponse,
-    summary="Preview or send portal invite links to a target group",
-)
-def bulk_invite_portal_accounts(
-    data: BulkInviteRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(require_role("admin")),
-):
-    students = _resolve_bulk_invite_students(db, data)
-    latest_statuses = _latest_invite_statuses(db, students) if data.target == "expired" else {}
-
-    already_linked_count = 0
-    invitations_to_send_count = 0
-    skipped_no_email = 0
-    send_plan: list[tuple[Student, str]] = []
-
-    for student in students:
-        for account_type in data.account_types:
-            if _student_has_account(student, account_type):
-                already_linked_count += 1
-                continue
-            if data.target == "expired" and latest_statuses.get((student.id, account_type)) != "expired":
-                continue
-            if not _student_has_email(student, account_type):
-                skipped_no_email += 1
-                continue
-            invitations_to_send_count += 1
-            send_plan.append((student, account_type))
-
-    response = BulkInviteResponse(
-        target=data.target,
-        mode=data.mode,
-        total_students=len(students),
-        already_linked_count=already_linked_count,
-        invitations_to_send_count=invitations_to_send_count,
-        skipped_no_email=skipped_no_email,
-    )
-    if data.mode == "preview":
-        return response
-
-    errors: list[str] = []
-    sent = 0
-    failed = 0
-    for student, account_type in send_plan:
-        try:
-            student_activation_service.create_activation_invite(
-                db,
-                student,
-                account_type,
-                current_user.id,
-            )
-            sent += 1
-        except HTTPException as exc:
-            db.rollback()
-            failed += 1
-            errors.append(f"{student.student_id} {account_type}: {exc.detail}")
-        except Exception as exc:
-            db.rollback()
-            failed += 1
-            errors.append(f"{student.student_id} {account_type}: {exc.__class__.__name__}")
-
-    background_tasks.add_task(process_pending_notifications_once)
-    response.sent = sent
-    response.failed = failed
-    response.errors = errors[:20]
-    return response
 
 
 @router.post(

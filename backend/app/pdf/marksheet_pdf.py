@@ -37,6 +37,7 @@ def render_marksheet_pdf(
     for r in results:
         student = db.query(Student).filter_by(id=r["student_id"]).first()
         r["name_gu"] = student.name_gu if student else "—"
+        r["name_en"] = student.name_en if student else "—"  
         r["gr_number"] = student.gr_number if student else "—"
         r["dob"] = str(student.dob) if student else "—"
         r["class_name"] = cls.name if cls else "—"
@@ -53,5 +54,5 @@ def render_marksheet_pdf(
     )
 
     # Generate PDF
-    pdf_bytes = _html_renderer()(string=html_content).write_pdf()
+    pdf_bytes = _html_renderer()(string=html_content, base_url=TEMPLATE_DIR).write_pdf()
     return pdf_bytes

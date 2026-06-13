@@ -96,7 +96,7 @@ def get_grade(percentage: Decimal):
         raise ValueError("Percentage cannot exceed 100")
     pct = max(pct, 0.0)
     for low, high, grade, gp, remark in GSEB_GRADES:
-        if low <= pct <= high:
+        if pct >= low:
             return grade, round(float(gp), 1), remark
     return "E", 0.0, "Fail"
 
@@ -211,16 +211,30 @@ def get_subjects(db: Session, class_id: int, include_inactive: bool = False):
 def create_subject(db: Session, data: SubjectCreate) -> Subject:
     has_col = _has_is_active_column(db)
     existing = db.query(Subject).filter_by(name=data.name, class_id=data.class_id).first()
+
+    # FIX: Validate passing_marks if provided
+    max_allowed = data.max_theory + (data.max_practical or 0)
+    if hasattr(data, 'passing_marks') and data.passing_marks:
+        if data.passing_marks > max_allowed:
+            raise ValueError(
+                f"passing_marks ({data.passing_marks}) cannot exceed "
+                f"max marks ({max_allowed}) for subject '{data.name}'"
+            )
+
     if existing:
         if has_col and not existing.is_active:
             existing.is_active     = True
             existing.max_theory    = data.max_theory
             existing.max_practical = data.max_practical
             existing.subject_type  = data.subject_type
+            # FIX: Also update passing_marks if provided
+            if hasattr(data, 'passing_marks'):
+                existing.passing_marks = data.passing_marks
             db.commit()
             db.refresh(existing)
             return existing
         raise ValueError(f"Subject '{data.name}' already exists for this class.")
+
     kwargs = data.model_dump()
     if has_col:
         kwargs["is_active"] = True
@@ -235,12 +249,23 @@ def update_subject(db: Session, subject_id: int, data: SubjectUpdate) -> Optiona
     s = db.query(Subject).filter_by(id=subject_id).first()
     if not s:
         return None
-    update_data = data.model_dump(exclude_unset=True)
-    has_col = _has_is_active_column(db)
-    if not has_col:
-        update_data.pop("is_active", None)
-    for key, value in update_data.items():
-        setattr(s, key, value)
+
+    update_fields = data.model_dump(exclude_unset=True)
+
+    # FIX: Validate passing_marks against (possibly updated) max marks
+    new_max_theory = update_fields.get("max_theory", s.max_theory)
+    new_max_practical = update_fields.get("max_practical", s.max_practical)
+    new_passing = update_fields.get("passing_marks", getattr(s, "passing_marks", None))
+    max_allowed = (new_max_theory or 0) + (new_max_practical or 0)
+    if new_passing and new_passing > max_allowed:
+        raise ValueError(
+            f"passing_marks ({new_passing}) cannot exceed "
+            f"max marks ({max_allowed}) for subject '{s.name}'"
+        )
+
+    for field, value in update_fields.items():
+        setattr(s, field, value)
+
     db.commit()
     db.refresh(s)
     return s
@@ -530,6 +555,7 @@ def get_marks(db: Session, exam_id: int, class_id: int, subject_ids: Optional[li
         }
         for subject in subjects:
             m = mark_map.get((enrollment_by_student[student.id].id, subject.id))
+            subject_is_locked = False           # reset each iteration
             row["marks"][subject.id] = {
                 "theory":    float(m.theory_marks)    if m and m.theory_marks    is not None else None,
                 "practical": float(m.practical_marks) if m and m.practical_marks is not None else None,
@@ -555,6 +581,20 @@ def get_marks(db: Session, exam_id: int, class_id: int, subject_ids: Optional[li
 
 
 def get_class_results(db: Session, exam_id: int, class_id: int):
+    """
+    Computes per-student results for a given exam/class.
+
+    Handles:
+    1. Proper handling of absent vs missing marks
+    2. Valid grade assignment ("NE" for not-entered, "E" for fail)
+    3. Null checks in total accumulation
+    4. Separate tracking of incomplete results
+    5. Passing-marks override capped to the *effective* (per-exam) max marks,
+       so a reduced ExamSubjectConfig max doesn't cause false fails
+    6. Correct percentage handling when max_total == 0
+    7. Locked marks flagging
+    8. Ranking only among PASS results
+    """
     cache_key = (exam_id, class_id)
     request_cache = db.info.setdefault("class_results_cache", {})
     if cache_key in request_cache:
@@ -603,83 +643,167 @@ def get_class_results(db: Session, exam_id: int, class_id: int):
     for mark in marks:
         if mark.enrollment_id is None and mark.student_id in enrollment_by_student:
             enrollment = enrollment_by_student[mark.student_id]
-            mark.enrollment_id = enrollment.id
             mark_map[(enrollment.id, mark.subject_id)] = mark
 
     results = []
     for student in students:
-        total     = Decimal("0")
+        total = Decimal("0")
         max_total = Decimal("0")
         subject_rows: list[dict] = []
-        has_fail  = False
+        has_fail = False
+        is_incomplete = False  # track "not entered" subjects separately
+        is_locked = False      # track if any marks locked
 
         for subject in subjects:
             config = configs_by_subject.get(subject.id)
             eff_max_theory = config.max_theory if config else subject.max_theory
             eff_max_practical = config.max_practical if config else subject.max_practical
-            max_t   = Decimal(str(eff_max_theory))
-            max_p   = Decimal(str(eff_max_practical))
+            max_t = Decimal(str(eff_max_theory))
+            max_p = Decimal(str(eff_max_practical))
             max_sub = max_t + max_p
-            enrollment = enrollment_by_student[student.id]
-            m       = mark_map.get((enrollment.id, subject.id))
 
-            if not m or m.is_absent:
+            # Skip subjects with no marks configured for this exam
+            if max_sub == 0:
+                continue
+
+            enrollment = enrollment_by_student[student.id]
+            m = mark_map.get((enrollment.id, subject.id))
+            subject_is_locked = False          # ← NEW: per-subject flag
+
+            if not m:
+                theory, practical, sub_total = None, None, None
+                grade, gp = "NE", 0.0
+                is_incomplete = True
+                total_for_subject = Decimal("0")
+                max_for_subject = Decimal("0")
+
+            elif m.is_absent:
                 theory, practical, sub_total = None, None, Decimal("0")
-                grade, gp = "AB", 0.0
-                has_fail  = True
-            else:
-                theory    = m.theory_marks    or Decimal("0")
+                grade, gp, _ = get_grade(Decimal("0"))
+                has_fail = True
+                total_for_subject = Decimal("0")
+                max_for_subject = max_sub
+
+            # AFTER
+            elif m.locked_at is not None:
+                subject_is_locked = True        # per-subject only
+                is_locked = True                # roll up to student level
+                theory = m.theory_marks or Decimal("0")
                 practical = m.practical_marks or Decimal("0")
                 sub_total = theory + practical
-                sub_pct   = (sub_total / max_sub * 100) if max_sub > 0 else Decimal("0")
+                sub_pct = (sub_total / max_sub * 100) if max_sub > 0 else Decimal("0")
+                grade, gp, _ = get_grade(sub_pct)
+                if grade == "E":
+                    has_fail = True             # still flag genuine fails within locked marks
+                total_for_subject = sub_total
+                max_for_subject = max_sub
+
+            else:
+                theory = m.theory_marks or Decimal("0")
+                practical = m.practical_marks or Decimal("0")
+                sub_total = theory + practical
+                sub_pct = (sub_total / max_sub * 100) if max_sub > 0 else Decimal("0")
                 grade, gp, _ = get_grade(sub_pct)
                 if grade == "E":
                     has_fail = True
+                total_for_subject = sub_total
+                max_for_subject = max_sub
 
-            # Use subject's explicit passing_marks if set
-            passing = None
+            # Passing-marks threshold (after grade assigned).
+            #
+            # IMPORTANT: cap passing_marks to the *effective* max for this
+            # exam (max_sub). ExamSubjectConfig can reduce the max marks for
+            # a particular exam (e.g. 25 instead of the subject default of
+            # 100). Without this cap, a student scoring 18/25 (74.7%) would
+            # be compared against a default passing_marks of 33/40 (set for
+            # the 100-mark default) and incorrectly marked FAIL.
+            passing_threshold = Decimal("0")
+
             if hasattr(subject, "passing_marks") and subject.passing_marks:
-                if sub_total is not None and sub_total < subject.passing_marks:
+                # passing_marks stored as percentage (33 means 33%)
+                passing_threshold = (
+                    max_sub * Decimal(str(subject.passing_marks))
+                ) / Decimal("100")
+
+                if sub_total is not None and sub_total < passing_threshold:
                     has_fail = True
 
-            total     += sub_total if sub_total is not None else Decimal("0")
-            max_total += max_sub
+                    if grade not in ("NE", "AB"):
+                        grade = "E"
+                        gp = 0.0
+
+            # Only accumulate if marks actually entered (or absent, which
+            # counts toward max_total via max_for_subject above)
+            total += total_for_subject
+            max_total += max_for_subject
 
             subject_rows.append({
-                "subject_name":    subject.name,
-                "max_theory":      eff_max_theory,
-                "max_practical":   eff_max_practical,
-                "theory_marks":    float(theory)    if theory    is not None else None,
+                "subject_name": subject.name,
+                "max_theory": eff_max_theory,
+                "max_practical": eff_max_practical,
+                "theory_marks": float(theory) if theory is not None else None,
                 "practical_marks": float(practical) if practical is not None else None,
-                "total":           float(sub_total),
-                "grade":           grade,
-                "grade_point":     gp,
+                "total": float(sub_total) if sub_total is not None else None,
+                "grade": grade,
+                "grade_point": gp,
+                "is_locked": subject_is_locked,   # ← was: is_locked (student-level, wrong)
+                "is_absent": m.is_absent if m else False,
             })
 
-        percentage    = (
-            (total / max_total * 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-            if max_total > 0 else Decimal("0")
-        )
-        overall_grade, cgpa, _ = get_grade(percentage)
-        result_str = "FAIL" if has_fail else "PASS"
+        # Handle max_total = 0 (no subjects configured / no marks at all)
+        if max_total == 0:
+            percentage = Decimal("0")
+            overall_grade = "NE"
+            cgpa = 0.0
+        else:
+            percentage = (
+                (total / max_total * 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            )
+            overall_grade, cgpa, _ = get_grade(percentage)
+
+        # Result status: incomplete takes priority, then locked, then pass/fail
+        if is_incomplete:
+            result_str = "INCOMPLETE"
+        elif is_locked:
+            result_str = "LOCKED"
+        else:
+            result_str = "FAIL" if has_fail else "PASS"
 
         results.append({
             "enrollment_id": enrollment_by_student[student.id].id,
-            "student_id":   student.id,
+            "student_id": student.id,
             "student_name": student.name_en,
-            "roll_number":  enrollment_by_student[student.id].roll_number,
-            "subjects":     subject_rows,
-            "total_marks":  float(total),
-            "max_marks":    float(max_total),
-            "percentage":   float(percentage),
-            "cgpa":         cgpa,
-            "grade":        overall_grade,
-            "result":       result_str,
+            "roll_number": enrollment_by_student[student.id].roll_number,
+            "subjects": subject_rows,
+            "total_marks": float(total),
+            "max_marks": float(max_total),
+            "percentage": float(percentage),
+            "cgpa": cgpa,
+            "grade": overall_grade,
+            "result": result_str,
+            "is_locked": is_locked,
+            "is_incomplete": is_incomplete,
         })
 
-    results.sort(key=lambda x: x["percentage"], reverse=True)
-    for i, r in enumerate(results):
-        r["class_rank"] = i + 1
+    # Rank only among PASS results
+    passed = [r for r in results if r["result"] == "PASS"]
+    failed = [r for r in results if r["result"] == "FAIL"]
+    incomplete = [r for r in results if r["result"] == "INCOMPLETE"]
+    locked = [r for r in results if r["result"] == "LOCKED"]
+
+    passed.sort(key=lambda x: x["percentage"], reverse=True)
+    failed.sort(key=lambda x: x["percentage"], reverse=True)
+    incomplete.sort(key=lambda x: x["student_name"])
+    locked.sort(key=lambda x: x["student_name"])
+
+    rank = 1
+    for r in passed:
+        r["class_rank"] = rank
+        rank += 1
+    for r in failed + incomplete + locked:
+        r["class_rank"] = None
+
+    results = passed + failed + incomplete + locked
 
     request_cache[cache_key] = results
     return results
