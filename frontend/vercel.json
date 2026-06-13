@@ -1,16 +1,12 @@
 {
-  "routes": [
+  "rewrites": [
     {
-      "src": "/api/(.*)",
-      "dest": "https://sms-backend-zs8v.onrender.com/api/$1"
+      "source": "/api/:path*",
+      "destination": "https://sms-backend-zs8v.onrender.com/api/:path*"
     },
     {
-      "src": "/assets/(.*)",
-      "dest": "/assets/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/((?!api).*)" ,
+      "destination": "/index.html"
     }
   ]
 }

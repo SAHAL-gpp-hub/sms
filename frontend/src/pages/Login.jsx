@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import logo from '../assets/logo.svg'
+import classroomBg from '../assets/classroom_green_bg.png'
 import { authAPI, extractError } from '../services/api'
 import { normalizeAuthUser, setAuthUser, setToken } from '../services/auth'
 
@@ -270,7 +271,6 @@ export default function Login() {
 
         .lr-left-bg {
           position: absolute; inset: -10%;
-          background-image: url('/classroom_green_bg.png');
           background-size: cover; background-position: center 25%;
           z-index: 0;
           animation: bgExpand 25s infinite alternate linear;
@@ -458,7 +458,7 @@ export default function Login() {
 
         {/* ── Left panel ── */}
         <aside className="lr-left">
-          <div className="lr-left-bg" />
+          <div className="lr-left-bg" style={{ backgroundImage: `url(${classroomBg})` }} />
           <div className="lr-left-overlay" />
           <DotsGrid />
           <div className="lr-left-content">

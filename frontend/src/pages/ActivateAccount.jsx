@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import logo from '../assets/logo.svg'
+import classroomBg from '../assets/classroom_green_bg.png'
 import { studentAuthAPI, extractError } from '../services/api'
 import { normalizeAuthUser, setAuthUser, setToken } from '../services/auth'
 
@@ -338,7 +339,6 @@ export default function ActivateAccount() {
         }
         .act-left-bg {
           position: absolute; inset: -10%;
-          background-image: url('/classroom_green_bg.png');
           background-size: cover; background-position: center 25%;
           z-index: 0;
           animation: bgExpand 25s infinite alternate linear;
@@ -533,7 +533,7 @@ export default function ActivateAccount() {
 
         {/* ── Left panel ── */}
         <aside className="act-left">
-          <div className="act-left-bg" />
+          <div className="act-left-bg" style={{ backgroundImage: `url(${classroomBg})` }} />
           <div className="act-left-overlay" />
           <DotsGrid />
           <div className="act-left-content">
