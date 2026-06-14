@@ -7,9 +7,14 @@ Key fixes vs original:
     the denominator correctly.
   2. get_attendance_for_date() now accepts academic_year_id so calendar
     service can look up holidays.
-  3. All other existing behaviour preserved.
+  3. FIX B: get_dashboard_stats() merges sections into one entry per class name
+     in class_counts (Nursery-A + Nursery-B + Nursery-C → one "Nursery" entry).
+  4. FIX D: Today's attendance summary uses multi-value status sets so "present",
+     "PRESENT", and "P" are all counted correctly.
+  5. All other existing behaviour preserved.
 """
 
+from collections import defaultdict
 from datetime import date, timedelta
 from calendar import monthrange
 from typing import Optional
@@ -31,6 +36,10 @@ ACTIVE_ENROLLMENT_STATUSES = (
     EnrollmentStatusEnum.retained,
     EnrollmentStatusEnum.provisional,
 )
+
+# FIX D: accept any casing of stored status values
+PRESENT_STATUSES = {"P", "present", "PRESENT"}
+ABSENT_STATUSES  = {"A", "absent",  "ABSENT"}
 
 
 def _resolve_enrollment_for_attendance(db: Session, entry: AttendanceEntry) -> Enrollment:
@@ -442,14 +451,52 @@ def get_dashboard_stats(db: Session, academic_year_id: Optional[int] = None) -> 
         .limit(5)
         .all()
     )
-    class_counts = (
-        db.query(Class.name, func.count(Enrollment.id))
+
+    # FIX B: merge sections — one entry per Class.name (not per Class row/section)
+    raw_class_counts = (
+        db.query(Class.id, Class.name, func.count(Enrollment.id))
         .join(Enrollment, Enrollment.class_id == Class.id)
         .filter(Enrollment.academic_year_id == current_year_id if current_year_id else True)
         .filter(Enrollment.status.in_(ACTIVE_ENROLLMENT_STATUSES))
-        .group_by(Class.name)
+        .group_by(Class.id, Class.name)
         .all()
     )
+
+    # Merge: Nursery-A + Nursery-B + Nursery-C → one "Nursery" entry
+    merged: dict[str, dict] = defaultdict(lambda: {"class_id": None, "class_name": "", "count": 0})
+    for cls_id, cls_name, cnt in raw_class_counts:
+        merged[cls_name]["class_name"] = cls_name
+        merged[cls_name]["count"] += cnt
+        if merged[cls_name]["class_id"] is None:
+            merged[cls_name]["class_id"] = cls_id  # keep first section's id as representative
+    class_counts = list(merged.values())
+
+    # ── Today's attendance summary ────────────────────────────────────────────
+    # FIX D: use Python-side status sets to handle any casing in the DB.
+    att_records = (
+        db.query(Attendance.status)
+        .join(Enrollment, Enrollment.id == Attendance.enrollment_id)
+        .filter(
+            Attendance.date == today,
+            Enrollment.status.in_(ACTIVE_ENROLLMENT_STATUSES),
+        )
+    )
+    if current_year_id:
+        att_records = att_records.filter(Enrollment.academic_year_id == current_year_id)
+
+    att_present = 0
+    att_absent  = 0
+    att_marked  = 0
+    for (status,) in att_records.all():
+        att_marked += 1
+        if status in PRESENT_STATUSES:
+            att_present += 1
+        elif status in ABSENT_STATUSES:
+            att_absent += 1
+        # anything else (L, late, LATE, OL…) counts as neither present nor absent
+
+    att_not_marked = max(0, total_students - att_marked)
+    att_total      = total_students
 
     return {
         "total_students":    total_students,
@@ -467,11 +514,14 @@ def get_dashboard_stats(db: Session, academic_year_id: Optional[int] = None) -> 
             for p in recent_payments
         ],
         "recent_students": [
-            {"student_id": s.student_id, "name": s.name_en, "class_id": s.class_id}
+            {"student_id": s.id, "name": s.name_en, "class_id": s.class_id}
             for s in recent_students
         ],
-        "class_counts": [
-            {"class_name": name, "count": count}
-            for name, count in class_counts
-        ],
+        "class_counts": class_counts,
+        "attendance_summary": {
+            "present":     att_present,
+            "absent":      att_absent,
+            "not_marked":  att_not_marked,
+            "total":       att_total,
+        },
     }

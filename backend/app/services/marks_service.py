@@ -807,3 +807,28 @@ def get_class_results(db: Session, exam_id: int, class_id: int):
 
     request_cache[cache_key] = results
     return results
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Exam name aggregation
+# ─────────────────────────────────────────────────────────────────────────────
+
+EXAM_NAME_ORDER = ["Unit Test 1", "Unit Test 2", "Half-Yearly", "Annual"]
+
+
+def get_exam_names(db: Session, academic_year_id: int) -> list[str]:
+    """
+    Return distinct exam names for the academic year, sorted in academic order.
+    Known exam types come first (Unit Test 1, Unit Test 2, Half-Yearly, Annual),
+    followed by any custom/unknown exam names alphabetically.
+    """
+    rows = (
+        db.query(Exam.name)
+        .filter(Exam.academic_year_id == academic_year_id)
+        .distinct()
+        .all()
+    )
+    names = [r[0] for r in rows]
+    known = [n for n in EXAM_NAME_ORDER if n in names]
+    unknown = sorted(n for n in names if n not in EXAM_NAME_ORDER)
+    return known + unknown

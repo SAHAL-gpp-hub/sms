@@ -352,6 +352,7 @@ export const marksAPI = {
   seedSubjects:   (classId)  => api.post(`/marks/subjects/seed/${classId}`),
 
   getExams:   (params) => api.get('/marks/exams', { params: withSelectedYear(params) }),
+  getExamNames: (params) => api.get('/marks/exam-names', { params: withSelectedYear(params) }),
   createExam: (data)   => api.post('/marks/exams', {
     ...data,
     class_id:         parseInt(data.class_id),

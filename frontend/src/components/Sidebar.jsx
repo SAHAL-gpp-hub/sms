@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { authAPI, yearendAPI } from '../services/api'
 import { clearToken, getAuthUser, getRole } from '../services/auth'
+import logoUrl from '../assets/logo.svg'
 
 const Icon = ({ children }) => (
   <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -169,27 +170,61 @@ export default function Sidebar({ open, onClose }) {
       {open && <button className="sidebar-backdrop" onClick={onClose} aria-label="Close navigation" />}
 
       <aside className={`app-sidebar ${open ? 'sidebar-open' : 'sidebar-closed'}`}>
-        <div className="sidebar-brand">
-          <NavLink to="/" onClick={onClose} className="sidebar-brand-link">
-            <span className="sidebar-brand-mark">
-              <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 14l9-5-9-5-9 5 9 5z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 14l6.16-3.422A12.083 12.083 0 0118.825 17.057 11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998" />
+        <div className="sidebar-brand" style={{
+            padding: '12px 14px',
+            borderBottom: '1px solid rgba(255,255,255,0.08)',
+          }}>
+            <NavLink
+              to="/"
+              onClick={onClose}
+              className="sidebar-brand-link"
+              style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, textDecoration: 'none' }}
+            >
+              <img
+                src={logoUrl}
+                alt="Iqra School Logo"
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 10,
+                  objectFit: 'cover',
+                  flexShrink: 0,
+                  border: '2px solid rgba(255,255,255,0.2)',
+                }}
+                onError={e => { e.target.style.display = 'none' }}
+              />
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
+                <span style={{
+                  fontSize: 13,
+                  fontWeight: 800,
+                  letterSpacing: '0.03em',
+                  textTransform: 'uppercase',
+                  color: '#fff',
+                  lineHeight: 1.25,
+                  wordBreak: 'break-word',
+                }}>
+                  Iqra English Medium School
+                </span>
+                <span style={{
+                  fontSize: 10,
+                  fontWeight: 400,
+                  color: 'rgba(255,255,255,0.4)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}>
+                  {yearLabel ? `AY ${yearLabel}` : 'School Management'}
+                </span>
+              </div>
+            </NavLink>
+
+            <button className="sidebar-close-btn" onClick={onClose} aria-label="Close sidebar" style={{ flexShrink: 0 }}>
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
               </svg>
-            </span>
-            <span className="sidebar-brand-copy">
-              <strong>Iqra School</strong>
-              <small>{yearLabel ? `Academic year ${yearLabel}` : 'School management'}</small>
-            </span>
-          </NavLink>
-
-          <button className="sidebar-close-btn" onClick={onClose} aria-label="Close sidebar">
-            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
+            </button>
+          </div>
         <nav className="sidebar-nav" aria-label="Primary navigation">
           {roleGroups.map(group => (
             <section key={group.label} className="sidebar-group">

@@ -181,6 +181,20 @@ def get_exams(
     return marks_service.get_exams(db, class_id, academic_year_id)
 
 
+@router.get("/exam-names", response_model=list[str])
+def get_exam_names(
+    academic_year_id: int = Query(...),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_role("admin", "teacher")),
+):
+    """
+    Return distinct exam names for the given academic year in academic order.
+    Deduplicates the per-class exam rows — e.g. returns ['Unit Test 1', 'Unit Test 2', ...]
+    instead of 52 rows (13 classes × 4 exam names).
+    """
+    return marks_service.get_exam_names(db, academic_year_id)
+
+
 @router.post("/exams", response_model=ExamOut, status_code=201)
 def create_exam(
     data: ExamCreate,

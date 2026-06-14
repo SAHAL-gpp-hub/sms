@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.base_models import AcademicYear, Attendance, Class, Exam, FeePayment, StudentFee
 from app.routers.auth import CurrentUser, require_role
-from app.services import attendance_service, marks_service
+from app.services import analytics_service, attendance_service, marks_service
 
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["Analytics"])
@@ -99,26 +99,18 @@ def fee_collection_trend(
 
 @router.get("/class-performance")
 def class_performance(
-    exam_id: int = Query(...),
     academic_year_id: int = Query(...),
+    exam_name: str = Query(...),
     _: CurrentUser = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
-    classes = db.query(Class).filter(Class.academic_year_id == academic_year_id).order_by(Class.name, Class.division).all()
-    out = []
-    for cls in classes:
-        rows = marks_service.get_class_results(db, exam_id=exam_id, class_id=cls.id)
-        if not rows:
-            continue
-        avg_percentage = sum(float(item["percentage"]) for item in rows) / len(rows)
-        out.append(
-            {
-                "class_id": cls.id,
-                "class_name": f"{cls.name}{f'-{cls.division}' if cls.division else ''}",
-                "avg_percentage": round(avg_percentage, 2),
-            }
-        )
-    return out
+    """
+    Returns {classes, school_average, top_class} for the given exam name.
+    Each class entry has {class_name, avg_percentage}.
+    Sections (e.g. Nursery-A/B/C) are merged into one entry per class name.
+    Only classes with at least one student with marks entered are included.
+    """
+    return analytics_service.class_performance(db, academic_year_id, exam_name)
 
 
 @router.get("/grade-distribution")
@@ -139,31 +131,17 @@ def grade_distribution(
 
 @router.get("/attendance-trends")
 def attendance_trends(
-    class_id: Optional[int] = Query(None),
-    months: int = Query(3, ge=1, le=12),
+    # FIX C: filter by class_name (covers all sections) instead of class_id (single section)
+    class_name: Optional[str] = Query(None),
     _: CurrentUser = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
-    present_case = case((Attendance.status == "P", 1), (Attendance.status == "L", 1), else_=0)
-    trend_rows = (
-        db.query(
-            Attendance.date.label("date"),
-            func.count(Attendance.id).label("total"),
-            func.sum(present_case).label("present"),
-        )
-        .filter(Attendance.date >= func.current_date() - func.make_interval(0, months))
-        .filter(Attendance.class_id == class_id if class_id else True)
-        .group_by(Attendance.date)
-        .order_by(Attendance.date)
-        .all()
-    )
-    return [
-        {
-            "date": row.date.isoformat(),
-            "attendance_pct": round((float(row.present or 0) / float(row.total or 1)) * 100, 2),
-        }
-        for row in trend_rows
-    ]
+    """
+    Returns daily attendance % for the last 7 days anchored to today.
+    Filters by class name so all sections of a class are included.
+    attendance_pct is null when no attendance was marked that day.
+    """
+    return analytics_service.attendance_trends(db, class_name, days=7)
 
 
 @router.get("/top-students")
