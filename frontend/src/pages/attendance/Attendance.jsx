@@ -14,7 +14,9 @@ const STATUS_OPTIONS = [
   { value: 'OL', label: 'Leave',   short: 'OL', color: '#2563eb', bg: '#dbeafe', border: '#bfdbfe' },
 ]
 
-const MARKABLE_STATUS_OPTIONS = STATUS_OPTIONS.filter(o => o.value !== 'UNMARKED')
+const MARKABLE_STATUS_OPTIONS = STATUS_OPTIONS.filter(
+  o => o.value === 'P' || o.value === 'A'
+)
 
 const MONTHS = ['January','February','March','April','May','June',
                 'July','August','September','October','November','December']
@@ -33,7 +35,7 @@ function StatusToggle({ value, onChange, disabled = false }) {
           aria-pressed={value === opt.value}
           style={{
             minWidth: '76px',
-            minHeight: '46px',
+            minHeight: '42px',
             padding: '7px 10px',
             borderRadius: '8px',
             border: `1.5px solid ${value === opt.value ? opt.color : 'var(--border-default)'}`,
@@ -58,6 +60,20 @@ function StatusToggle({ value, onChange, disabled = false }) {
         </button>
       ))}
     </div>
+  )
+}
+
+function StatusBadge({ value }) {
+  const opt = STATUS_OPTIONS.find(o => o.value === value) || STATUS_OPTIONS[0]
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      padding: '5px 12px', borderRadius: 8,
+      background: opt.bg, border: `1.5px solid ${opt.border}`,
+      color: opt.color, fontWeight: 700, fontSize: 13,
+    }}>
+      {opt.short} {opt.label}
+    </span>
   )
 }
 
@@ -107,6 +123,8 @@ export default function Attendance() {
   const [selectedDate, setSelectedDate]     = useState(new Date().toISOString().split('T')[0])
   const [roster, setRoster]                 = useState([])
   const [statuses, setStatuses]             = useState({})
+  const [savedStatuses, setSavedStatuses]   = useState({})
+  const [editMode, setEditMode]             = useState(false)
   const [loading, setLoading]               = useState(false)
   const [saving, setSaving]                 = useState(false)
   const [saved, setSaved]                   = useState(false)
@@ -131,6 +149,8 @@ export default function Attendance() {
       const map = {}
       r.data.forEach(s => { map[s.student_id] = s.status || 'UNMARKED' })
       setStatuses(map)
+      setSavedStatuses(map)
+      setEditMode(false)
       setHighlightUnmarked(false)
     } catch (err) {
       toast.error(extractError(err))
@@ -187,7 +207,7 @@ export default function Attendance() {
   }, [dirty])
 
   const handleStatusChange = (studentId, status) => {
-    if (isClosedYear) return
+    if (!editMode || isClosedYear) return
     setStatuses(prev => ({ ...prev, [studentId]: status }))
     setHighlightUnmarked(false)
     setSaved(false)
@@ -195,7 +215,7 @@ export default function Attendance() {
   }
 
   const handleMarkAll = (status) => {
-    if (isClosedYear) return
+    if (!editMode || isClosedYear) return
     const label = STATUS_OPTIONS.find(o => o.value === status)?.label
     const map = {}
     roster.forEach(s => { map[s.student_id] = status })
@@ -207,7 +227,7 @@ export default function Attendance() {
   }
 
   const handleMarkRemainingPresent = () => {
-    if (isClosedYear) return
+    if (!editMode || isClosedYear) return
     const unmarkedCount = roster.filter(s => !statuses[s.student_id] || statuses[s.student_id] === 'UNMARKED').length
     if (unmarkedCount === 0) return
     const map = { ...statuses }
@@ -242,6 +262,8 @@ export default function Attendance() {
       setSaved(true)
       setDirty(false)
       setHighlightUnmarked(false)
+      setSavedStatuses(statuses)
+      setEditMode(false)
       toast.success(`Saved for ${entries.length} students`)
     } catch (err) {
       toast.error(extractError(err))
@@ -277,14 +299,35 @@ export default function Attendance() {
           gap: 6px;
           flex-wrap: wrap;
         }
+        .attendance-mobile-rowhead {
+          display: none;
+        }
+        .attendance-desktop-name {
+          display: inline;
+        }
         .attendance-status-toggle-cell {
-          min-width: 360px;
+          min-width: 200px;
+          padding-top: 0;
+          padding-bottom: 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 5px;
         }
         .status-toggle-group {
           display: grid;
-          grid-template-columns: repeat(4, minmax(76px, 1fr));
-          gap: 6px;
-          width: min(100%, 380px);
+          grid-template-columns: repeat(2, minmax(80px, 1fr));
+          gap: 10px;
+          width: 100%;
+          max-width: 200px;
+          align-items: center;
+          justify-content: center;
+        }
+        .status-btn {
+          display: flex !important;
+          width: 100%;
+          box-sizing: border-box;
         }
         .attendance-status-short {
           display: inline-grid;
@@ -313,6 +356,25 @@ export default function Attendance() {
           align-items: center;
           gap: 10px;
           flex-wrap: wrap;
+        }
+        .attendance-page .card {
+          overflow-x: hidden;
+          max-width: 100%;
+        }
+        .attendance-table-wrapper {
+          overflow-x: auto;
+          max-width: 100%;
+        }
+        .data-table.attendance-table td {
+          padding-top: 18px;
+          padding-bottom: 18px;
+          vertical-align: middle;
+        }
+        .data-table.attendance-table tbody tr {
+          border-bottom: 1px solid var(--border-subtle);
+        }
+        .data-table.attendance-table tbody tr:last-child {
+          border-bottom: none;
         }
         @media (max-width: 900px) {
           .attendance-actions {
@@ -348,16 +410,95 @@ export default function Attendance() {
           .attendance-save-bar .btn {
             width: 100%;
           }
-        }
-        @media (max-width: 380px) {
+
+          /* Card-style rows — no horizontal scroll */
+          .attendance-table-wrapper {
+            overflow-x: visible !important;
+          }
+          .data-table.attendance-table {
+            min-width: 0 !important;
+          }
+          .data-table.attendance-table thead {
+            display: none;
+          }
+          .data-table.attendance-table,
+          .data-table.attendance-table tbody,
+          .data-table.attendance-table tr,
+          .data-table.attendance-table td {
+            display: block;
+            width: 100%;
+          }
+          .data-table.attendance-table tr {
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            margin: 0 0 10px 0;
+            padding: 10px 12px;
+            background: var(--surface-0);
+          }
+          .data-table.attendance-table tbody tr:last-child {
+            border-bottom: 1px solid var(--border-subtle);
+            margin-bottom: 0;
+          }
+          .data-table.attendance-table td {
+            border: none;
+            padding: 2px 0;
+            text-align: left !important;
+          }
+          .attendance-mobile-rowhead {
+            display: flex;
+            align-items: baseline;
+            justify-content: flex-start;
+            gap: 8px;
+            margin-bottom: 4px;
+            text-align: left;
+          }
+          .attendance-mobile-sr {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--text-tertiary);
+            font-weight: 600;
+          }
+          .attendance-mobile-name {
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 14px;
+            flex: 1;
+          }
+          .attendance-mobile-roll {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--text-tertiary);
+            font-weight: 600;
+            white-space: nowrap;
+          }
+          .attendance-desktop-name {
+            display: none;
+          }
+          .data-table.attendance-table td.attendance-cell-sr,
+          .data-table.attendance-table td.attendance-cell-roll {
+            display: none;
+          }
+          .data-table.attendance-table td.attendance-cell-student {
+            text-align: left !important;
+          }
+
+          .attendance-status-toggle-cell {
+            min-width: 0;
+            margin-top: 6px;
+            align-items: stretch;
+          }
           .status-toggle-group {
-            display: grid !important;
-            grid-template-columns: 1fr 1fr;
-            gap: 6px !important;
+            max-width: 100%;
+            gap: 8px;
           }
           .status-btn {
-            min-height: 44px !important;
-            font-size: 13px !important;
+            min-height: 44px;
+            font-size: 13px;
+            min-width: 0 !important;
+            padding: 6px 6px !important;
+          }
+          .attendance-status-label {
+            display: inline;
           }
         }
         @keyframes unmarkedPulse {
@@ -469,51 +610,69 @@ export default function Attendance() {
                 )}
               </div>
               <div className="attendance-actions">
-                {/* Mark all buttons */}
-                <div className="attendance-bulk-actions">
-                  {MARKABLE_STATUS_OPTIONS.map(opt => (
-                    <button
-                      key={opt.value}
-                      onClick={() => handleMarkAll(opt.value)}
-                      disabled={roster.length === 0 || isClosedYear}
-                      style={{
-                        padding: '5px 10px',
-                        minHeight: '34px',
-                        borderRadius: '7px',
-                        border: `1.5px solid ${opt.border}`,
-                        background: opt.bg,
-                        color: opt.color,
-                        fontSize: '11.5px',
-                        fontWeight: 700,
-                        cursor: (roster.length === 0 || isClosedYear) ? 'not-allowed' : 'pointer',
-                        fontFamily: 'var(--font-sans)',
-                        opacity: (roster.length === 0 || isClosedYear) ? 0.5 : 1,
-                        touchAction: 'manipulation',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      All {opt.label}
-                    </button>
-                  ))}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  {unmarkedCount > 0 && (
-                    <button type="button" className="btn btn-secondary" onClick={handleMarkRemainingPresent} disabled={isClosedYear}>
-                      Mark remaining present ({unmarkedCount})
-                    </button>
-                  )}
-                  {saved && (
-                    <span style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--success-600)', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
-                      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                      </svg>
-                      Saved
-                    </span>
-                  )}
-                  <button className="btn btn-primary" onClick={handleSave} disabled={saving || roster.length === 0 || isClosedYear || !dirty} style={{ whiteSpace: 'nowrap' }}>
-                    {saving ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Saving…</> : 'Save'}
+                {!isClosedYear && !editMode && roster.length > 0 && (
+                  <button className="btn btn-primary" onClick={() => setEditMode(true)}>
+                    Edit Attendance
                   </button>
-                </div>
+                )}
+                {!isClosedYear && editMode && roster.length > 0 && (
+                  <button className="btn btn-secondary" onClick={() => {
+                    setStatuses(savedStatuses)
+                    setDirty(false)
+                    setEditMode(false)
+                  }}>
+                    Cancel
+                  </button>
+                )}
+                {editMode && (
+                  <>
+                    {/* Mark all buttons */}
+                    <div className="attendance-bulk-actions">
+                      {MARKABLE_STATUS_OPTIONS.map(opt => (
+                        <button
+                          key={opt.value}
+                          onClick={() => handleMarkAll(opt.value)}
+                          disabled={roster.length === 0 || isClosedYear}
+                          style={{
+                            padding: '5px 10px',
+                            minHeight: '34px',
+                            borderRadius: '7px',
+                            border: `1.5px solid ${opt.border}`,
+                            background: opt.bg,
+                            color: opt.color,
+                            fontSize: '11.5px',
+                            fontWeight: 700,
+                            cursor: (roster.length === 0 || isClosedYear) ? 'not-allowed' : 'pointer',
+                            fontFamily: 'var(--font-sans)',
+                            opacity: (roster.length === 0 || isClosedYear) ? 0.5 : 1,
+                            touchAction: 'manipulation',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          All {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      {unmarkedCount > 0 && (
+                        <button type="button" className="btn btn-secondary" onClick={handleMarkRemainingPresent} disabled={isClosedYear}>
+                          Mark remaining present ({unmarkedCount})
+                        </button>
+                      )}
+                      {saved && (
+                        <span style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--success-600)', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+                          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                          </svg>
+                          Saved
+                        </span>
+                      )}
+                      <button className="btn btn-primary" onClick={handleSave} disabled={saving || roster.length === 0 || isClosedYear || !dirty} style={{ whiteSpace: 'nowrap' }}>
+                        {saving ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Saving…</> : 'Save'}
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -526,52 +685,63 @@ export default function Attendance() {
                 description="Add students to mark attendance"
               />
             ) : (
-              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                <table className="data-table" style={{ minWidth: '340px' }}>
+              <div className="attendance-table-wrapper" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <table className="data-table attendance-table" style={{ minWidth: '340px' }}>
                   <thead>
                     <tr>
-                      <th style={{ width: '50px' }}>Roll</th>
-                      <th>Student</th>
-                      <th>Status</th>
+                      <th style={{ width: '44px' }}>Sr.</th>
+                      <th style={{ textAlign: 'center' }}>Student</th>
+                      <th style={{ width: '90px' }}>Roll No.</th>
+                      <th style={{ textAlign: 'center' }}>Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {roster.map(student => {
+                    {roster.map((student, index) => {
                       const isUnmarked = !statuses[student.student_id] || statuses[student.student_id] === 'UNMARKED'
                       return (
-                      <tr
-                        key={student.student_id}
-                        id={`student-row-${student.student_id}`}
-                        style={{
-                          animation: highlightUnmarked && isUnmarked ? 'unmarkedPulse 1.1s ease-in-out infinite' : undefined,
-                          background: highlightUnmarked && isUnmarked ? '#fff1f2' : undefined,
-                        }}
-                      >
-                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 600 }}>
-                          {student.roll_number || '—'}
-                        </td>
-                        <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                          {student.student_name}
-                        </td>
-                        <td className="attendance-status-toggle-cell">
-                          <StatusToggle
-                            value={statuses[student.student_id] || 'UNMARKED'}
-                            onChange={status => handleStatusChange(student.student_id, status)}
-                            disabled={isClosedYear}
-                          />
-                          {(!statuses[student.student_id] || statuses[student.student_id] === 'UNMARKED') && (
-                            <div style={{ marginTop: '5px', fontSize: '11px', fontWeight: 700, color: '#64748b' }}>Unmarked</div>
-                          )}
-                        </td>
-                      </tr>
-                    )})}
+                        <tr
+                          key={student.student_id}
+                          id={`student-row-${student.student_id}`}
+                          style={{
+                            animation: highlightUnmarked && isUnmarked ? 'unmarkedPulse 1.1s ease-in-out infinite' : undefined,
+                            background: highlightUnmarked && isUnmarked ? '#fff1f2' : undefined,
+                          }}
+                        >
+                          <td className="attendance-cell-sr" style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 600 }}>
+                            {index + 1}
+                          </td>
+                          <td className="attendance-cell-student" style={{ fontWeight: 600, color: 'var(--text-primary)', textAlign: 'center' }}>
+                            <div className="attendance-mobile-rowhead">
+                              <span className="attendance-mobile-sr">{index + 1}.</span>
+                              <span className="attendance-mobile-name">{student.student_name}</span>
+                              <span className="attendance-mobile-roll">Roll {student.roll_number || '—'}</span>
+                            </div>
+                            <span className="attendance-desktop-name">{student.student_name}</span>
+                          </td>
+                          <td className="attendance-cell-roll" style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 600 }}>
+                            {student.roll_number || '—'}
+                          </td>
+                          <td className="attendance-status-toggle-cell">
+                            {editMode ? (
+                              <StatusToggle
+                                value={statuses[student.student_id] || 'UNMARKED'}
+                                onChange={status => handleStatusChange(student.student_id, status)}
+                                disabled={isClosedYear}
+                              />
+                            ) : (
+                              <StatusBadge value={statuses[student.student_id] || 'UNMARKED'} />
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
             )}
 
             {/* Save footer for long lists */}
-            {roster.length > 5 && !loading && (
+            {editMode && roster.length > 5 && !loading && (
               <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'flex-end', gap: '8px', flexWrap: 'wrap' }}>
                 {unmarkedCount > 0 && (
                   <button type="button" className="btn btn-secondary" onClick={handleMarkRemainingPresent} disabled={isClosedYear}>
@@ -584,7 +754,7 @@ export default function Attendance() {
               </div>
             )}
           </div>
-          {roster.length > 0 && !loading && (
+          {editMode && roster.length > 0 && !loading && (
             <div className="attendance-save-bar" style={{
               border: highlightUnmarked && unmarkedCount > 0 ? '1px solid #fecaca' : '1px solid var(--border-default)',
               background: highlightUnmarked && unmarkedCount > 0 ? '#fee2e2' : 'rgba(255,255,255,0.96)',

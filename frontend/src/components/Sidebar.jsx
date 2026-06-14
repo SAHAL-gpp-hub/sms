@@ -196,7 +196,7 @@ export default function Sidebar({ open, onClose }) {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
                 <span style={{
-                  fontSize: 13,
+                  fontSize: 18,
                   fontWeight: 800,
                   letterSpacing: '0.03em',
                   textTransform: 'uppercase',
@@ -207,7 +207,7 @@ export default function Sidebar({ open, onClose }) {
                   Iqra English Medium School
                 </span>
                 <span style={{
-                  fontSize: 10,
+                  fontSize: 11,
                   fontWeight: 400,
                   color: 'rgba(255,255,255,0.4)',
                   whiteSpace: 'nowrap',
