@@ -12,6 +12,7 @@ consistency and to respect the service-layer boundary.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import Optional
 from decimal import Decimal
@@ -19,7 +20,7 @@ from decimal import Decimal
 from app.core.database import get_db
 from app.core.cache import response_cache
 from app.core.config import settings
-from app.models.base_models import AcademicYear
+from app.models.base_models import AcademicYear, StudentFee, FeePayment
 from app.models.base_models import Enrollment, EnrollmentStatusEnum, FeeStructure
 from app.routers.auth import CurrentUser, ensure_student_access, require_role
 from app.schemas.fee import (
@@ -343,3 +344,25 @@ def get_defaulters(
     data = fee_service.get_defaulters(db, class_id, academic_year_id)
     response_cache.set(cache_key, data, settings.RESPONSE_CACHE_TTL_SECONDS)
     return data
+
+
+@router.get("/monthly-collections")
+def get_monthly_collections(
+    month:            int           = Query(..., ge=1, le=12),
+    academic_year_id: Optional[int] = Query(None),
+    db:               Session       = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
+    return fee_service.get_monthly_collections(db, month, academic_year_id)
+
+
+@router.get("/payment-options/{student_id}")
+def get_payment_options(
+    student_id: int,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_role("admin", "student", "parent")),
+):
+    ensure_student_access(db, current_user, student_id)
+    return fee_service.get_payment_options(db, student_id)
+
+

@@ -336,24 +336,83 @@ export default function PortalFees() {
           )}
         </div>
         {canPayOnline ? (
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))', gap:'8px' }}>
-            {paymentOptions.map(option => (
+          <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))', gap:'8px' }}>
+              {paymentOptions.map(option => (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setPendingPayment(option)}
+                  disabled={payingOption === option.key || Boolean(verifyingOrderId)}
+                  style={{
+                    border:0, borderRadius:'12px', padding:'11px 10px', background:'#0d7377',
+                    color:'white', cursor: payingOption || verifyingOrderId ? 'wait' : 'pointer',
+                    opacity: payingOption === option.key || verifyingOrderId ? 0.7 : 1,
+                    minHeight:'58px',
+                  }}
+                >
+                  <div style={{ fontSize:'13px', fontWeight:900 }}>{payingOption === option.key ? 'Opening…' : option.label}</div>
+                  <div style={{ fontSize:'11px', fontWeight:800, opacity:0.85, marginTop:'2px' }}>{fmt(option.amount)}</div>
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display:'flex', gap:'10px', alignItems:'center', marginTop:'4px' }}>
+              <div style={{ position:'relative', flex:1 }}>
+                <span style={{ position:'absolute', left:'12px', top:'50%', transform:'translateY(-50%)', fontSize:'13.5px', fontWeight:700, color:'#94a3b8' }}>₹</span>
+                <input
+                  type="number"
+                  placeholder="Enter custom amount..."
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px 10px 28px',
+                    borderRadius: '10px',
+                    border: '1px solid #e2e8f0',
+                    fontSize: '13.5px',
+                    minHeight: '40px',
+                    boxSizing: 'border-box'
+                  }}
+                  id="portalCustomAmount"
+                  min="1"
+                  max={currentYearBalance}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const val = parseFloat(e.currentTarget.value)
+                      if (val > 0 && val <= currentYearBalance) {
+                        setPendingPayment({ key: 'custom', label: 'Custom Payment', amount: val })
+                      } else {
+                        toast.error(`Amount must be between ₹1 and ${fmt(currentYearBalance)}`)
+                      }
+                    }
+                  }}
+                />
+              </div>
               <button
-                key={option.key}
                 type="button"
-                onClick={() => setPendingPayment(option)}
-                disabled={payingOption === option.key || Boolean(verifyingOrderId)}
+                onClick={() => {
+                  const val = parseFloat(document.getElementById('portalCustomAmount')?.value || 0)
+                  if (val > 0 && val <= currentYearBalance) {
+                    setPendingPayment({ key: 'custom', label: 'Custom Payment', amount: val })
+                  } else {
+                    toast.error(`Amount must be between ₹1 and ${fmt(currentYearBalance)}`)
+                  }
+                }}
                 style={{
-                  border:0, borderRadius:'12px', padding:'11px 10px', background:'#0d7377',
-                  color:'white', cursor: payingOption || verifyingOrderId ? 'wait' : 'pointer',
-                  opacity: payingOption === option.key || verifyingOrderId ? 0.7 : 1,
-                  minHeight:'58px',
+                  padding:'0 18px',
+                  borderRadius:'8px',
+                  height:'40px',
+                  background:'#0d7377',
+                  color:'white',
+                  border:'none',
+                  fontWeight:700,
+                  cursor:'pointer',
+                  whiteSpace:'nowrap',
+                  fontSize:'13px'
                 }}
               >
-                <div style={{ fontSize:'13px', fontWeight:900 }}>{payingOption === option.key ? 'Opening…' : option.label}</div>
-                <div style={{ fontSize:'11px', fontWeight:800, opacity:0.85, marginTop:'2px' }}>{fmt(option.amount)}</div>
+                Pay Custom
               </button>
-            ))}
+            </div>
           </div>
         ) : (
           <div style={{ fontSize:'13px', color:'#64748b', fontWeight:700 }}>

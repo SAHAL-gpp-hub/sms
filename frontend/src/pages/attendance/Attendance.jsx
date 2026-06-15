@@ -590,9 +590,6 @@ export default function Attendance() {
           />
         </div>
       )}
-      {selectedYearId && !selectedClass && classes.length > 0 && (
-        <div className="card"><ScreenState type="no-class" description="Choose a class and date before loading the attendance roster." /></div>
-      )}
 
       {/* Daily View */}
       {view === 'daily' && selectedClass && (

@@ -80,11 +80,13 @@ class StudentFeeOut(BaseModel):
     model_config = {"from_attributes": True}
 
 class PaymentCreate(BaseModel):
-    student_fee_id: int
+    student_id: int
     amount_paid: Decimal
     payment_date: date
     mode: str
     collected_by: Optional[str] = None
+    notes: Optional[str] = None
+    academic_year_id: Optional[int] = None
 
     @field_validator("amount_paid")
     @classmethod
@@ -93,16 +95,24 @@ class PaymentCreate(BaseModel):
             raise ValueError("Payment amount must be greater than 0")
         return v
 
+class PaymentAllocation(BaseModel):
+    fee_head_name: str
+    amount_applied: Decimal
+    balance_after: Decimal
+
 class PaymentOut(BaseModel):
     id: int
-    student_fee_id: int
-    amount_paid: Decimal
+    receipt_numbers: list[str]
+    total_amount: Decimal
     payment_date: date
     mode: str
-    receipt_number: str
-    collected_by: Optional[str]
-    online_order_id: Optional[int] = None
-    notes: Optional[str] = None
+    collected_by: Optional[str] = None
+    student_name: Optional[str] = None
+    student_gr_no: Optional[str] = None
+    class_name: Optional[str] = None
+    allocations: list[PaymentAllocation] = []
+    total_balance_after: Decimal
+    
     model_config = {"from_attributes": True}
 
 class StudentLedgerItem(BaseModel):
@@ -115,6 +125,7 @@ class StudentLedgerItem(BaseModel):
     enrollment_id: int
     academic_year_id: Optional[int] = None
     invoice_type: str = "regular"
+
 
 class StudentLedger(BaseModel):
     student_id: int

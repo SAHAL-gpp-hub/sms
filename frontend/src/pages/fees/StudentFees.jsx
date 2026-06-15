@@ -4,17 +4,11 @@ import { useParams, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { feeAPI, formatINR, extractPaymentError } from '../../services/api'
 import { PageHeader, EmptyState, LoadingPage } from '../../components/UI'
+import { ReceiptModal } from '../../components/fees/ReceiptModal'
 
 const PAYMENT_MODES = ['Cash', 'Cheque', 'DD', 'UPI']
 
-const buildPaymentForm = (feeItem) => ({
-  amount_paid: feeItem?.balance ? Number(feeItem.balance).toFixed(2) : '',
-  mode: 'Cash',
-  payment_date: new Date().toISOString().split('T')[0],
-  collected_by: '',
-})
-
-function LedgerItem({ item, onPay }) {
+function LedgerItem({ item }) {
   const balance = parseFloat(item.balance || 0)
   const paid    = parseFloat(item.paid_amount || 0)
   const total   = parseFloat(item.net_amount || 0)
@@ -25,7 +19,7 @@ function LedgerItem({ item, onPay }) {
   return (
     <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '8px' }}>
-        <div style={{ minWidth: 0 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-primary)' }}>{item.fee_head_name}</span>
             {isArrear && (
@@ -37,113 +31,100 @@ function LedgerItem({ item, onPay }) {
               {isPaid ? 'Paid' : 'Due'}
             </span>
           </div>
-          <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '3px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '8px', flexWrap: 'wrap' }}>
             <span>Billed: <strong style={{ color: 'var(--text-secondary)' }}>{formatINR(total)}</strong></span>
             <span>Paid: <strong style={{ color: 'var(--success-700)' }}>{formatINR(paid)}</strong></span>
             <span>Balance: <strong style={{ color: balance > 0 ? 'var(--danger-600)' : 'var(--success-700)' }}>{formatINR(balance)}</strong></span>
-            {item.source_invoice_id && <span>Source invoice: <strong style={{ color: 'var(--text-secondary)' }}>#{item.source_invoice_id}</strong></span>}
+            {item.source_invoice_id && <span>Source: <strong style={{ color: 'var(--text-secondary)' }}>#{item.source_invoice_id}</strong></span>}
           </div>
         </div>
-        {!isPaid && (
-          <button
-            onClick={() => onPay(item)}
-            style={{ padding: '7px 14px', borderRadius: '8px', fontSize: '12.5px', fontWeight: 700, background: 'var(--brand-600)', color: 'white', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-sans)', whiteSpace: 'nowrap', flexShrink: 0, touchAction: 'manipulation', minHeight: '36px' }}
-          >
-            Pay
-          </button>
-        )}
       </div>
-      <div style={{ height: '5px', background: 'var(--gray-100)', borderRadius: '3px', overflow: 'hidden' }}>
+      <div style={{ height: '5px', background: 'var(--gray-100)', borderRadius: '3px', overflow: 'hidden', marginTop: '6px' }}>
         <div style={{ height: '100%', width: `${paidPct}%`, background: isPaid ? 'var(--success-500)' : 'var(--brand-500)', borderRadius: '3px', transition: 'width 0.5s ease' }} />
       </div>
     </div>
   )
 }
 
-function PaymentModal({ item, onClose, onSuccess }) {
-  const [form, setForm] = useState(() => buildPaymentForm(item))
+
+function PaymentModal({ target, ledger, onClose, onSuccess }) {
+  const [form, setForm] = useState({
+    amount_paid: '',
+    mode: 'Cash',
+    payment_date: new Date().toISOString().split('T')[0],
+    collected_by: '',
+    notes: '',
+  })
 
   const [saving, setSaving] = useState(false)
-  const [successReceipt, setSuccessReceipt] = useState(null)
-
-  const itemId = item?.student_fee_id
-  const itemBalance = item?.balance
-  const balance = item ? parseFloat(item.balance) : 0
 
   useEffect(() => {
-    if (itemId) {
-      setForm(buildPaymentForm({ balance: itemBalance }))
-      setSuccessReceipt(null)
+    if (target) {
+      setForm(f => ({
+        ...f,
+        amount_paid: target.amount ? target.amount.toFixed(2) : '',
+        notes: '',
+      }))
       setSaving(false)
     }
-  }, [itemId, itemBalance])
+  }, [target])
+
+  if (!target || !ledger) return null
+
+  const maxBalance = parseFloat(target.balance || 0)
+  const currentAmount = parseFloat(form.amount_paid) || 0
+
+  // Calculate live allocation preview
+  let remaining = currentAmount
+  const previewAllocations = []
+  for (const item of ledger.items || []) {
+    const itemBal = parseFloat(item.balance || 0)
+    if (itemBal > 0 && remaining > 0) {
+      const applied = Math.min(itemBal, remaining)
+      previewAllocations.push({
+        name: item.fee_head_name,
+        amount: applied,
+      })
+      remaining -= applied
+    }
+  }
 
   const handleSubmit = async () => {
-    if (saving || successReceipt) return
+    if (saving) return
 
     const amt = parseFloat(form.amount_paid)
 
     if (!amt || amt <= 0) {
-
       toast.error('Amount must be > ₹0')
-
       return
-
     }
 
-    if (amt > balance) {
-
-      toast.error('Amount cannot exceed balance')
-
+    if (amt > maxBalance) {
+      toast.error('Amount cannot exceed outstanding balance')
       return
-
-    }
-
-    if (!item?.student_fee_id) {
-
-      toast.error('Invalid fee record')
-
-      return
-
     }
 
     setSaving(true)
 
     try {
-
       const result = await feeAPI.recordPayment({
-        student_fee_id: item.student_fee_id,
+        student_id: parseInt(target.student_id),
         amount_paid: amt,
         mode: form.mode,
         payment_date: form.payment_date,
         collected_by: form.collected_by || null,
-
+        notes: form.notes || null,
       })
-      setSuccessReceipt(result.data?.receipt_number || 'Recorded')
       toast.success(`Payment of ${formatINR(amt)} recorded`)
+      onSuccess(result.data)
+      onClose()
     } catch (err) {
       toast.error(extractPaymentError(err).message)
       setSaving(false)
-      return
     } finally {
-      if (!successReceipt) setSaving(false)
+      setSaving(false)
     }
   }
-
-  if (!item) return null
-  if (successReceipt) return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)' }} />
-      <div style={{ position: 'relative', background: 'var(--surface-0)', borderRadius: '16px 16px 0 0', padding: 24, width: '100%', maxWidth: 480, boxShadow: 'var(--shadow-xl)', textAlign: 'center' }} className="payment-modal-inner">
-        <div style={{ fontSize: 44, color: 'var(--success-600)', fontWeight: 900, lineHeight: 1 }}>✓</div>
-        <div style={{ fontSize: 18, fontWeight: 900, color: '#15803d', marginTop: 10 }}>Payment Recorded</div>
-        <div style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '8px 0 20px' }}>Receipt: {successReceipt}</div>
-        <button className="btn btn-primary btn-lg" style={{ width: '100%' }} onClick={() => { onSuccess(); onClose() }}>
-          Done
-        </button>
-      </div>
-    </div>
-  )
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
@@ -151,15 +132,43 @@ function PaymentModal({ item, onClose, onSuccess }) {
       <div style={{ position: 'relative', background: 'var(--surface-0)', borderRadius: '16px 16px 0 0', padding: '24px 20px 28px', width: '100%', maxWidth: '480px', boxShadow: 'var(--shadow-xl)', border: '1px solid var(--border-default)', borderBottom: 'none' }} className="payment-modal-inner">
         <h3 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Record Payment</h3>
         <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
-          {item.fee_head_name} — Balance: <strong style={{ color: 'var(--danger-600)' }}>{formatINR(balance)}</strong>
+          Total Outstanding Balance: <strong style={{ color: 'var(--danger-600)' }}>{formatINR(maxBalance)}</strong>
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div>
             <label className="label">Amount (₹) *</label>
-            <input type="number" className="input" value={form.amount_paid} onChange={e => setForm(f => ({ ...f, amount_paid: e.target.value }))} placeholder="0.00" min="0.01" step="0.01" max={balance} autoFocus inputMode="decimal" />
-            <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '4px' }}>Max: {formatINR(balance)}</div>
+            <input 
+              type="number" 
+              className="input" 
+              value={form.amount_paid} 
+              onChange={e => setForm(f => ({ ...f, amount_paid: e.target.value }))} 
+              placeholder="0.00" 
+              min="0.01" 
+              step="0.01" 
+              max={maxBalance} 
+              autoFocus 
+              inputMode="decimal" 
+            />
+            <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
+              Max: {formatINR(maxBalance)}
+            </div>
           </div>
+
+          {/* Live Allocation Preview */}
+          {previewAllocations.length > 0 && (
+            <div style={{ background: 'var(--gray-50)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '10px 12px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.04em' }}>Payment Allocation Preview</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {previewAllocations.map((alloc, idx) => (
+                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+                    <span>{alloc.name}</span>
+                    <strong style={{ color: 'var(--text-primary)' }}>{formatINR(alloc.amount)}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="label">Payment Mode *</label>
@@ -181,6 +190,11 @@ function PaymentModal({ item, onClose, onSuccess }) {
           <div>
             <label className="label">Collected By</label>
             <input type="text" className="input" value={form.collected_by} onChange={e => setForm(f => ({ ...f, collected_by: e.target.value }))} placeholder="Staff name (optional)" />
+          </div>
+
+          <div>
+            <label className="label">Notes / Remarks</label>
+            <input type="text" className="input" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Notes (optional)" />
           </div>
         </div>
 
@@ -210,6 +224,8 @@ export default function StudentFees() {
   const [payments, setPayments]   = useState([])
   const [loading, setLoading]     = useState(true)
   const [payTarget, setPayTarget] = useState(null)
+  const [receipt, setReceipt]     = useState(null)
+
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -270,6 +286,101 @@ export default function StudentFees() {
         </div>
       )}
 
+      {/* Collect Fee Payment section */}
+      {totalBalance > 0 && (
+        <div className="card" style={{ padding: '16px', marginBottom: '14px' }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '12px' }}>Collect Fee Payment</div>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '12px' }}>
+            {[
+              { key: 'full', label: 'Full Payment', amount: totalBalance },
+              { key: 'half', label: 'Half Payment', amount: totalBalance / 2 },
+              { key: 'quarter', label: 'Quarter Payment', amount: totalBalance / 4 },
+            ].map(opt => (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => setPayTarget({ student_id: id, amount: opt.amount, balance: totalBalance })}
+                style={{
+                  padding: '10px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border-default)',
+                  background: 'var(--surface-0)',
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                  transition: 'all 0.15s',
+                  boxShadow: 'var(--shadow-xs)',
+                  minHeight: '64px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--brand-500)'
+                  e.currentTarget.style.background = 'var(--brand-50)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border-default)'
+                  e.currentTarget.style.background = 'var(--surface-0)'
+                }}
+              >
+                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: '3px' }}>{opt.label}</div>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>{formatINR(opt.amount)}</div>
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <div style={{ position: 'relative', flex: 1 }}>
+              <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', fontWeight: 700, color: 'var(--text-tertiary)' }}>₹</span>
+              <input
+                type="number"
+                placeholder="Enter custom amount..."
+                className="input"
+                style={{ paddingLeft: '28px', minHeight: '40px', fontSize: '13.5px' }}
+                id="customAmountInput"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const val = parseFloat(e.currentTarget.value)
+                    if (val > 0 && val <= totalBalance) {
+                      setPayTarget({ student_id: id, amount: val, balance: totalBalance })
+                    } else {
+                      toast.error('Invalid amount entered')
+                    }
+                  }
+                }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const val = parseFloat(document.getElementById('customAmountInput')?.value || 0)
+                if (val > 0 && val <= totalBalance) {
+                  setPayTarget({ student_id: id, amount: val, balance: totalBalance })
+                } else {
+                  toast.error('Please enter a valid amount')
+                }
+              }}
+              style={{
+                padding: '0 18px',
+                borderRadius: '8px',
+                height: '40px',
+                background: 'var(--brand-600)',
+                color: 'white',
+                border: 'none',
+                fontWeight: 700,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                fontSize: '13px',
+              }}
+            >
+              Collect
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Fee breakdown */}
       <div className="card" style={{ marginBottom: '14px' }}>
         <div className="card-header">
@@ -284,7 +395,7 @@ export default function StudentFees() {
           />
         ) : (
           ledger.items.map(item => (
-            <LedgerItem key={item.student_fee_id} item={item} onPay={setPayTarget} />
+            <LedgerItem key={item.student_fee_id} item={item} />
           ))
         )}
       </div>
@@ -323,7 +434,8 @@ export default function StudentFees() {
         </div>
       )}
 
-      <PaymentModal item={payTarget} onClose={() => setPayTarget(null)} onSuccess={() => { setPayTarget(null); fetchData() }} />
+      <PaymentModal target={payTarget} ledger={ledger} onClose={() => setPayTarget(null)} onSuccess={(payment) => { setReceipt(payment); fetchData() }} />
+      {receipt && <ReceiptModal payment={receipt} onClose={() => setReceipt(null)} />}
     </div>
   )
 }

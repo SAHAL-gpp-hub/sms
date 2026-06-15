@@ -466,6 +466,7 @@ class StudentFee(Base):
     source_invoice_id = Column(Integer, ForeignKey("student_fees.id"), nullable=True)  # NEW for arrears
 
 
+
 class FeePayment(Base):
     __tablename__ = "fee_payments"
 

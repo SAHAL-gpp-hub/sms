@@ -347,84 +347,34 @@ def mark_order_paid(
             db.commit()
         return existing_payments
 
-    if order.status == "paid":
-        raise HTTPException(status_code=409, detail="Order is paid but receipt is missing")
-
     amount = _order_net_amount(order)
-    allocations: list[tuple[StudentFee, Decimal]]
-    if order.scope == "current_year":
-        if not order.student_id:
-            raise HTTPException(status_code=404, detail="Payment order is not linked to a student")
-        payable_items, outstanding = _current_year_outstanding(db, order.student_id)
-        if amount > outstanding:
-            order.status = "failed"
-            order.failure_reason = f"Payment amount exceeds current-year outstanding balance ₹{outstanding}"
-            db.commit()
-            raise HTTPException(status_code=409, detail=order.failure_reason)
-        remaining = amount
-        allocations = []
-        for item in payable_items:
-            if remaining <= 0:
-                break
-            item_outstanding = _outstanding_for_student_fee(db, item)
-            applied = min(item_outstanding, remaining)
-            if applied > 0:
-                allocations.append((item, applied))
-                remaining = _money(remaining - applied)
-    else:
-        student_fee = db.query(StudentFee).filter_by(id=order.student_fee_id).first()
-        if not student_fee:
-            raise HTTPException(status_code=404, detail="Fee record not found")
-        outstanding = _outstanding_for_student_fee(db, student_fee)
-        if amount > outstanding:
-            order.status = "failed"
-            order.failure_reason = f"Payment amount exceeds outstanding balance ₹{outstanding}"
-            db.commit()
-            raise HTTPException(status_code=409, detail=order.failure_reason)
-        allocations = [(student_fee, amount)]
+    student_id = _student_id_for_order(db, order)
 
     order.razorpay_payment_id = payment_id
     order.razorpay_signature = signature
     order.status = "paid"
     order.paid_at = datetime.now(timezone.utc)
+    db.flush()
 
-    payments: list[FeePayment] = []
-    for student_fee, applied_amount in allocations:
-        payment = FeePayment(
-            student_fee_id=student_fee.id,
-            amount_paid=applied_amount,
-            payment_date=date.today(),
-            mode="online",
-            receipt_number=generate_receipt_number(db),
-            collected_by=None,
-            notes=f"Razorpay payment {payment_id}",
-            online_order_id=order.id,
-        )
-        db.add(payment)
-        db.flush()
-        payments.append(payment)
-    db.commit()
-    for payment in payments:
-        db.refresh(payment)
-        log_data_change(
-            db,
-            user_id=actor_user_id,
-            action=DataAuditActionEnum.create,
-            table_name="fee_payments",
-            record_id=payment.id,
-            old_value=None,
-            new_value=model_snapshot(payment),
-        )
-    db.commit()
-    for payment in payments:
-        db.refresh(payment)
-        try:
-            from app.services.notification_service import enqueue_payment_confirmation
-            enqueue_payment_confirmation(db, payment.id)
-            db.commit()
-        except Exception as exc:
-            db.rollback()
-            logger.warning("Could not queue payment confirmation for payment %s: %s", payment.id, exc)
+    from app.services.fee_service import allocate_payment
+    
+    academic_year_id = None
+    if order.scope == "current_year":
+        year = require_current_academic_year(db)
+        academic_year_id = year.id
+
+    payments = allocate_payment(
+        db=db,
+        student_id=student_id,
+        amount=amount,
+        payment_date=date.today(),
+        mode="online",
+        notes=f"Razorpay payment {payment_id}",
+        online_order_id=order.id,
+        actor_user_id=actor_user_id,
+        academic_year_id=academic_year_id,
+        student_fee_id=order.student_fee_id if order.scope != "current_year" else None,
+    )
     return payments
 
 

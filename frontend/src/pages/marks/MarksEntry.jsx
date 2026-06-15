@@ -565,6 +565,65 @@ if (typeof document !== 'undefined' && !document.getElementById('me-responsive-c
 // Sub-components
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Read-only mark cell used in view mode.
+ * Shows the mark value prominently; handles absent / empty states.
+ */
+function MarkReadView({ theory, practical, maxTheory, maxPractical, isAbsent, isLocked }) {
+  if (isAbsent) {
+    return (
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        padding: '3px 10px', borderRadius: 6,
+        background: '#fee2e2', border: '1px solid #fecaca',
+        color: '#dc2626', fontWeight: 800, fontSize: 12.5,
+        letterSpacing: '0.02em',
+      }}>AB</span>
+    )
+  }
+  const hasTheory = theory !== '' && theory !== undefined && theory !== null
+  const hasPractical = maxPractical > 0 && practical !== '' && practical !== undefined && practical !== null
+  const empty = !hasTheory && !hasPractical
+
+  if (empty) {
+    return (
+      <span style={{ color: 'var(--text-tertiary)', fontSize: 13, fontWeight: 500 }}>—</span>
+    )
+  }
+
+  const invalid =
+    isMarkInvalid(theory, maxTheory) ||
+    (maxPractical > 0 && isMarkInvalid(practical, maxPractical))
+
+  const bg     = isLocked ? '#f1f5f9'  : invalid ? '#fee2e2'  : '#f0fdf4'
+  const border = isLocked ? '#e2e8f0'  : invalid ? '#fecaca'  : '#bbf7d0'
+  const color  = isLocked ? '#475569'  : invalid ? '#dc2626'  : '#15803d'
+
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      padding: '3px 9px', borderRadius: 6,
+      background: bg, border: `1px solid ${border}`,
+      color, fontWeight: 800, fontSize: 13,
+      fontFamily: 'var(--font-mono)',
+    }}>
+      {hasTheory ? String(theory) : '—'}
+      {maxPractical > 0 && (
+        <>
+          <span style={{ opacity: 0.4, fontWeight: 400, fontSize: 11 }}>+</span>
+          {hasPractical ? String(practical) : '—'}
+        </>
+      )}
+      {isLocked && (
+        <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ opacity: 0.5, marginLeft: 2 }}>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
+            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+      )}
+    </span>
+  )
+}
+
 function GradeBadge({ grade }) {
   const s = GRADE_COLORS[grade] || { bg: 'var(--gray-100)', color: 'var(--gray-600)' }
   return (
@@ -614,7 +673,7 @@ function EntryStat({ label, value, note }) {
   )
 }
 
-const StudentMarksCard = memo(function StudentMarksCard({ student, subjects, marks, onChange, canEditSubject }) {
+const StudentMarksCard = memo(function StudentMarksCard({ student, subjects, marks, onChange, canEditSubject, editMode }) {
   return (
     <article className="me-student-mark-card">
       <div className="me-student-mark-header">
@@ -630,58 +689,73 @@ const StudentMarksCard = memo(function StudentMarksCard({ student, subjects, mar
       </div>
       {subjects.map(subject => {
         const current = marks?.[subject.id] || {}
-        const locked = current.is_locked || !canEditSubject(subject.id)
+        const locked = !editMode || current.is_locked || !canEditSubject(subject.id)
+        const viewOnly = !editMode
         return (
           <div key={subject.id} className="me-subject-mark-row">
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)' }}>
-                {subject.name}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)' }}>
+                  {subject.name}
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                  Theory /{subject.max_theory}{subject.max_practical > 0 ? ` · Practical /${subject.max_practical}` : ''}
+                </div>
               </div>
-              <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                Theory /{subject.max_theory}{subject.max_practical > 0 ? ` · Practical /${subject.max_practical}` : ''}
-              </div>
-            </div>
-            <div className="me-mobile-mark-inputs">
-              <label>
-                <span className="label" style={{ fontSize: 11 }}>Theory</span>
-                <input
-                  className={`input me-mark-input ${isMarkInvalid(current.theory, subject.max_theory) ? 'is-invalid' : ''}`}
-                  type="number"
-                  min="0"
-                  max={subject.max_theory}
-                  value={current.theory ?? ''}
-                  onChange={event => onChange(student.student_id, subject.id, 'theory', event.target.value)}
-                  disabled={locked || current.is_absent}
-                  placeholder={`/${subject.max_theory}`}
+              {viewOnly && (
+                <MarkReadView
+                  theory={current.theory}
+                  practical={current.practical}
+                  maxTheory={subject.max_theory}
+                  maxPractical={subject.max_practical}
+                  isAbsent={current.is_absent}
+                  isLocked={current.is_locked}
                 />
-              </label>
-              {subject.max_practical > 0 ? (
+              )}
+            </div>
+            {!viewOnly && (
+              <div className="me-mobile-mark-inputs">
                 <label>
-                  <span className="label" style={{ fontSize: 11 }}>Practical</span>
+                  <span className="label" style={{ fontSize: 11 }}>Theory</span>
                   <input
-                    className={`input me-mark-input ${isMarkInvalid(current.practical, subject.max_practical) ? 'is-invalid' : ''}`}
+                    className={`input me-mark-input ${isMarkInvalid(current.theory, subject.max_theory) ? 'is-invalid' : ''}`}
                     type="number"
                     min="0"
-                    max={subject.max_practical}
-                    value={current.practical ?? ''}
-                    onChange={event => onChange(student.student_id, subject.id, 'practical', event.target.value)}
+                    max={subject.max_theory}
+                    value={current.theory ?? ''}
+                    onChange={event => onChange(student.student_id, subject.id, 'theory', event.target.value)}
                     disabled={locked || current.is_absent}
-                    placeholder={`/${subject.max_practical}`}
+                    placeholder={`/${subject.max_theory}`}
                   />
                 </label>
-              ) : (
-                <div />
-              )}
-              <label className={`me-absent-toggle ${locked ? 'disabled' : ''}`} style={{ alignSelf: 'end', minHeight: 44 }}>
-                Abs
-                <input
-                  type="checkbox"
-                  checked={current.is_absent || false}
-                  onChange={event => onChange(student.student_id, subject.id, 'is_absent', event.target.checked)}
-                  disabled={locked}
-                />
-              </label>
-            </div>
+                {subject.max_practical > 0 ? (
+                  <label>
+                    <span className="label" style={{ fontSize: 11 }}>Practical</span>
+                    <input
+                      className={`input me-mark-input ${isMarkInvalid(current.practical, subject.max_practical) ? 'is-invalid' : ''}`}
+                      type="number"
+                      min="0"
+                      max={subject.max_practical}
+                      value={current.practical ?? ''}
+                      onChange={event => onChange(student.student_id, subject.id, 'practical', event.target.value)}
+                      disabled={locked || current.is_absent}
+                      placeholder={`/${subject.max_practical}`}
+                    />
+                  </label>
+                ) : (
+                  <div />
+                )}
+                <label className={`me-absent-toggle ${locked ? 'disabled' : ''}`} style={{ alignSelf: 'end', minHeight: 44 }}>
+                  Abs
+                  <input
+                    type="checkbox"
+                    checked={current.is_absent || false}
+                    onChange={event => onChange(student.student_id, subject.id, 'is_absent', event.target.checked)}
+                    disabled={locked}
+                  />
+                </label>
+              </div>
+            )}
           </div>
         )
       })}
@@ -696,6 +770,7 @@ const MarksGridRow = memo(function MarksGridRow({
   rowIndex,
   onChange,
   canEditSubject,
+  editMode,
 }) {
   const rowBackground = rowIndex % 2 === 0 ? 'var(--surface-0)' : 'var(--gray-25)'
   return (
@@ -708,44 +783,60 @@ const MarksGridRow = memo(function MarksGridRow({
       </td>
       {subjects.map(sub => {
         const current = marks?.[sub.id] || {}
-        const locked = current.is_locked || !canEditSubject(sub.id)
+        const locked = !editMode || current.is_locked || !canEditSubject(sub.id)
+        const viewOnly = !editMode
         return (
           <td key={sub.id} className="me-cell" style={{ background: sub.has_custom_config && rowIndex % 2 === 0 ? '#fafbff' : undefined }}>
-            <div className={`me-mark-controls ${sub.max_practical > 0 ? '' : 'no-practical'}`}>
-              <input
-                type="number"
-                min="0"
-                max={sub.max_theory}
-                value={current.theory ?? ''}
-                onChange={event => onChange(student.student_id, sub.id, 'theory', event.target.value)}
-                disabled={locked || current.is_absent}
-                placeholder={`/${sub.max_theory}`}
-                className={`me-mark-input ${isMarkInvalid(current.theory, sub.max_theory) ? 'is-invalid' : ''}`}
-              />
-              {sub.max_practical > 0 && (
+            {viewOnly ? (
+              /* ── View mode: show mark as a clear read-only badge ── */
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 36 }}>
+                <MarkReadView
+                  theory={current.theory}
+                  practical={current.practical}
+                  maxTheory={sub.max_theory}
+                  maxPractical={sub.max_practical}
+                  isAbsent={current.is_absent}
+                  isLocked={current.is_locked}
+                />
+              </div>
+            ) : (
+              /* ── Edit mode: show input controls ── */
+              <div className={`me-mark-controls ${sub.max_practical > 0 ? '' : 'no-practical'}`}>
                 <input
                   type="number"
                   min="0"
-                  max={sub.max_practical}
-                  value={current.practical ?? ''}
-                  onChange={event => onChange(student.student_id, sub.id, 'practical', event.target.value)}
+                  max={sub.max_theory}
+                  value={current.theory ?? ''}
+                  onChange={event => onChange(student.student_id, sub.id, 'theory', event.target.value)}
                   disabled={locked || current.is_absent}
-                  placeholder={`P/${sub.max_practical}`}
-                  className={`me-mark-input ${isMarkInvalid(current.practical, sub.max_practical) ? 'is-invalid' : ''}`}
+                  placeholder={`/${sub.max_theory}`}
+                  className={`me-mark-input ${isMarkInvalid(current.theory, sub.max_theory) ? 'is-invalid' : ''}`}
                 />
-              )}
-              <label className={`me-absent-toggle ${locked ? 'disabled' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={current.is_absent || false}
-                  onChange={event => onChange(student.student_id, sub.id, 'is_absent', event.target.checked)}
-                  disabled={locked}
-                />
-                <span>
-                  {current.is_locked ? 'Locked' : !canEditSubject(sub.id) ? 'View' : 'Abs'}
-                </span>
-              </label>
-            </div>
+                {sub.max_practical > 0 && (
+                  <input
+                    type="number"
+                    min="0"
+                    max={sub.max_practical}
+                    value={current.practical ?? ''}
+                    onChange={event => onChange(student.student_id, sub.id, 'practical', event.target.value)}
+                    disabled={locked || current.is_absent}
+                    placeholder={`P/${sub.max_practical}`}
+                    className={`me-mark-input ${isMarkInvalid(current.practical, sub.max_practical) ? 'is-invalid' : ''}`}
+                  />
+                )}
+                <label className={`me-absent-toggle ${locked ? 'disabled' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={current.is_absent || false}
+                    onChange={event => onChange(student.student_id, sub.id, 'is_absent', event.target.checked)}
+                    disabled={locked}
+                  />
+                  <span>
+                    {current.is_locked ? 'Locked' : !canEditSubject(sub.id) ? 'View' : 'Abs'}
+                  </span>
+                </label>
+              </div>
+            )}
           </td>
         )
       })}
@@ -1482,6 +1573,8 @@ export default function MarksEntry() {
 
   const [gridData, setGridData]       = useState(null)
   const [localMarks, setLocalMarks]   = useState({})
+  const [savedMarks, setSavedMarks]   = useState({})
+  const [editMode, setEditMode]       = useState(false)
   const [dirty, setDirty]             = useState(false)
   const [draftSavedAt, setDraftSavedAt] = useState(null)
   const [subjectFilter, setSubjectFilter] = useState('all')
@@ -1564,6 +1657,8 @@ export default function MarksEntry() {
         }
       }
       setLocalMarks(map)
+      setSavedMarks(map)
+      setEditMode(false)
       setDirty(false)
       setDraftSavedAt(null)
     } catch (err) {
@@ -1653,7 +1748,7 @@ export default function MarksEntry() {
 
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleMarkChange = useCallback((studentId, subjectId, field, value) => {
-    if (isClosedYear || !canEditSubject(subjectId)) return
+    if (!editMode || isClosedYear || !canEditSubject(subjectId)) return
     setDirty(true)
     setLocalMarks(prev => {
       if (prev[studentId]?.[subjectId]?.is_locked) return prev
@@ -1725,6 +1820,8 @@ export default function MarksEntry() {
       }
       await marksAPI.bulkSaveMarks(entries)
       if (draftKey) localStorage.removeItem(draftKey)
+      setSavedMarks(localMarks)
+      setEditMode(false)
       setDirty(false)
       setDraftSavedAt(null)
       setSaved(true)
@@ -2062,9 +2159,25 @@ export default function MarksEntry() {
                     Saved
                   </span>
                 )}
-                <button className="btn btn-primary" onClick={handleSave} disabled={saving || isClosedYear || !dirty}>
-                  {saving ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Saving…</> : 'Save All Marks'}
-                </button>
+                {!isClosedYear && !editMode && (
+                  <button className="btn btn-primary" onClick={() => setEditMode(true)}>
+                    Edit Marks
+                  </button>
+                )}
+                {!isClosedYear && editMode && (
+                  <button className="btn btn-secondary" onClick={() => {
+                    setLocalMarks(savedMarks)
+                    setDirty(false)
+                    setEditMode(false)
+                  }}>
+                    Cancel
+                  </button>
+                )}
+                {editMode && (
+                  <button className="btn btn-primary" onClick={handleSave} disabled={saving || isClosedYear || !dirty}>
+                    {saving ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Saving…</> : 'Save All Marks'}
+                  </button>
+                )}
               </div>
             )}
 
@@ -2163,12 +2276,26 @@ export default function MarksEntry() {
                   ) : (
                     <>
                       <div className="me-info-bar">
-                        <span className="me-info-chip"><strong>T</strong> Theory</span>
-                        <span className="me-info-chip"><strong>P</strong> Practical</span>
-                        <span className="me-info-chip"><strong>Abs</strong> Mark absent</span>
-                        <span className={`me-info-chip ${dirty ? 'warning' : 'success'}`}>
-                          {dirty ? `Draft autosaved${draftSavedAt ? ` ${new Date(draftSavedAt).toLocaleTimeString()}` : ''}` : 'Saved data loaded'}
-                        </span>
+                        {!editMode ? (
+                          <span className="me-info-chip" style={{
+                            background: '#f0fdfa', borderColor: '#99f6e4', color: '#0d9488',
+                          }}>
+                            <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                            Viewing saved marks
+                          </span>
+                        ) : (
+                          <>
+                            <span className="me-info-chip"><strong>T</strong> Theory</span>
+                            <span className="me-info-chip"><strong>P</strong> Practical</span>
+                            <span className="me-info-chip"><strong>Abs</strong> Mark absent</span>
+                            <span className={`me-info-chip ${dirty ? 'warning' : 'success'}`}>
+                              {dirty ? `Draft autosaved${draftSavedAt ? ` ${new Date(draftSavedAt).toLocaleTimeString()}` : ''}` : 'Saved data loaded'}
+                            </span>
+                          </>
+                        )}
                         {hasCustomConfig && (
                           <span className="me-info-chip brand">
                             Custom max marks active for this exam
@@ -2196,6 +2323,7 @@ export default function MarksEntry() {
                               marks={localMarks[student.student_id] || {}}
                               onChange={handleMarkChange}
                               canEditSubject={canEditSubject}
+                              editMode={editMode}
                             />
                           ))}
                         </div>
@@ -2265,6 +2393,7 @@ export default function MarksEntry() {
                                   rowIndex={index}
                                   onChange={handleMarkChange}
                                   canEditSubject={canEditSubject}
+                                  editMode={editMode}
                                 />
                               ))}
                               {virtualRows.bottomPadding > 0 && (
@@ -2280,9 +2409,11 @@ export default function MarksEntry() {
                         <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
                           {gridData.students.length} student{gridData.students.length !== 1 ? 's' : ''} · {visibleSubjects.length} of {gridData.subjects.length} subject{gridData.subjects.length !== 1 ? 's' : ''}
                         </span>
-                        <button className="btn btn-primary" onClick={handleSave} disabled={saving || isClosedYear || !dirty}>
-                          {saving ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Saving…</> : 'Save All Marks'}
-                        </button>
+                        {editMode && (
+                          <button className="btn btn-primary" onClick={handleSave} disabled={saving || isClosedYear || !dirty}>
+                            {saving ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Saving…</> : 'Save All Marks'}
+                          </button>
+                        )}
                       </div>
                     </>
                   )}

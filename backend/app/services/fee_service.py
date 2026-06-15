@@ -25,7 +25,7 @@ from decimal import Decimal
 import logging
 from typing import Optional
 
-from sqlalchemy import func, text
+from sqlalchemy import func, text, extract
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.constants import RECEIPT_NUMBER_LOCK_KEY
@@ -349,57 +349,173 @@ def generate_receipt_number(db: Session) -> str:
     return f"RCPT-{year}-{int(num):05d}"
 
 
-def record_payment(db: Session, data: PaymentCreate, actor_user_id: int | None = None) -> FeePayment:
-    if Decimal(str(data.amount_paid)) <= 0:
+def allocate_payment(
+    db: Session,
+    student_id: int,
+    amount: Decimal,
+    payment_date: date,
+    mode: str,
+    collected_by: str | None = None,
+    notes: str | None = None,
+    online_order_id: int | None = None,
+    actor_user_id: int | None = None,
+    academic_year_id: int | None = None,
+    student_fee_id: int | None = None,
+) -> list[FeePayment]:
+    if amount <= 0:
         raise ValueError("Payment amount must be greater than 0")
 
-    sf = db.query(StudentFee).filter_by(id=data.student_fee_id).first()
-    if not sf:
-        raise LookupError("Student fee not found")
-
-    # Check overpayment
-    already_paid = Decimal(str(
-        db.query(func.coalesce(func.sum(FeePayment.amount_paid), 0))
-        .filter(FeePayment.student_fee_id == data.student_fee_id)
-        .scalar()
-    ))
-    net = Decimal(str(sf.net_amount))
-    outstanding = net - already_paid
-
-    if outstanding <= 0:
-        raise ValueError(
-            f"This fee entry is already fully paid "
-            f"(net: ₹{net}, paid: ₹{already_paid})."
-        )
-    if Decimal(str(data.amount_paid)) > outstanding:
-        raise ValueError(
-            f"Payment ₹{data.amount_paid} exceeds outstanding balance ₹{outstanding}."
-        )
-
-    receipt = generate_receipt_number(db)
-    payment = FeePayment(**data.model_dump(), receipt_number=receipt)
-    db.add(payment)
-    db.commit()
-    db.refresh(payment)
-    log_data_change(
-        db,
-        user_id=actor_user_id,
-        action=DataAuditActionEnum.create,
-        table_name="fee_payments",
-        record_id=payment.id,
-        old_value=None,
-        new_value=model_snapshot(payment),
+    from sqlalchemy import or_
+    query = db.query(StudentFee).outerjoin(Enrollment, Enrollment.id == StudentFee.enrollment_id).filter(
+        or_(StudentFee.student_id == student_id, Enrollment.student_id == student_id)
     )
+    if academic_year_id:
+        query = query.filter(StudentFee.academic_year_id == academic_year_id)
+    if student_fee_id:
+        query = query.filter(StudentFee.id == student_fee_id)
+
+    student_fees = query.order_by(StudentFee.id).all()
+
+    payable_items = []
+    total_outstanding = Decimal("0.00")
+    for sf in student_fees:
+        paid = Decimal(str(
+            db.query(func.coalesce(func.sum(FeePayment.amount_paid), 0))
+            .filter(FeePayment.student_fee_id == sf.id)
+            .scalar()
+        ))
+        outstanding = Decimal(str(sf.net_amount)) - paid
+        if outstanding > 0:
+            payable_items.append((sf, outstanding))
+            total_outstanding += outstanding
+
+    if amount > total_outstanding:
+        raise ValueError(f"Payment amount ₹{amount} exceeds total outstanding balance ₹{total_outstanding}")
+
+    remaining = amount
+    payments = []
+
+    for sf, outstanding in payable_items:
+        if remaining <= 0:
+            break
+        applied = min(outstanding, remaining)
+        if applied > 0:
+            receipt = generate_receipt_number(db)
+            payment = FeePayment(
+                student_fee_id=sf.id,
+                amount_paid=applied,
+                payment_date=payment_date,
+                mode=mode,
+                receipt_number=receipt,
+                collected_by=collected_by,
+                notes=notes,
+                online_order_id=online_order_id,
+            )
+            db.add(payment)
+            db.flush()
+            payments.append(payment)
+            remaining = (remaining - applied).quantize(Decimal("0.01"))
+
     db.commit()
-    db.refresh(payment)
-    try:
-        from app.services.notification_service import enqueue_payment_confirmation
-        enqueue_payment_confirmation(db, payment.id)
-        db.commit()
-    except Exception as exc:
-        db.rollback()
-        logger.warning("Could not queue payment confirmation for payment %s: %s", payment.id, exc)
-    return payment
+
+    for payment in payments:
+        db.refresh(payment)
+        log_data_change(
+            db,
+            user_id=actor_user_id,
+            action=DataAuditActionEnum.create,
+            table_name="fee_payments",
+            record_id=payment.id,
+            old_value=None,
+            new_value=model_snapshot(payment),
+        )
+    db.commit()
+
+    for payment in payments:
+        db.refresh(payment)
+        try:
+            from app.services.notification_service import enqueue_payment_confirmation
+            enqueue_payment_confirmation(db, payment.id)
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            logger.warning("Could not queue payment confirmation for payment %s: %s", payment.id, exc)
+
+    return payments
+
+
+def record_payment(db: Session, data: PaymentCreate, actor_user_id: int | None = None) -> dict:
+    student = db.query(Student).filter_by(id=data.student_id).first()
+    if not student:
+        raise LookupError("Student not found")
+
+    payments = allocate_payment(
+        db=db,
+        student_id=data.student_id,
+        amount=Decimal(str(data.amount_paid)),
+        payment_date=data.payment_date,
+        mode=data.mode,
+        collected_by=data.collected_by,
+        notes=data.notes,
+        actor_user_id=actor_user_id,
+        academic_year_id=data.academic_year_id,
+    )
+
+    if not payments:
+        raise ValueError("No outstanding fees found or payment could not be allocated")
+
+    enrollment = (
+        db.query(Enrollment)
+        .filter_by(student_id=data.student_id)
+        .order_by(Enrollment.id.desc())
+        .first()
+    )
+    cls = db.query(Class).filter_by(id=enrollment.class_id).first() if enrollment else None
+
+    from sqlalchemy import or_
+    total_balance_after = Decimal("0.00")
+    all_fees = db.query(StudentFee).outerjoin(Enrollment, Enrollment.id == StudentFee.enrollment_id).filter(
+        or_(StudentFee.student_id == data.student_id, Enrollment.student_id == data.student_id)
+    ).all()
+    for sf in all_fees:
+        paid = Decimal(str(
+            db.query(func.coalesce(func.sum(FeePayment.amount_paid), 0))
+            .filter(FeePayment.student_fee_id == sf.id)
+            .scalar()
+        ))
+        total_balance_after += (Decimal(str(sf.net_amount)) - paid)
+
+    allocations = []
+    for p in payments:
+        sf = db.query(StudentFee).filter_by(id=p.student_fee_id).first()
+        fh_name = sf.fee_structure.fee_head.name if sf.fee_structure and sf.fee_structure.fee_head else "Unknown"
+        
+        paid_for_sf = Decimal(str(
+            db.query(func.coalesce(func.sum(FeePayment.amount_paid), 0))
+            .filter(FeePayment.student_fee_id == sf.id)
+            .scalar()
+        ))
+        bal_sf = Decimal(str(sf.net_amount)) - paid_for_sf
+
+        allocations.append({
+            "fee_head_name": fh_name,
+            "amount_applied": Decimal(str(p.amount_paid)),
+            "balance_after": bal_sf,
+        })
+
+    return {
+        "id": payments[0].id,
+        "receipt_numbers": [p.receipt_number for p in payments],
+        "total_amount": data.amount_paid,
+        "payment_date": data.payment_date,
+        "mode": data.mode,
+        "collected_by": data.collected_by,
+        "student_name": student.name_en,
+        "student_gr_no": student.gr_number,
+        "class_name": f"Class {cls.name} — {cls.division}" if cls else None,
+        "allocations": allocations,
+        "total_balance_after": total_balance_after,
+    }
 
 
 def get_payments_by_student(db: Session, student_id: int):
@@ -456,16 +572,17 @@ def get_defaulters(
     )
 
     fee_totals = (
-        db.query(
-            Enrollment.student_id.label("student_id"),
-            Enrollment.class_id.label("class_id"),
-            Enrollment.academic_year_id.label("academic_year_id"),
-            func.coalesce(func.sum(StudentFee.net_amount), 0).label("total_due"),
-            func.sum(func.coalesce(payment_totals.c.total_paid, 0)).label("total_paid"),
-        )
-        .join(Enrollment, Enrollment.id == StudentFee.enrollment_id)
-        .join(FeeStructure, StudentFee.fee_structure_id == FeeStructure.id, isouter=True)
-        .outerjoin(payment_totals, payment_totals.c.student_fee_id == StudentFee.id)
+    db.query(
+        Enrollment.student_id.label("student_id"),
+        Enrollment.class_id.label("class_id"),
+        Enrollment.academic_year_id.label("academic_year_id"),
+        func.coalesce(func.sum(StudentFee.net_amount), 0).label("total_due"),
+        func.sum(func.coalesce(payment_totals.c.total_paid, 0)).label("total_paid"),
+    )
+    .select_from(StudentFee)
+    .join(Enrollment, Enrollment.id == StudentFee.enrollment_id)
+    .outerjoin(FeeStructure, StudentFee.fee_structure_id == FeeStructure.id)
+    .outerjoin(payment_totals, payment_totals.c.student_fee_id == StudentFee.id)
     )
 
     if academic_year_id is not None:
@@ -510,3 +627,76 @@ def get_defaulters(
 
     defaulters.sort(key=lambda x: x["balance"], reverse=True)
     return defaulters
+
+
+def get_monthly_collections(
+    db: Session,
+    month: int,
+    academic_year_id: Optional[int] = None,
+) -> list[dict]:
+    q = (
+        db.query(
+            FeePayment.payment_date.label("pdate"),
+            func.coalesce(func.sum(FeePayment.amount_paid), 0).label("total"),
+        )
+        .filter(extract("month", FeePayment.payment_date) == month)
+    )
+    if academic_year_id is not None:
+        q = (
+            q.join(StudentFee, StudentFee.id == FeePayment.student_fee_id)
+             .filter(StudentFee.academic_year_id == academic_year_id)
+        )
+    rows = (
+        q.group_by(FeePayment.payment_date)
+         .order_by(FeePayment.payment_date)
+         .all()
+    )
+    MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun",
+                   "Jul","Aug","Sep","Oct","Nov","Dec"]
+    return [
+        {"day": f"{r.pdate.day} {MONTH_SHORT[r.pdate.month-1]}", "collected": float(r.total)}
+        for r in rows
+    ]
+
+
+def get_payment_options(db: Session, student_id: int) -> dict:
+    from app.services.academic_year_service import require_current_academic_year
+    from sqlalchemy import or_
+    try:
+        year = require_current_academic_year(db)
+        year_id = year.id
+    except Exception:
+        year_id = None
+
+    query = db.query(StudentFee).outerjoin(Enrollment, Enrollment.id == StudentFee.enrollment_id).filter(
+        or_(StudentFee.student_id == student_id, Enrollment.student_id == student_id)
+    )
+    if year_id:
+        query = query.filter(StudentFee.academic_year_id == year_id)
+
+    student_fees = query.all()
+    total_outstanding = Decimal("0.00")
+    for sf in student_fees:
+        paid = Decimal(str(
+            db.query(func.coalesce(func.sum(FeePayment.amount_paid), 0))
+            .filter(FeePayment.student_fee_id == sf.id)
+            .scalar()
+        ))
+        outstanding = Decimal(str(sf.net_amount)) - paid
+        if outstanding > 0:
+            total_outstanding += outstanding
+
+    total_outstanding = total_outstanding.quantize(Decimal("0.01"))
+    half_outstanding = (total_outstanding / Decimal("2")).quantize(Decimal("0.01"))
+    quarter_outstanding = (total_outstanding / Decimal("4")).quantize(Decimal("0.01"))
+
+    return {
+        "student_id": student_id,
+        "total_outstanding": total_outstanding,
+        "options": [
+            {"key": "full", "label": "Full Payment", "amount": total_outstanding},
+            {"key": "half", "label": "Half Payment", "amount": half_outstanding},
+            {"key": "quarter", "label": "Quarter Payment", "amount": quarter_outstanding},
+        ]
+    }
+

@@ -147,7 +147,7 @@ export default function Sidebar({ open, onClose }) {
     }
     if (role === 'admin') {
       return [
-        { label: 'Operations', items: visibleGroups.flatMap(group => group.items).filter(item => ['/', '/students', '/attendance', '/marks', '/fees', '/reports'].includes(item.to)).map(item => item.to === '/' ? { ...item, label: 'Today' } : item) },
+        { label: 'Operations', items: visibleGroups.flatMap(group => group.items).filter(item => ['/', '/students', '/attendance', '/marks', '/fees', '/fees/defaulters', '/reports'].includes(item.to)).map(item => item.to === '/' ? { ...item, label: 'Today' } : item) },
         { label: 'Settings', items: visibleGroups.flatMap(group => group.items).filter(item => ['/yearend', '/admin/users', '/admin/notifications', '/setup/classes'].includes(item.to)) },
       ].filter(group => group.items.length > 0)
     }

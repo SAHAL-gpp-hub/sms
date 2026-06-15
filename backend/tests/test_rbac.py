@@ -606,7 +606,7 @@ class TestFeeScoping:
     def test_teacher_cannot_record_payment(self, client):
         tok = token(client, "teachera@test.com", "teacher1234")
         res = client.post("/api/v1/fees/payment", json={
-            "student_fee_id": 1, "amount_paid": 100,
+            "student_id": 1, "amount_paid": 100,
             "payment_date": "2025-06-01", "mode": "Cash",
         }, headers=auth(tok))
         assert res.status_code == 403

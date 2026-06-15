@@ -333,7 +333,11 @@ export const feeAPI = {
   recordPayment: (data)      => api.post('/fees/payment', data),
   getPayments:   (studentId) => api.get(`/fees/payments/${studentId}`),
   getDefaulters: (params)    => api.get('/fees/defaulters', { params: withSelectedYear(params) }),
+  getMonthlyCollections: (params) =>
+    api.get('/fees/monthly-collections', { params }),
+  getPaymentOptions: (studentId) => api.get(`/fees/payment-options/${studentId}`),
 }
+
 
 // ── Marks ─────────────────────────────────────────────────────────────────────
 export const marksAPI = {
