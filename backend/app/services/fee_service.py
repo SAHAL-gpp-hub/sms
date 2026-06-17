@@ -25,8 +25,8 @@ from decimal import Decimal
 import logging
 from typing import Optional
 
-from sqlalchemy import func, text, extract
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func, text, extract, or_
+from sqlalchemy.orm import Session, joinedload  
 
 from app.core.constants import RECEIPT_NUMBER_LOCK_KEY
 from app.models.base_models import (
@@ -286,6 +286,8 @@ def get_student_ledger(db: Session, student_id: int) -> Optional[StudentLedger]:
         .all()
     )
 
+    PLAN_COUNTS = {"full": 1, "half": 2, "quarter": 4}
+
     items: list[StudentLedgerItem] = []
     total_due  = Decimal("0.00")
     total_paid = Decimal("0.00")
@@ -298,6 +300,17 @@ def get_student_ledger(db: Session, student_id: int) -> Optional[StudentLedger]:
         net = Decimal(str(sf.net_amount))
         total_due  += net
         total_paid += paid
+
+        plan = sf.installment_plan
+        inst_paid = int(sf.installments_paid or 0)
+        total_inst = PLAN_COUNTS.get(plan) if plan else None
+        if plan and total_inst:
+            inst_amount = (net / Decimal(str(total_inst))).quantize(Decimal("0.01"))
+            remaining_inst = total_inst - inst_paid
+            next_inst_amount = inst_amount if remaining_inst > 0 and (net - paid) > 0 else None
+        else:
+            next_inst_amount = None
+
         items.append(StudentLedgerItem(
             fee_head_name=sf.fee_structure.fee_head.name,
             frequency=sf.fee_structure.fee_head.frequency,
@@ -308,6 +321,10 @@ def get_student_ledger(db: Session, student_id: int) -> Optional[StudentLedger]:
             enrollment_id=sf.enrollment_id,
             academic_year_id=sf.academic_year_id,
             invoice_type=sf.invoice_type or "regular",
+            installment_plan=plan,
+            installments_paid=inst_paid,
+            total_installments=total_inst,
+            next_installment_amount=next_inst_amount,
         ))
 
     return StudentLedger(
@@ -361,9 +378,29 @@ def allocate_payment(
     actor_user_id: int | None = None,
     academic_year_id: int | None = None,
     student_fee_id: int | None = None,
+    installment_plan: str | None = None,
 ) -> list[FeePayment]:
+    """
+    Allocate a payment across StudentFee rows, enforcing installment plan rules.
+
+    INSTALLMENT PLAN ENFORCEMENT
+    ────────────────────────────
+    installment_plan must be 'full', 'half', or 'quarter' (or None for legacy
+    custom-amount flows).
+
+    Rules:
+    1. If a StudentFee already has installment_plan set (plan_locked), the
+       payment MUST match the next scheduled instalment amount (net_amount /
+       total_installments).  Re-splitting is rejected.
+    2. If no plan is set yet (first payment), the plan is locked onto the row
+       from the installment_plan argument.
+    3. After each successful payment, installments_paid is incremented.
+    4. Overpaying beyond the scheduled instalment is rejected with ValueError.
+    """
     if amount <= 0:
         raise ValueError("Payment amount must be greater than 0")
+
+    PLAN_COUNTS = {"full": 1, "half": 2, "quarter": 4}
 
     from sqlalchemy import or_
     query = db.query(StudentFee).outerjoin(Enrollment, Enrollment.id == StudentFee.enrollment_id).filter(
@@ -379,15 +416,42 @@ def allocate_payment(
     payable_items = []
     total_outstanding = Decimal("0.00")
     for sf in student_fees:
-        paid = Decimal(str(
+        paid_so_far = Decimal(str(
             db.query(func.coalesce(func.sum(FeePayment.amount_paid), 0))
             .filter(FeePayment.student_fee_id == sf.id)
             .scalar()
         ))
-        outstanding = Decimal(str(sf.net_amount)) - paid
+        outstanding = Decimal(str(sf.net_amount)) - paid_so_far
         if outstanding > 0:
-            payable_items.append((sf, outstanding))
+            payable_items.append((sf, outstanding, paid_so_far))
             total_outstanding += outstanding
+
+    # ── Installment plan: lock on first payment, guard against over-paying ──
+    # Instalment amounts are always based on the TOTAL across all fee heads
+    # (frontend sends total_balance / 2 or / 4), NOT per-fee-head.
+    for sf, outstanding, paid_so_far in payable_items:
+        existing_plan = sf.installment_plan
+        inst_paid = int(sf.installments_paid or 0)
+
+        if existing_plan:
+            total_inst = PLAN_COUNTS[existing_plan]
+            if inst_paid >= total_inst:
+                fee_name = (
+                    sf.fee_structure.fee_head.name
+                    if sf.fee_structure and sf.fee_structure.fee_head
+                    else "fee"
+                )
+                raise ValueError(
+                    f"All {total_inst} instalments for '{fee_name}' have already been paid."
+                )
+        elif installment_plan:
+            # First payment — lock the plan onto this fee row.
+            if installment_plan not in PLAN_COUNTS:
+                raise ValueError(
+                    f"Invalid installment plan '{installment_plan}'. Must be full, half, or quarter."
+                )
+            sf.installment_plan = installment_plan
+            sf.installments_paid = 0
 
     if amount > total_outstanding:
         raise ValueError(f"Payment amount ₹{amount} exceeds total outstanding balance ₹{total_outstanding}")
@@ -395,18 +459,54 @@ def allocate_payment(
     remaining = amount
     payments = []
 
-    for sf, outstanding in payable_items:
+    # ONE receipt number per payment session — shared across all fee-head rows.
+    shared_receipt = generate_receipt_number(db)
+
+    # ── Proportional allocation ───────────────────────────────────────────
+    # When an instalment plan is active (half/quarter), distribute the payment
+    # proportionally so every fee head is paid at the same rate.
+    # Example: total 750, half plan -> 375 payment
+    #   Tuition 500 -> 500/750 * 375 = 250
+    #   Exam    150 -> 150/750 * 375 = 75
+    #   Activity100 -> 100/750 * 375 = 50
+    # For full/custom payments, greedy fill is used.
+    active_plan = installment_plan or (payable_items[0][0].installment_plan if payable_items else None)
+
+    if active_plan and active_plan != "full":
+        total_original = sum(Decimal(str(sf.net_amount)) for sf, _, _ in payable_items)
+        proportional_amounts: dict[int, Decimal] = {}
+        allocated_so_far = Decimal("0.00")
+        items_list = list(payable_items)
+        for i, (sf, outstanding, _) in enumerate(items_list):
+            if i == len(items_list) - 1:
+                proportional_amounts[sf.id] = min(
+                    (amount - allocated_so_far).quantize(Decimal("0.01")),
+                    outstanding,
+                )
+            else:
+                share = (Decimal(str(sf.net_amount)) / total_original * amount).quantize(Decimal("0.01"))
+                share = min(share, outstanding)
+                proportional_amounts[sf.id] = share
+                allocated_so_far += share
+    else:
+        proportional_amounts = {}
+
+    for sf, outstanding, _paid_so_far in payable_items:
         if remaining <= 0:
             break
-        applied = min(outstanding, remaining)
+
+        if proportional_amounts:
+            applied = min(proportional_amounts.get(sf.id, Decimal("0.00")), outstanding, remaining)
+        else:
+            applied = min(outstanding, remaining)
+
         if applied > 0:
-            receipt = generate_receipt_number(db)
             payment = FeePayment(
                 student_fee_id=sf.id,
                 amount_paid=applied,
                 payment_date=payment_date,
                 mode=mode,
-                receipt_number=receipt,
+                receipt_number=shared_receipt,
                 collected_by=collected_by,
                 notes=notes,
                 online_order_id=online_order_id,
@@ -415,6 +515,11 @@ def allocate_payment(
             db.flush()
             payments.append(payment)
             remaining = (remaining - applied).quantize(Decimal("0.01"))
+
+            # Increment the instalment counter (works whether plan was just
+            # locked above or was already locked from a prior payment).
+            if sf.installment_plan:
+                sf.installments_paid = int(sf.installments_paid or 0) + 1
 
     db.commit()
 
@@ -459,6 +564,7 @@ def record_payment(db: Session, data: PaymentCreate, actor_user_id: int | None =
         notes=data.notes,
         actor_user_id=actor_user_id,
         academic_year_id=data.academic_year_id,
+        installment_plan=data.installment_plan,
     )
 
     if not payments:
@@ -505,7 +611,8 @@ def record_payment(db: Session, data: PaymentCreate, actor_user_id: int | None =
 
     return {
         "id": payments[0].id,
-        "receipt_numbers": [p.receipt_number for p in payments],
+        "payment_ids": [p.id for p in payments],
+        "receipt_numbers": list(dict.fromkeys(p.receipt_number for p in payments)),
         "total_amount": data.amount_paid,
         "payment_date": data.payment_date,
         "mode": data.mode,
@@ -522,8 +629,8 @@ def get_payments_by_student(db: Session, student_id: int):
     sf_ids = [
         sf.id
         for sf in db.query(StudentFee)
-        .join(Enrollment, Enrollment.id == StudentFee.enrollment_id)
-        .filter(Enrollment.student_id == student_id)
+        .outerjoin(Enrollment, Enrollment.id == StudentFee.enrollment_id)
+        .filter(or_(StudentFee.student_id == student_id, Enrollment.student_id == student_id))
         .all()
     ]
     if not sf_ids:
@@ -629,6 +736,8 @@ def get_defaulters(
     return defaulters
 
 
+
+
 def get_monthly_collections(
     db: Session,
     month: int,
@@ -660,6 +769,62 @@ def get_monthly_collections(
 
 
 def get_payment_options(db: Session, student_id: int) -> dict:
+    """
+    Returns installment options for a student.
+
+    INSTALLMENT PLAN LOGIC
+    ─────────────────────
+    Installment amounts are always derived from the ORIGINAL net_amount of each
+    StudentFee row, never from the remaining balance.  This prevents the
+    "nested installment" bug where paying half of the balance and then
+    re-splitting the remainder would result in sub-half/quarter payments that
+    don't match the original plan.
+
+    Each StudentFee row carries:
+      installment_plan   — null / 'full' / 'half' / 'quarter'
+      installments_paid  — count of instalments settled so far
+
+    Plan totals per StudentFee:
+      full    → 1 payment of net_amount
+      half    → 2 payments of net_amount / 2
+      quarter → 4 payments of net_amount / 4
+
+    Once any instalment has been paid (installments_paid > 0) the plan is
+    locked.  The UI must only offer the next scheduled instalment, not the
+    Full/Half/Quarter chooser.
+
+    Return shape
+    ─────────────
+    {
+      "student_id": int,
+      "fee_items": [
+        {
+          "student_fee_id": int,
+          "fee_head_name": str,
+          "original_amount": Decimal,     # net_amount (never changes)
+          "paid_amount": Decimal,          # sum of all FeePayment rows
+          "balance": Decimal,              # original - paid
+          "installment_plan": str|null,    # 'full'/'half'/'quarter'/null
+          "installments_paid": int,        # 0..total_installments
+          "total_installments": int,       # 1 / 2 / 4
+          "next_installment_amount": Decimal|null,  # null if fully paid
+          "plan_locked": bool,             # true once first instalment paid
+        }
+      ],
+      "summary": {
+        "total_original": Decimal,
+        "total_paid": Decimal,
+        "total_balance": Decimal,
+        "plan_state": "unset" | "in_progress" | "complete",
+        # Quick-access options shown only when plan is "unset" for ALL items
+        "options": [
+          {"key": "full",    "label": "Full Payment",    "amount": Decimal},
+          {"key": "half",    "label": "Half Payment",    "amount": Decimal},
+          {"key": "quarter", "label": "Quarter Payment", "amount": Decimal},
+        ] | None
+      }
+    }
+    """
     from app.services.academic_year_service import require_current_academic_year
     from sqlalchemy import or_
     try:
@@ -668,35 +833,95 @@ def get_payment_options(db: Session, student_id: int) -> dict:
     except Exception:
         year_id = None
 
-    query = db.query(StudentFee).outerjoin(Enrollment, Enrollment.id == StudentFee.enrollment_id).filter(
-        or_(StudentFee.student_id == student_id, Enrollment.student_id == student_id)
+    query = (
+        db.query(StudentFee)
+        .options(joinedload(StudentFee.fee_structure).joinedload(FeeStructure.fee_head))
+        .outerjoin(Enrollment, Enrollment.id == StudentFee.enrollment_id)
+        .filter(or_(StudentFee.student_id == student_id, Enrollment.student_id == student_id))
     )
     if year_id:
         query = query.filter(StudentFee.academic_year_id == year_id)
 
     student_fees = query.all()
-    total_outstanding = Decimal("0.00")
+
+    PLAN_COUNTS = {"full": 1, "half": 2, "quarter": 4}
+
+    fee_items = []
+    total_original = Decimal("0.00")
+    total_paid_all = Decimal("0.00")
+
     for sf in student_fees:
         paid = Decimal(str(
             db.query(func.coalesce(func.sum(FeePayment.amount_paid), 0))
             .filter(FeePayment.student_fee_id == sf.id)
             .scalar()
         ))
-        outstanding = Decimal(str(sf.net_amount)) - paid
-        if outstanding > 0:
-            total_outstanding += outstanding
+        original = Decimal(str(sf.net_amount))
+        balance = original - paid
+        plan = sf.installment_plan          # null / 'full' / 'half' / 'quarter'
+        inst_paid = int(sf.installments_paid or 0)
+        total_inst = PLAN_COUNTS.get(plan, 1) if plan else None
 
-    total_outstanding = total_outstanding.quantize(Decimal("0.01"))
-    half_outstanding = (total_outstanding / Decimal("2")).quantize(Decimal("0.01"))
-    quarter_outstanding = (total_outstanding / Decimal("4")).quantize(Decimal("0.01"))
+        if plan and total_inst:
+            inst_amount = (original / Decimal(str(total_inst))).quantize(Decimal("0.01"))
+            remaining_inst = total_inst - inst_paid
+            next_amount = inst_amount if remaining_inst > 0 and balance > 0 else None
+        else:
+            inst_amount = None
+            next_amount = None
+
+        fee_head_name = "General Fee"
+        if sf.fee_structure and sf.fee_structure.fee_head:
+            fee_head_name = sf.fee_structure.fee_head.name
+
+        fee_items.append({
+            "student_fee_id": sf.id,
+            "fee_head_name": fee_head_name,
+            "original_amount": original,
+            "paid_amount": paid,
+            "balance": balance,
+            "installment_plan": plan,
+            "installments_paid": inst_paid,
+            "total_installments": total_inst,
+            "next_installment_amount": next_amount,
+            "plan_locked": inst_paid > 0,
+        })
+        total_original += original
+        total_paid_all += paid
+
+    total_balance = total_original - total_paid_all
+
+    # Determine aggregate plan state
+    plans_set = [item for item in fee_items if item["installment_plan"] is not None]
+    any_in_progress = any(item["installments_paid"] > 0 for item in fee_items)
+    all_complete = total_balance <= Decimal("0.00")
+
+    if all_complete:
+        plan_state = "complete"
+    elif any_in_progress:
+        plan_state = "in_progress"
+    else:
+        plan_state = "unset"
+
+    # Only offer Full/Half/Quarter chooser when NO plan has been started yet
+    options = None
+    if plan_state == "unset" and total_balance > 0:
+        half_amount = (total_balance / Decimal("2")).quantize(Decimal("0.01"))
+        quarter_amount = (total_balance / Decimal("4")).quantize(Decimal("0.01"))
+        options = [
+            {"key": "full",    "label": "Full Payment",    "amount": total_balance},
+            {"key": "half",    "label": "Half Payment (1/2)",  "amount": half_amount},
+            {"key": "quarter", "label": "Quarter Payment (1/4)", "amount": quarter_amount},
+        ]
 
     return {
         "student_id": student_id,
-        "total_outstanding": total_outstanding,
-        "options": [
-            {"key": "full", "label": "Full Payment", "amount": total_outstanding},
-            {"key": "half", "label": "Half Payment", "amount": half_outstanding},
-            {"key": "quarter", "label": "Quarter Payment", "amount": quarter_outstanding},
-        ]
+        "fee_items": fee_items,
+        "summary": {
+            "total_original": total_original,
+            "total_paid": total_paid_all,
+            "total_balance": total_balance,
+            "plan_state": plan_state,
+            "options": options,
+        },
     }
-

@@ -114,6 +114,9 @@ function PaymentModal({ target, ledger, onClose, onSuccess }) {
         payment_date: form.payment_date,
         collected_by: form.collected_by || null,
         notes: form.notes || null,
+        // Pass the plan chosen by admin; null for subsequent instalments
+        // (the plan is already locked on the DB row).
+        installment_plan: target.installment_plan || null,
       })
       toast.success(`Payment of ${formatINR(amt)} recorded`)
       onSuccess(result.data)
@@ -133,6 +136,11 @@ function PaymentModal({ target, ledger, onClose, onSuccess }) {
         <h3 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Record Payment</h3>
         <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
           Total Outstanding Balance: <strong style={{ color: 'var(--danger-600)' }}>{formatINR(maxBalance)}</strong>
+          {target.installment_plan && (
+            <span style={{ marginLeft: '10px', fontSize: '11.5px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px', background: 'var(--brand-100)', color: 'var(--brand-700)' }}>
+              {target.installment_plan === 'half' ? 'Half' : 'Quarter'} plan · instalment {(target.installments_paid || 0) + 1}/{target.total_installments}
+            </span>
+          )}
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -146,12 +154,17 @@ function PaymentModal({ target, ledger, onClose, onSuccess }) {
               placeholder="0.00" 
               min="0.01" 
               step="0.01" 
-              max={maxBalance} 
+              max={maxBalance}
+              // Lock the amount when the plan is active — admin cannot change it
+              readOnly={Boolean(target.installment_plan)}
+              style={target.installment_plan ? { background: 'var(--gray-50)', color: 'var(--text-secondary)' } : undefined}
               autoFocus 
               inputMode="decimal" 
             />
             <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
-              Max: {formatINR(maxBalance)}
+              {target.installment_plan
+                ? `Scheduled instalment — amount is fixed by the ${target.installment_plan} plan`
+                : `Max: ${formatINR(maxBalance)}`}
             </div>
           </div>
 
@@ -242,6 +255,14 @@ export default function StudentFees() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
+  const handleDownloadReceipt = async (paymentId) => {
+    try {
+      await feeAPI.downloadReceipt(paymentId)
+    } catch {
+      toast.error('Failed to download receipt')
+    }
+  }
+
   if (loading) return <LoadingPage />
   if (!ledger) return (
     <div>
@@ -287,99 +308,176 @@ export default function StudentFees() {
       )}
 
       {/* Collect Fee Payment section */}
-      {totalBalance > 0 && (
-        <div className="card" style={{ padding: '16px', marginBottom: '14px' }}>
-          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '12px' }}>Collect Fee Payment</div>
-          
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '12px' }}>
-            {[
-              { key: 'full', label: 'Full Payment', amount: totalBalance },
-              { key: 'half', label: 'Half Payment', amount: totalBalance / 2 },
-              { key: 'quarter', label: 'Quarter Payment', amount: totalBalance / 4 },
-            ].map(opt => (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={() => setPayTarget({ student_id: id, amount: opt.amount, balance: totalBalance })}
-                style={{
-                  padding: '10px',
-                  borderRadius: '10px',
-                  border: '1px solid var(--border-default)',
-                  background: 'var(--surface-0)',
-                  cursor: 'pointer',
-                  textAlign: 'center',
-                  transition: 'all 0.15s',
-                  boxShadow: 'var(--shadow-xs)',
-                  minHeight: '64px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--brand-500)'
-                  e.currentTarget.style.background = 'var(--brand-50)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--border-default)'
-                  e.currentTarget.style.background = 'var(--surface-0)'
-                }}
-              >
-                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: '3px' }}>{opt.label}</div>
-                <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>{formatINR(opt.amount)}</div>
-              </button>
-            ))}
-          </div>
+      {totalBalance > 0 && (() => {
+        // Determine whether any item has a locked plan already in progress.
+        const lockedItems = (ledger.items || []).filter(
+          item => item.installment_plan && item.installments_paid > 0
+        )
+        const unlockedItems = (ledger.items || []).filter(
+          item => !item.installment_plan && parseFloat(item.balance || 0) > 0
+        )
+        const planInProgress = lockedItems.length > 0
 
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <div style={{ position: 'relative', flex: 1 }}>
-              <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', fontWeight: 700, color: 'var(--text-tertiary)' }}>₹</span>
-              <input
-                type="number"
-                placeholder="Enter custom amount..."
-                className="input"
-                style={{ paddingLeft: '28px', minHeight: '40px', fontSize: '13.5px' }}
-                id="customAmountInput"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const val = parseFloat(e.currentTarget.value)
-                    if (val > 0 && val <= totalBalance) {
-                      setPayTarget({ student_id: id, amount: val, balance: totalBalance })
-                    } else {
-                      toast.error('Invalid amount entered')
-                    }
-                  }
-                }}
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                const val = parseFloat(document.getElementById('customAmountInput')?.value || 0)
-                if (val > 0 && val <= totalBalance) {
-                  setPayTarget({ student_id: id, amount: val, balance: totalBalance })
-                } else {
-                  toast.error('Please enter a valid amount')
-                }
-              }}
-              style={{
-                padding: '0 18px',
-                borderRadius: '8px',
-                height: '40px',
-                background: 'var(--brand-600)',
-                color: 'white',
-                border: 'none',
-                fontWeight: 700,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                fontSize: '13px',
-              }}
-            >
-              Collect
-            </button>
+        return (
+          <div className="card" style={{ padding: '20px', marginBottom: '14px', border: '1.5px solid var(--border-default)' }}>
+            <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '14px' }}>Collect Fee Payment</div>
+
+            {planInProgress ? (
+              (() => {
+                const firstLocked = lockedItems[0]
+                const planLabel = firstLocked.installment_plan === 'half' ? 'Half' : 'Quarter'
+                const instNum = firstLocked.installments_paid + 1
+                const totalInst = firstLocked.total_installments
+                const combinedNextAmt = lockedItems.reduce(
+                  (sum, item) => sum + parseFloat(item.next_installment_amount || 0), 0
+                )
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {/* Progress dots */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {Array.from({ length: totalInst }).map((_, i) => (
+                        <div key={i} style={{
+                          width: i < instNum - 1 ? '28px' : '10px',
+                          height: '6px',
+                          borderRadius: '3px',
+                          background: i < instNum - 1 ? 'var(--brand-500)' : i === instNum - 1 ? 'var(--brand-200)' : 'var(--gray-200)',
+                          transition: 'all 0.3s'
+                        }} />
+                      ))}
+                      <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginLeft: '4px' }}>
+                        {instNum - 1} of {totalInst} paid
+                      </span>
+                    </div>
+                    {/* Big collect button */}
+                    {combinedNextAmt > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setPayTarget({
+                          student_id: id,
+                          amount: combinedNextAmt,
+                          balance: totalBalance,
+                          installment_plan: firstLocked.installment_plan,
+                          installments_paid: firstLocked.installments_paid,
+                          total_installments: totalInst,
+                        })}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '16px 20px',
+                          borderRadius: '12px',
+                          border: 'none',
+                          background: 'var(--brand-600)',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          transition: 'background 0.15s, transform 0.1s',
+                          width: '100%',
+                          boxShadow: '0 2px 8px rgba(37,99,235,0.25)',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'var(--brand-700)' }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'var(--brand-600)' }}
+                        onMouseDown={e => { e.currentTarget.style.transform = 'scale(0.99)' }}
+                        onMouseUp={e => { e.currentTarget.style.transform = 'scale(1)' }}
+                      >
+                        <div>
+                          <div style={{ fontSize: '14px', fontWeight: 700, color: 'white' }}>
+                            Collect Instalment {instNum} of {totalInst}
+                          </div>
+                          <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.75)', marginTop: '3px' }}>
+                            {planLabel} plan · split across {lockedItems.length} fee head{lockedItems.length > 1 ? 's' : ''}
+                          </div>
+                        </div>
+                        <div style={{ fontWeight: 900, fontSize: '18px', color: 'white' }}>{formatINR(combinedNextAmt)}</div>
+                      </button>
+                    )}
+                  </div>
+                )
+              })()
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {/* Full payment — solid primary button */}
+                <button
+                  type="button"
+                  onClick={() => setPayTarget({
+                    student_id: id, amount: totalBalance, balance: totalBalance,
+                    installment_plan: 'full', installments_paid: 0, total_installments: 1,
+                  })}
+                  style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '14px 20px', borderRadius: '12px', border: 'none',
+                    background: 'var(--brand-600)', cursor: 'pointer', width: '100%',
+                    boxShadow: '0 2px 8px rgba(37,99,235,0.22)', transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--brand-700)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'var(--brand-600)' }}
+                >
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: 'white' }}>Pay in Full</div>
+                  <div style={{ fontWeight: 900, fontSize: '17px', color: 'white' }}>{formatINR(totalBalance)}</div>
+                </button>
+
+                {/* Half & Quarter — outlined secondary buttons */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  {[
+                    { key: 'half',    label: 'Pay in 2 Instalments', sub: 'Half each',    amount: totalBalance / 2,  total: 2 },
+                    { key: 'quarter', label: 'Pay in 4 Instalments', sub: 'Quarter each', amount: totalBalance / 4,  total: 4 },
+                  ].map(opt => (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => setPayTarget({
+                        student_id: id, amount: opt.amount, balance: totalBalance,
+                        installment_plan: opt.key, installments_paid: 0, total_installments: opt.total,
+                      })}
+                      style={{
+                        padding: '12px 14px', borderRadius: '10px',
+                        border: '1.5px solid var(--brand-300)',
+                        background: 'var(--brand-50)', cursor: 'pointer',
+                        textAlign: 'left', transition: 'all 0.15s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--brand-500)'; e.currentTarget.style.background = 'var(--brand-100)' }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--brand-300)'; e.currentTarget.style.background = 'var(--brand-50)' }}
+                    >
+                      <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--brand-700)' }}>{opt.label}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{opt.sub}</div>
+                      <div style={{ fontWeight: 800, fontSize: '15px', color: 'var(--text-primary)', marginTop: '6px' }}>{formatINR(opt.amount)} ×{opt.total}</div>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom amount */}
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', paddingTop: '2px' }}>
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', fontWeight: 700, color: 'var(--text-tertiary)' }}>₹</span>
+                    <input
+                      type="number" placeholder="Custom amount" className="input"
+                      style={{ paddingLeft: '28px', minHeight: '40px', fontSize: '13.5px' }}
+                      id="customAmountInput"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const val = parseFloat(e.currentTarget.value)
+                          if (val > 0 && val <= totalBalance) setPayTarget({ student_id: id, amount: val, balance: totalBalance, installment_plan: null })
+                          else toast.error('Invalid amount')
+                        }
+                      }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const val = parseFloat(document.getElementById('customAmountInput')?.value || 0)
+                      if (val > 0 && val <= totalBalance) setPayTarget({ student_id: id, amount: val, balance: totalBalance, installment_plan: null })
+                      else toast.error('Please enter a valid amount')
+                    }}
+                    style={{ padding: '0 16px', borderRadius: '8px', height: '40px', background: 'var(--gray-800)', color: 'white', border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: '13px', whiteSpace: 'nowrap' }}
+                  >
+                    Collect
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Fee breakdown */}
       <div className="card" style={{ marginBottom: '14px' }}>
@@ -400,39 +498,77 @@ export default function StudentFees() {
         )}
       </div>
 
-      {/* Payment history */}
-      {payments.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">Payment History</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>{payments.length} transaction{payments.length !== 1 ? 's' : ''}</div>
-          </div>
-          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-            <table className="data-table" style={{ minWidth: '440px' }}>
-              <thead>
-                <tr>
-                  <th>Receipt No.</th>
-                  <th>Date</th>
-                  <th>Amount</th>
-                  <th>Mode</th>
-                  <th>Collected By</th>
-                </tr>
-              </thead>
-              <tbody>
-                {payments.map(p => (
-                  <tr key={p.id}>
-                    <td><span className="mono" style={{ color: 'var(--brand-600)', fontWeight: 600 }}>{p.receipt_number}</span></td>
-                    <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{p.payment_date}</td>
-                    <td style={{ fontWeight: 700, color: 'var(--success-700)' }}>{formatINR(p.amount_paid)}</td>
-                    <td><span style={{ fontSize: '11.5px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px', background: 'var(--gray-100)', color: 'var(--text-secondary)' }}>{p.mode}</span></td>
-                    <td style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>{p.collected_by || '—'}</td>
+      {/* Payment history — grouped by receipt_number so that one payment
+          session (which may span multiple fee heads / DB rows) appears as
+          a single row with a single Download button. */}
+      {payments.length > 0 && (() => {
+        // Group raw payment rows by receipt_number.
+        // Each group = one payment session = one receipt.
+        const groupMap = new Map()
+        for (const p of payments) {
+          const key = p.receipt_number || `no-receipt-${p.id}`
+          if (!groupMap.has(key)) {
+            groupMap.set(key, {
+              receipt_number: p.receipt_number,
+              payment_date:   p.payment_date,
+              mode:           p.mode,
+              collected_by:   p.collected_by,
+              total_amount:   0,
+              // keep the first payment id for the download call —
+              // report_pdf.py uses it to find siblings by receipt_number
+              first_id:       p.id,
+            })
+          }
+          groupMap.get(key).total_amount += parseFloat(p.amount_paid || 0)
+        }
+        const grouped = Array.from(groupMap.values())
+
+        return (
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title">Payment History</div>
+              <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                {grouped.length} transaction{grouped.length !== 1 ? 's' : ''}
+              </div>
+            </div>
+            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <table className="data-table" style={{ minWidth: '540px' }}>
+                <thead>
+                  <tr>
+                    <th>Receipt No.</th>
+                    <th>Date</th>
+                    <th>Amount</th>
+                    <th>Mode</th>
+                    <th>Collected By</th>
+                    <th>Receipt</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {grouped.map(g => (
+                    <tr key={g.receipt_number || g.first_id}>
+                      <td><span className="mono" style={{ color: 'var(--brand-600)', fontWeight: 600 }}>{g.receipt_number}</span></td>
+                      <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{g.payment_date}</td>
+                      <td style={{ fontWeight: 700, color: 'var(--success-700)' }}>{formatINR(g.total_amount)}</td>
+                      <td><span style={{ fontSize: '11.5px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px', background: 'var(--gray-100)', color: 'var(--text-secondary)' }}>{g.mode}</span></td>
+                      <td style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>{g.collected_by || '—'}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleDownloadReceipt(g.first_id)}
+                          disabled={!g.receipt_number}
+                        >
+                          Download
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       <PaymentModal target={payTarget} ledger={ledger} onClose={() => setPayTarget(null)} onSuccess={(payment) => { setReceipt(payment); fetchData() }} />
       {receipt && <ReceiptModal payment={receipt} onClose={() => setReceipt(null)} />}

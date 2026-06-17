@@ -462,8 +462,14 @@ class StudentFee(Base):
     concession        = Column(Numeric(10, 2), default=0)
     net_amount        = Column(Numeric(10, 2), nullable=False)
     academic_year_id  = Column(Integer, ForeignKey("academic_years.id"), nullable=True, index=True)
-    invoice_type      = Column(String(10), nullable=False, default="regular")  # NEW regular/arrear
-    source_invoice_id = Column(Integer, ForeignKey("student_fees.id"), nullable=True)  # NEW for arrears
+    invoice_type      = Column(String(10), nullable=False, default="regular")  # regular/arrear
+    source_invoice_id = Column(Integer, ForeignKey("student_fees.id"), nullable=True)  # for arrears
+    # Installment plan columns — set when the first installment is paid.
+    # installment_plan: null = no plan chosen yet, 'half' = 2 installments,
+    #                   'quarter' = 4 installments, 'full' = paid in one shot.
+    # installments_paid: count of installments recorded so far (0 initially).
+    installment_plan   = Column(String(10), nullable=True)   # null / 'full' / 'half' / 'quarter'
+    installments_paid  = Column(Integer, nullable=False, default=0)
 
 
 

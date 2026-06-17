@@ -332,6 +332,8 @@ export const feeAPI = {
   getLedger:     (studentId) => api.get(`/fees/ledger/${studentId}`),
   recordPayment: (data)      => api.post('/fees/payment', data),
   getPayments:   (studentId) => api.get(`/fees/payments/${studentId}`),
+  downloadReceipt: (paymentId) =>
+    openSignedPdf(`/pdf/token/receipt/${paymentId}`, `/pdf/receipt/${paymentId}`),
   getDefaulters: (params)    => api.get('/fees/defaulters', { params: withSelectedYear(params) }),
   getMonthlyCollections: (params) =>
     api.get('/fees/monthly-collections', { params }),

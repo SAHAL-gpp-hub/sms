@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from app.core.database import get_db
 from app.core.security import create_access_token, decode_access_token
-from app.models.base_models import FeePayment, StudentFee
+from app.models.base_models import Enrollment, FeePayment, StudentFee
 from app.routers.auth import CurrentUser, ensure_class_access, ensure_student_access, require_role
 from app.pdf.marksheet_pdf import render_marksheet_pdf
 from app.pdf.report_pdf import (
@@ -116,7 +116,13 @@ def fee_receipt_token(
     student_fee = db.query(StudentFee).filter_by(id=payment.student_fee_id).first()
     if not student_fee:
         raise HTTPException(status_code=404, detail="Payment record is invalid")
-    ensure_student_access(db, current_user, student_fee.student_id)
+    student_id = student_fee.student_id
+    if not student_id and student_fee.enrollment_id:
+        enrollment = db.query(Enrollment).filter_by(id=student_fee.enrollment_id).first()
+        student_id = enrollment.student_id if enrollment else None
+    if not student_id:
+        raise HTTPException(status_code=404, detail="Payment student is invalid")
+    ensure_student_access(db, current_user, student_id)
     return _pdf_token(current_user, f"receipt:{payment_id}")
 
 @router.get("/marksheet/student/{student_id}")

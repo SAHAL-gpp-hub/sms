@@ -4,74 +4,185 @@
   <meta charset="UTF-8">
   <title>Fee Receipt</title>
   <style>
-    @page { size: A4; margin: 15mm; }
-    body { font-family: Arial, sans-serif; color: #1f2937; font-size: 12px; }
-    .header { text-align: center; border-bottom: 2px solid #1d4ed8; padding-bottom: 8px; margin-bottom: 16px; }
-    .school { font-size: 20px; font-weight: 700; color: #1d4ed8; }
-    .title { font-size: 14px; font-weight: 700; margin-top: 4px; }
-    .meta { color: #6b7280; font-size: 11px; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
-    .card { border: 1px solid #d1d5db; border-radius: 6px; padding: 10px; }
-    .label { font-size: 10px; text-transform: uppercase; color: #6b7280; margin-bottom: 2px; }
-    .value { font-size: 13px; font-weight: 600; color: #111827; }
-    .amount { font-size: 22px; font-weight: 700; color: #059669; text-align: right; margin: 10px 0; }
-    .footer { margin-top: 24px; border-top: 1px solid #e5e7eb; padding-top: 10px; color: #6b7280; font-size: 11px; }
+    @page { size: A5; margin: 18mm 15mm; }
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+      color: #1f2937;
+      margin: 0;
+      padding: 0;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+    .header-logo {
+      flex-shrink: 0;
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .header-logo img {
+      width: 48px;
+      height: 48px;
+      object-fit: contain;
+      display: block;
+    }
+    .header-text {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    h2 {
+      margin: 0;
+      font-size: 18px;
+      color: #1f2937;
+      line-height: 1.2;
+    }
+    .sub {
+      color: #666;
+      font-size: 12px;
+      margin-top: 2px;
+    }
+    hr {
+      border: none;
+      border-top: 2px solid #333;
+      margin: 10px 0;
+    }
+    hr.thin {
+      border-top: 1px solid #ccc;
+    }
+    h3 {
+      margin: 0 0 10px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    h4 {
+      margin: 8px 0 6px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    table.info {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    table.info td {
+      padding: 4px 0;
+      vertical-align: top;
+    }
+    table.info td:first-child {
+      color: #555;
+      width: 130px;
+    }
+    table.info td:last-child {
+      font-weight: 600;
+    }
+    .amount {
+      font-size: 20px;
+      font-weight: 800;
+      color: #16a34a;
+    }
+    .balance-positive {
+      color: #dc2626;
+      font-weight: 600;
+    }
+    .balance-zero {
+      color: #16a34a;
+      font-weight: 600;
+    }
+    table.alloc {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 6px 0;
+    }
+    table.alloc th,
+    table.alloc td {
+      border: 1px solid #ddd;
+      padding: 6px 8px;
+      text-align: left;
+    }
+    table.alloc th {
+      background: #f8fafc;
+      font-weight: 700;
+      font-size: 11.5px;
+    }
+    table.alloc td {
+      font-size: 12px;
+    }
+    .footer {
+      margin-top: 22px;
+      font-size: 11px;
+      color: #999;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
   <div class="header">
-    <div class="school">{{ school_name }}</div>
-    <div class="title">Fee Receipt</div>
-    <div class="meta">Generated on {{ generated_date }}</div>
-  </div>
-
-  <div class="grid">
-    <div class="card">
-      <div class="label">Receipt No</div>
-      <div class="value">{{ receipt_number }}</div>
+    <div class="header-logo">
+      <img src="logo.jpeg" alt="Logo" onerror="this.style.display='none'">
     </div>
-    <div class="card">
-      <div class="label">Payment Date</div>
-      <div class="value">{{ payment_date }}</div>
+    <div class="header-text">
+      <h2>Iqra English Medium School</h2>
+      <div class="sub">Palanpur, Gujarat</div>
     </div>
   </div>
+  <hr/>
+  <h3>Fee Receipt</h3>
 
-  <div class="grid">
-    <div class="card">
-      <div class="label">Student</div>
-      <div class="value">{{ student_name }} ({{ student_id }})</div>
-    </div>
-    <div class="card">
-      <div class="label">Father / Guardian</div>
-      <div class="value">{{ father_name }}</div>
-    </div>
-    <div class="card">
-      <div class="label">Class</div>
-      <div class="value">{{ class_name }}</div>
-    </div>
-    <div class="card">
-      <div class="label">Academic Year</div>
-      <div class="value">{{ academic_year }}</div>
-    </div>
-    <div class="card">
-      <div class="label">Contact</div>
-      <div class="value">{{ contact }}</div>
-    </div>
-    <div class="card">
-      <div class="label">Payment Mode</div>
-      <div class="value">{{ payment_mode }}</div>
-    </div>
-  </div>
+  <table class="info">
+    <tr><td>Receipt No.</td><td>{{ receipt_number }}</td></tr>
+    <tr><td>Date</td><td>{{ payment_date }}</td></tr>
+    <tr><td>Student</td><td>{{ student_name }}</td></tr>
+    {% if gr_no %}<tr><td>GR No.</td><td>{{ gr_no }}</td></tr>{% endif %}
+    <tr><td>Class</td><td>{{ class_name }}</td></tr>
+    <tr><td>Mode</td><td>{{ payment_mode }}</td></tr>
+    {% if collected_by %}<tr><td>Collected By</td><td>{{ collected_by }}</td></tr>{% endif %}
+    {% if notes %}<tr><td>Notes</td><td>{{ notes }}</td></tr>{% endif %}
+  </table>
 
-  <div class="amount">Amount Paid: ₹{{ "{:,.2f}".format(amount_paid) }}</div>
-  {% if notes %}
-    <div class="card">
-      <div class="label">Notes</div>
-      <div class="value">{{ notes }}</div>
-    </div>
-  {% endif %}
+  <hr class="thin"/>
+  <h4>Payment Allocation</h4>
+  <table class="alloc">
+    <thead>
+      <tr>
+        <th>Fee Head</th>
+        <th>Amount Applied</th>
+        <th>Balance After</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in allocations %}
+      <tr>
+        <td>{{ row.fee_head_name }}</td>
+        <td>&#8377;{{ "{:,.0f}".format(row.amount_paid) }}</td>
+        <td class="{{ 'balance-positive' if row.balance_after > 0 else 'balance-zero' }}">
+          &#8377;{{ "{:,.0f}".format(row.balance_after) }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
 
-  <div class="footer">This is a system-generated receipt.</div>
+  <hr/>
+  <table class="info">
+    <tr>
+      <td>Total Paid</td>
+      <td class="amount">&#8377;{{ "{:,.0f}".format(total_amount_paid) }}</td>
+    </tr>
+    <tr>
+      <td>Total Balance After</td>
+      <td class="{{ 'balance-positive' if total_balance_after > 0 else 'balance-zero' }}">
+        &#8377;{{ "{:,.0f}".format(total_balance_after) }}
+      </td>
+    </tr>
+  </table>
+
+  <div class="footer">Computer-generated receipt &middot; No signature required</div>
 </body>
 </html>
-

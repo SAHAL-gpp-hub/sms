@@ -87,12 +87,24 @@ class PaymentCreate(BaseModel):
     collected_by: Optional[str] = None
     notes: Optional[str] = None
     academic_year_id: Optional[int] = None
+    # Installment plan selected by the payer.
+    # Must be 'full', 'half', or 'quarter'.  Required on the FIRST payment
+    # for a StudentFee row.  Omit (or pass null) for subsequent installments
+    # — the plan is already locked on the DB row and enforced by the service.
+    installment_plan: Optional[str] = None
 
     @field_validator("amount_paid")
     @classmethod
     def validate_amount(cls, v):
         if v <= 0:
             raise ValueError("Payment amount must be greater than 0")
+        return v
+
+    @field_validator("installment_plan")
+    @classmethod
+    def validate_plan(cls, v):
+        if v is not None and v not in ("full", "half", "quarter"):
+            raise ValueError("installment_plan must be 'full', 'half', or 'quarter'")
         return v
 
 class PaymentAllocation(BaseModel):
@@ -115,6 +127,16 @@ class PaymentOut(BaseModel):
     
     model_config = {"from_attributes": True}
 
+class PaymentHistoryOut(BaseModel):
+    id: int
+    receipt_number: Optional[str] = None
+    amount_paid: Decimal
+    payment_date: date
+    mode: str
+    collected_by: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
 class StudentLedgerItem(BaseModel):
     fee_head_name: str
     frequency: str
@@ -125,6 +147,11 @@ class StudentLedgerItem(BaseModel):
     enrollment_id: int
     academic_year_id: Optional[int] = None
     invoice_type: str = "regular"
+    # Installment plan state — populated from StudentFee columns
+    installment_plan: Optional[str] = None     # null / 'full' / 'half' / 'quarter'
+    installments_paid: int = 0
+    total_installments: Optional[int] = None   # 1 / 2 / 4 once plan set
+    next_installment_amount: Optional[Decimal] = None
 
 
 class StudentLedger(BaseModel):

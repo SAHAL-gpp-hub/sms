@@ -27,7 +27,7 @@ from app.schemas.fee import (
     FeeHeadCreate, FeeHeadOut,
     FeePlanApplyResult, FeePlanPreview, FeePlanRequest,
     FeeStructureCreate, FeeStructureOut,
-    PaymentCreate, PaymentOut,
+    PaymentCreate, PaymentHistoryOut, PaymentOut,
     StudentLedger,
 )
 from app.services import fee_service
@@ -316,7 +316,7 @@ def get_payments_query(
     return fee_service.get_payments_by_student(db, student_id)
 
 
-@router.get("/payments/{student_id}", response_model=list[PaymentOut])
+@router.get("/payments/{student_id}", response_model=list[PaymentHistoryOut])
 def get_payments(
     student_id: int,
     db: Session = Depends(get_db),
@@ -364,5 +364,3 @@ def get_payment_options(
 ):
     ensure_student_access(db, current_user, student_id)
     return fee_service.get_payment_options(db, student_id)
-
-

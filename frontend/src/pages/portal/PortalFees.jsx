@@ -231,11 +231,21 @@ export default function PortalFees() {
   const currentYearBalance = currentItems.reduce((sum, item) => sum + parseFloat(item.balance || 0), 0)
   const arrearBalance = arrearItems.reduce((sum, item) => sum + parseFloat(item.balance || 0), 0)
   const canPayOnline = ((isParent && Boolean(selectedChildId)) || role === 'student') && currentYearBalance > 0
-  const paymentOptions = [
-    { key:'full', label:'Pay Full', amount: currentYearBalance },
-    { key:'half', label:'Pay Half', amount: currentYearBalance / 2 },
-    { key:'quarter', label:'Pay Quarter', amount: currentYearBalance / 4 },
-  ].filter(option => option.amount > 0)
+
+  // Determine plan state from ledger items
+  const lockedItems = (ledger.items || []).filter(
+    item => item.invoice_type !== 'arrear' && item.installment_plan && item.installments_paid > 0
+  )
+  const planInProgress = lockedItems.length > 0
+
+  // Only offer Full/Half/Quarter chooser when no plan is in progress
+  const paymentOptions = planInProgress
+    ? []
+    : [
+        { key: 'full',    label: 'Pay Full',       amount: currentYearBalance },
+        { key: 'half',    label: 'Pay Half (1/2)',  amount: currentYearBalance / 2 },
+        { key: 'quarter', label: 'Pay Quarter (1/4)', amount: currentYearBalance / 4 },
+      ].filter(o => o.amount > 0)
   const pendingBreakdown = pendingPayment ? paymentBreakdown(pendingPayment.amount) : null
 
   const renderFeeSection = (title, items, empty, collapsed = false) => {
@@ -337,82 +347,132 @@ export default function PortalFees() {
         </div>
         {canPayOnline ? (
           <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))', gap:'8px' }}>
-              {paymentOptions.map(option => (
-                <button
-                  key={option.key}
-                  type="button"
-                  onClick={() => setPendingPayment(option)}
-                  disabled={payingOption === option.key || Boolean(verifyingOrderId)}
-                  style={{
-                    border:0, borderRadius:'12px', padding:'11px 10px', background:'#0d7377',
-                    color:'white', cursor: payingOption || verifyingOrderId ? 'wait' : 'pointer',
-                    opacity: payingOption === option.key || verifyingOrderId ? 0.7 : 1,
-                    minHeight:'58px',
-                  }}
-                >
-                  <div style={{ fontSize:'13px', fontWeight:900 }}>{payingOption === option.key ? 'Opening…' : option.label}</div>
-                  <div style={{ fontSize:'11px', fontWeight:800, opacity:0.85, marginTop:'2px' }}>{fmt(option.amount)}</div>
-                </button>
-              ))}
-            </div>
+            {planInProgress ? (
+              /* ── Plan active: ONE combined button for the next instalment ── */
+              (() => {
+                const firstLocked = lockedItems[0]
+                const planLabel = firstLocked.installment_plan === 'half' ? 'Half' : 'Quarter'
+                const instNum = firstLocked.installments_paid + 1
+                const totalInst = firstLocked.total_installments
+                const combinedNextAmt = lockedItems.reduce(
+                  (sum, item) => sum + parseFloat(item.next_installment_amount || 0), 0
+                )
+                return (
+                  <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                    <div style={{ fontSize:'12px', fontWeight:700, color:'#0369a1', padding:'8px 10px', background:'#e0f2fe', borderRadius:'8px', border:'1px solid #bae6fd' }}>
+                      {planLabel} plan active — payment {instNum} of {totalInst}. Distributed proportionally across all fee heads.
+                    </div>
+                    {combinedNextAmt > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setPendingPayment({ key: firstLocked.installment_plan, label: `Instalment ${instNum} of ${totalInst}`, amount: combinedNextAmt })}
+                        disabled={Boolean(payingOption) || Boolean(verifyingOrderId)}
+                        style={{
+                          border: '1.5px solid #0d7377',
+                          borderRadius: '12px',
+                          padding: '14px 16px',
+                          background: '#f0fdfa',
+                          color: '#0f172a',
+                          cursor: payingOption || verifyingOrderId ? 'wait' : 'pointer',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          opacity: payingOption || verifyingOrderId ? 0.7 : 1,
+                        }}
+                      >
+                        <div style={{ textAlign: 'left' }}>
+                          <div style={{ fontSize: '13px', fontWeight: 900 }}>Pay Instalment {instNum} of {totalInst}</div>
+                          <div style={{ fontSize: '11px', fontWeight: 700, opacity: 0.7, marginTop: '2px' }}>
+                            {planLabel} plan · across {lockedItems.length} fee head{lockedItems.length > 1 ? 's' : ''}
+                          </div>
+                        </div>
+                        <div style={{ fontSize: '16px', fontWeight: 900 }}>{fmt(combinedNextAmt)}</div>
+                      </button>
+                    )}
+                  </div>
+                )
+              })()
+            ) : (
+              /* ── No plan yet: show Full / Half / Quarter + custom ── */
+              <>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))', gap:'8px' }}>
+                  {paymentOptions.map(option => (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => setPendingPayment(option)}
+                      disabled={payingOption === option.key || Boolean(verifyingOrderId)}
+                      style={{
+                        border:0, borderRadius:'12px', padding:'11px 10px', background:'#0d7377',
+                        color:'white', cursor: payingOption || verifyingOrderId ? 'wait' : 'pointer',
+                        opacity: payingOption === option.key || verifyingOrderId ? 0.7 : 1,
+                        minHeight:'58px',
+                      }}
+                    >
+                      <div style={{ fontSize:'13px', fontWeight:900 }}>{payingOption === option.key ? 'Opening…' : option.label}</div>
+                      <div style={{ fontSize:'11px', fontWeight:800, opacity:0.85, marginTop:'2px' }}>{fmt(option.amount)}</div>
+                    </button>
+                  ))}
+                </div>
 
-            <div style={{ display:'flex', gap:'10px', alignItems:'center', marginTop:'4px' }}>
-              <div style={{ position:'relative', flex:1 }}>
-                <span style={{ position:'absolute', left:'12px', top:'50%', transform:'translateY(-50%)', fontSize:'13.5px', fontWeight:700, color:'#94a3b8' }}>₹</span>
-                <input
-                  type="number"
-                  placeholder="Enter custom amount..."
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px 10px 28px',
-                    borderRadius: '10px',
-                    border: '1px solid #e2e8f0',
-                    fontSize: '13.5px',
-                    minHeight: '40px',
-                    boxSizing: 'border-box'
-                  }}
-                  id="portalCustomAmount"
-                  min="1"
-                  max={currentYearBalance}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      const val = parseFloat(e.currentTarget.value)
+                <div style={{ display:'flex', gap:'10px', alignItems:'center', marginTop:'4px' }}>
+                  <div style={{ position:'relative', flex:1 }}>
+                    <span style={{ position:'absolute', left:'12px', top:'50%', transform:'translateY(-50%)', fontSize:'13.5px', fontWeight:700, color:'#94a3b8' }}>₹</span>
+                    <input
+                      type="number"
+                      placeholder="Enter custom amount..."
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px 10px 28px',
+                        borderRadius: '10px',
+                        border: '1px solid #e2e8f0',
+                        fontSize: '13.5px',
+                        minHeight: '40px',
+                        boxSizing: 'border-box'
+                      }}
+                      id="portalCustomAmount"
+                      min="1"
+                      max={currentYearBalance}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const val = parseFloat(e.currentTarget.value)
+                          if (val > 0 && val <= currentYearBalance) {
+                            setPendingPayment({ key: 'custom', label: 'Custom Payment', amount: val })
+                          } else {
+                            toast.error(`Amount must be between ₹1 and ${fmt(currentYearBalance)}`)
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const val = parseFloat(document.getElementById('portalCustomAmount')?.value || 0)
                       if (val > 0 && val <= currentYearBalance) {
                         setPendingPayment({ key: 'custom', label: 'Custom Payment', amount: val })
                       } else {
                         toast.error(`Amount must be between ₹1 and ${fmt(currentYearBalance)}`)
                       }
-                    }
-                  }}
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const val = parseFloat(document.getElementById('portalCustomAmount')?.value || 0)
-                  if (val > 0 && val <= currentYearBalance) {
-                    setPendingPayment({ key: 'custom', label: 'Custom Payment', amount: val })
-                  } else {
-                    toast.error(`Amount must be between ₹1 and ${fmt(currentYearBalance)}`)
-                  }
-                }}
-                style={{
-                  padding:'0 18px',
-                  borderRadius:'8px',
-                  height:'40px',
-                  background:'#0d7377',
-                  color:'white',
-                  border:'none',
-                  fontWeight:700,
-                  cursor:'pointer',
-                  whiteSpace:'nowrap',
-                  fontSize:'13px'
-                }}
-              >
-                Pay Custom
-              </button>
-            </div>
+                    }}
+                    style={{
+                      padding:'0 18px',
+                      borderRadius:'8px',
+                      height:'40px',
+                      background:'#0d7377',
+                      color:'white',
+                      border:'none',
+                      fontWeight:700,
+                      cursor:'pointer',
+                      whiteSpace:'nowrap',
+                      fontSize:'13px'
+                    }}
+                  >
+                    Pay Custom
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         ) : (
           <div style={{ fontSize:'13px', color:'#64748b', fontWeight:700 }}>

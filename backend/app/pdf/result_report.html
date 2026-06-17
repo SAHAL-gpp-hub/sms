@@ -11,9 +11,31 @@
 
         body { font-family: Arial, sans-serif; font-size: 10px; color: #1a1a1a; }
 
+        /* ── Header with logo ── */
         .header {
-            text-align: center; border-bottom: 2px solid #1a3a6b;
-            padding-bottom: 8px; margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            border-bottom: 2px solid #1a3a6b;
+            padding-bottom: 10px;
+            margin-bottom: 14px;
+        }
+        .header-logo {
+            flex-shrink: 0;
+            width: 56px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .header-logo img {
+            width: 56px;
+            height: 56px;
+            object-fit: contain;
+        }
+        .header-text {
+            flex: 1;
+            text-align: center;
         }
         .school-name { font-size: 18px; font-weight: bold; color: #1a3a6b; }
         .report-title {
@@ -21,8 +43,16 @@
             margin-top: 4px; text-transform: uppercase; letter-spacing: 2px;
         }
         .meta { font-size: 10px; color: #666; margin-top: 3px; }
+        /* Right spacer to keep title centered */
+        .header-spacer { flex-shrink: 0; width: 56px; }
 
-        .table-wrap { width: 100%; }
+        /* ── Table section with border ── */
+        .table-wrap {
+            width: 100%;
+            border: 2px solid #1a3a6b;
+            border-radius: 4px;
+            overflow: hidden;
+        }
         table { width: 100%; border-collapse: collapse; font-size: 9px; }
         th {
             background: #1a3a6b; color: white;
@@ -34,10 +64,26 @@
         }
         td:first-child, td:nth-child(2) { text-align: left; }
         tr:nth-child(even) { background: #f9f9f9; }
+        /* Right-border on Result column to visually cap the table */
+        td:last-child, th:last-child { border-left: 1px solid #c8d4f0; }
 
         .pass { color: #1a7a45; font-weight: bold; }
         .fail { color: #c0392b; font-weight: bold; }
-        .grade { font-weight: bold; color: #1a3a6b; }
+
+        /* ── Signatures ── */
+        .signatures {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 28px;
+            padding-top: 0;
+        }
+        .sig-box { text-align: center; width: 200px; }
+        .sig-line {
+            border-top: 1px solid #333;
+            margin-top: 32px;
+            margin-bottom: 4px;
+        }
+        .sig-label { font-size: 10px; font-weight: bold; color: #444; }
 
         .footer {
             margin-top: 12px; text-align: center;
@@ -45,7 +91,7 @@
             border-top: 1px solid #eee; padding-top: 8px;
         }
 
-        /* ===== SCREEN-ONLY RESPONSIVE LAYER ===== */
+        /* ── Screen-only responsive layer ── */
         @media screen {
             body {
                 max-width: 1400px;
@@ -53,7 +99,7 @@
                 padding: 16px;
                 background: #f4f6fa;
             }
-            .header, .table-wrap, .footer {
+            .header, .table-wrap, .signatures, .footer {
                 background: #fff;
                 padding: 16px;
                 border-radius: 8px;
@@ -61,9 +107,9 @@
                 margin-bottom: 14px;
             }
             .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-            /* Result tables can be very wide due to many subjects */
             table { min-width: 900px; }
             th, td { white-space: nowrap; }
+            .signatures { background: #fff; padding: 16px 24px; }
         }
 
         @media screen and (max-width: 720px) {
@@ -71,6 +117,9 @@
             .report-title { font-size: 12px; letter-spacing: 1px; }
             body { padding: 10px; }
             .header, .footer { padding: 12px; }
+            .header-logo { width: 44px; height: 44px; }
+            .header-logo img { width: 44px; height: 44px; }
+            .header-spacer { width: 44px; }
         }
 
         @media screen and (max-width: 420px) {
@@ -78,14 +127,23 @@
             .school-name { font-size: 14px; }
             .report-title { font-size: 11px; }
             .meta { font-size: 9px; }
+            .header { flex-wrap: wrap; justify-content: center; }
+            .header-spacer { display: none; }
         }
     </style>
 </head>
 <body>
     <div class="header">
-        <div class="school-name">IQRA ENGLISH MEDIUM SCHOOL</div>
-        <div class="report-title">Class Result Report — {{ exam_name }}</div>
-        <div class="meta">Class {{ class_name }} · Academic Year {{ academic_year }} · Generated: {{ generated_date }}</div>
+        <div class="header-logo">
+            <img src="logo.jpeg" alt="School Logo"
+                 onerror="this.style.display='none'">
+        </div>
+        <div class="header-text">
+            <div class="school-name">IQRA ENGLISH MEDIUM SCHOOL</div>
+            <div class="report-title">Class Result Report — {{ exam_name }}</div>
+            <div class="meta">Class {{ class_name }} · Academic Year {{ academic_year }} · Generated: {{ generated_date }}</div>
+        </div>
+        <div class="header-spacer"></div>
     </div>
 
     <div class="table-wrap">
@@ -100,8 +158,6 @@
                     {% endfor %}
                     <th>Total</th>
                     <th>%</th>
-                    <th>CGPA</th>
-                    <th>Grade</th>
                     <th>Result</th>
                 </tr>
             </thead>
@@ -116,13 +172,22 @@
                     {% endfor %}
                     <td><strong>{{ r.total_marks|int }}/{{ r.max_marks|int }}</strong></td>
                     <td>{{ "%.1f"|format(r.percentage) }}%</td>
-                    <td>{{ r.cgpa }}</td>
-                    <td class="grade">{{ r.grade }}</td>
                     <td class="{{ 'pass' if r.result == 'PASS' else 'fail' }}">{{ r.result }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
+    </div>
+
+    <div class="signatures">
+        <div class="sig-box">
+            <div class="sig-line"></div>
+            <div class="sig-label">Class Teacher</div>
+        </div>
+        <div class="sig-box">
+            <div class="sig-line"></div>
+            <div class="sig-label">Principal / Headmaster</div>
+        </div>
     </div>
 
     <div class="footer">

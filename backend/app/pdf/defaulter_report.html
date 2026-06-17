@@ -12,9 +12,25 @@
         body { font-family: Arial, sans-serif; font-size: 11px; color: #1a1a1a; }
 
         .header {
-            text-align: center; border-bottom: 2px solid #1a3a6b;
-            padding-bottom: 10px; margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            border-bottom: 2px solid #1a3a6b;
+            padding-bottom: 10px;
+            margin-bottom: 16px;
         }
+        .header-logo {
+            flex-shrink: 0;
+            width: 56px;
+            height: 56px;
+        }
+        .header-logo img {
+            width: 56px;
+            height: 56px;
+            object-fit: contain;
+        }
+        .header-text { flex: 1; text-align: center; }
+        .header-spacer { flex-shrink: 0; width: 56px; }
         .school-name { font-size: 20px; font-weight: bold; color: #1a3a6b; }
         .report-title {
             font-size: 14px; font-weight: bold; color: #c0392b;
@@ -49,7 +65,6 @@
             border-top: 1px solid #eee; padding-top: 8px;
         }
 
-        /* ===== SCREEN-ONLY RESPONSIVE LAYER ===== */
         @media screen {
             body {
                 max-width: 1100px;
@@ -75,6 +90,9 @@
             .sum-value { font-size: 17px; }
             .school-name { font-size: 17px; }
             .report-title { font-size: 12px; letter-spacing: 1px; }
+            .header-logo { width: 44px; height: 44px; }
+            .header-logo img { width: 44px; height: 44px; }
+            .header-spacer { width: 44px; }
         }
 
         @media screen and (max-width: 460px) {
@@ -83,14 +101,22 @@
             .header, .footer { padding: 12px; }
             .school-name { font-size: 15px; }
             .sum-value { font-size: 18px; }
+            .header { flex-wrap: wrap; justify-content: center; }
+            .header-spacer { display: none; }
         }
     </style>
 </head>
 <body>
     <div class="header">
-        <div class="school-name">IQRA ENGLISH MEDIUM SCHOOL</div>
-        <div class="report-title">Fee Defaulter Report</div>
-        <div class="meta">Academic Year: {{ academic_year }} · Generated: {{ generated_date }}</div>
+        <div class="header-logo">
+            <img src="logo.jpeg" alt="Logo" onerror="this.style.display='none'">
+        </div>
+        <div class="header-text">
+            <div class="school-name">IQRA ENGLISH MEDIUM SCHOOL</div>
+            <div class="report-title">Fee Defaulter Report</div>
+            <div class="meta">Academic Year: {{ academic_year }} · Generated: {{ generated_date }}</div>
+        </div>
+        <div class="header-spacer"></div>
     </div>
 
     <div class="summary-box">

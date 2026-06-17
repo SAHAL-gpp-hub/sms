@@ -9,9 +9,28 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: Arial, sans-serif; font-size: 11px; color: #1a1a1a; }
         .outer-border { border: 3px double #1a3a6b; padding: 20px; min-height: 257mm; }
-        .header { text-align: center; margin-bottom: 16px; }
+
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 16px;
+        }
+        .header-logo {
+            flex-shrink: 0;
+            width: 60px;
+            height: 60px;
+        }
+        .header-logo img {
+            width: 60px;
+            height: 60px;
+            object-fit: contain;
+        }
+        .header-text { flex: 1; text-align: center; }
+        .header-spacer { flex-shrink: 0; width: 60px; }
         .school-name { font-size: 22px; font-weight: bold; color: #1a3a6b; letter-spacing: 1px; }
         .school-sub { font-size: 11px; color: #555; margin-top: 3px; }
+
         .tc-title {
             font-size: 16px; font-weight: bold; color: #1a3a6b;
             text-align: center; margin: 14px 0;
@@ -66,6 +85,9 @@
             .signatures { grid-template-columns: 1fr; gap: 40px; }
             .field-label { width: 50%; }
             .field-value { width: 47%; }
+            .header-logo { width: 48px; height: 48px; }
+            .header-logo img { width: 48px; height: 48px; }
+            .header-spacer { width: 48px; }
         }
         @media screen and (max-width: 480px) {
             body { padding: 8px; }
@@ -78,14 +100,22 @@
             .field-colon { display: none !important; }
             .field-label { font-size: 10px; color: #1a3a6b; }
             .field-value { border-bottom: 1px solid #ddd; padding-bottom: 4px !important; }
+            .header { flex-wrap: wrap; justify-content: center; }
+            .header-spacer { display: none; }
         }
     </style>
 </head>
 <body>
     <div class="outer-border">
         <div class="header">
-            <div class="school-name">IQRA ENGLISH MEDIUM SCHOOL</div>
-            <div class="school-sub">GSEB Affiliated · Nursery to Std 10 · Palanpur, Gujarat</div>
+            <div class="header-logo">
+                <img src="logo.jpeg" alt="Logo" onerror="this.style.display='none'">
+            </div>
+            <div class="header-text">
+                <div class="school-name">IQRA ENGLISH MEDIUM SCHOOL</div>
+                <div class="school-sub">GSEB Affiliated · Nursery to Std 10 · Palanpur, Gujarat</div>
+            </div>
+            <div class="header-spacer"></div>
         </div>
 
         <div class="tc-title">Transfer Certificate</div>
