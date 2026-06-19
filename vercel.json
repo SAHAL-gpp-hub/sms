@@ -1,12 +1,16 @@
 {
-  "rewrites": [
+  "framework": null,
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "installCommand": "cd frontend && npm install",
+  "routes": [
     {
-      "source": "/api/:path*",
-      "destination": "https://sms-backend-zs8v.onrender.com/api/:path*"
+      "src": "/api/(.*)",
+      "dest": "https://sms-backend-zs8v.onrender.com/api/$1"
     },
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ]
 }
