@@ -24,8 +24,6 @@ const DAYS = ['Mo','Tu','We','Th','Fr','Sa','Su']
 const STATUS_META = {
   P:  { color: '#15803d', bg: '#dcfce7', border: '#16a34a', label: 'Present', letter: 'P', pattern: 'solid' },
   A:  { color: '#b91c1c', bg: '#fee2e2', border: '#dc2626', label: 'Absent',  letter: 'A', pattern: 'dashed' },
-  L:  { color: '#b45309', bg: '#fef3c7', border: '#d97706', label: 'Late',    letter: 'L', pattern: 'dotted' },
-  OL: { color: '#1d4ed8', bg: '#dbeafe', border: '#2563eb', label: 'Leave',   letter: 'OL', pattern: 'double' },
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -192,8 +190,6 @@ export default function PortalAttendance() {
 
   const present  = monthRecs.filter(r => r.status === 'P').length
   const absent   = monthRecs.filter(r => r.status === 'A').length
-  const late     = monthRecs.filter(r => r.status === 'L').length
-  const onLeave  = monthRecs.filter(r => r.status === 'OL').length
   const total    = monthRecs.length
 
   const monthSummary = summaries.find(s => s.year === year && s.month === month)
@@ -399,8 +395,6 @@ export default function PortalAttendance() {
                   {[
                     { key: 'P',  label: 'Present', count: present  },
                     { key: 'A',  label: 'Absent',  count: absent   },
-                    { key: 'L',  label: 'Late',    count: late     },
-                    { key: 'OL', label: 'Leave',   count: onLeave  },
                   ].map(s => {
                     const meta = STATUS_META[s.key]
                     return (

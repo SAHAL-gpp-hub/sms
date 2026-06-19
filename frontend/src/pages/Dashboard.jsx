@@ -677,7 +677,7 @@ export default function Dashboard() {
       return {
         present: stats?.attendance_summary?.present ?? 0,
         absent: stats?.attendance_summary?.absent ?? 0,
-        late: stats?.attendance_summary?.not_marked ?? 0,
+        not_marked: stats?.attendance_summary?.not_marked ?? 0,
         total: stats?.attendance_summary?.total ?? 0,
       }
     }
@@ -687,7 +687,7 @@ export default function Dashboard() {
     return {
       present: stats?.attendance_summary?.present ?? 0,
       absent: stats?.attendance_summary?.absent ?? 0,
-      late: stats?.attendance_summary?.not_marked ?? 0,
+      not_marked: stats?.attendance_summary?.not_marked ?? 0,
       total: stats?.attendance_summary?.total ?? 0,
     }
   }, [selectedAttendanceClass, stats])
@@ -697,7 +697,7 @@ export default function Dashboard() {
     return [
       { name: 'Present', value: classFilteredStats.present, color: '#3b82f6' },
       { name: 'Absent', value: classFilteredStats.absent, color: '#ef4444' },
-      { name: 'Late', value: classFilteredStats.late, color: '#f59e0b' },
+      { name: 'Not Marked', value: classFilteredStats.not_marked, color: '#94a3b8' },
     ]
   }, [classFilteredStats])
 
@@ -981,9 +981,9 @@ export default function Dashboard() {
                   <span><span className="attendance-dot absent"></span>Absent</span>
                   <span className="attendance-pill-value">{classFilteredStats.absent.toLocaleString()}</span>
                 </div>
-                <div className="attendance-pill late" style={{ padding: '6px 10px', borderRadius: 8, fontSize: 12 }}>
-                  <span><span className="attendance-dot late"></span>Late</span>
-                  <span className="attendance-pill-value">{classFilteredStats.late.toLocaleString()}</span>
+                <div className="attendance-pill not-marked" style={{ padding: '6px 10px', borderRadius: 8, fontSize: 12 }}>
+                  <span><span className="attendance-dot not-marked"></span>Not Marked</span>
+                  <span className="attendance-pill-value">{classFilteredStats.not_marked.toLocaleString()}</span>
                 </div>
               </div>
             </div>

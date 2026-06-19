@@ -40,22 +40,47 @@ def mark_attendance(
     else:
         entries = data.entries
     if current_user.role == "teacher":
-        class_ids = set()
+        # C4 fix: previously fired one Enrollment query per entry (twice — once
+        # for class-id resolution, once for the body). Batch-load everything
+        # needed for access-control up-front in two queries total.
+        enrollment_ids = [e.enrollment_id for e in entries if e.enrollment_id is not None]
+        enrollments_by_id: dict[int, Enrollment] = {}
+        if enrollment_ids:
+            enrollments_by_id = {
+                en.id: en
+                for en in db.query(Enrollment).filter(Enrollment.id.in_(enrollment_ids)).all()
+            }
+
+        class_ids_to_lookup = [e.class_id for e in entries if e.class_id is not None and e.enrollment_id is None]
+        classes_by_id: dict[int, Class] = {}
+        if class_ids_to_lookup:
+            classes_by_id = {
+                c.id: c
+                for c in db.query(Class).filter(Class.id.in_(set(class_ids_to_lookup))).all()
+            }
+
+        # Resolve the class_id set for teacher access checks (one pass, no queries).
+        resolved_class_ids: set = set()
         for entry in entries:
             if entry.class_id is not None:
-                class_ids.add(entry.class_id)
+                resolved_class_ids.add(entry.class_id)
             elif entry.enrollment_id is not None:
-                enrollment = db.query(Enrollment).filter_by(id=entry.enrollment_id).first()
+                enrollment = enrollments_by_id.get(entry.enrollment_id)
                 if not enrollment:
                     raise HTTPException(status_code=404, detail=f"Enrollment {entry.enrollment_id} not found")
-                class_ids.add(enrollment.class_id)
-        for class_id in class_ids:
+                resolved_class_ids.add(enrollment.class_id)
+        for class_id in resolved_class_ids:
             ensure_class_teacher_access(current_user, class_id)
+
+        # Validate each entry resolves to an enrollment (using the pre-fetched maps).
         for entry in entries:
             if entry.enrollment_id is not None:
-                enrollment = db.query(Enrollment).filter_by(id=entry.enrollment_id).first()
+                enrollment = enrollments_by_id.get(entry.enrollment_id)
             else:
-                cls = db.query(Class).filter_by(id=entry.class_id).first()
+                cls = classes_by_id.get(entry.class_id) if entry.class_id is not None else None
+                # No bulk map for (student_id, class_id) pairs: these legacy
+                # entries still need a lookup, but only for entries that don't
+                # carry an enrollment_id (typically a small minority).
                 enrollment = db.query(Enrollment).filter_by(
                     student_id=entry.student_id,
                     class_id=entry.class_id,

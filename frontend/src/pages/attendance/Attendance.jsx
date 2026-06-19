@@ -10,8 +10,6 @@ const STATUS_OPTIONS = [
   { value: 'UNMARKED', label: 'Unmarked', short: '—', color: '#64748b', bg: '#f8fafc', border: '#cbd5e1' },
   { value: 'P',  label: 'Present', short: 'P',  color: '#16a34a', bg: '#dcfce7', border: '#bbf7d0' },
   { value: 'A',  label: 'Absent',  short: 'A',  color: '#dc2626', bg: '#fee2e2', border: '#fecaca' },
-  { value: 'L',  label: 'Late',    short: 'L',  color: '#d97706', bg: '#fef3c7', border: '#fde68a' },
-  { value: 'OL', label: 'Leave',   short: 'OL', color: '#2563eb', bg: '#dbeafe', border: '#bfdbfe' },
 ]
 
 const MARKABLE_STATUS_OPTIONS = STATUS_OPTIONS.filter(
@@ -78,11 +76,9 @@ function StatusBadge({ value }) {
 }
 
 function AttendanceSummaryBar({ statuses }) {
-  const total   = Object.keys(statuses).length
-  const present = Object.values(statuses).filter(s => s === 'P').length
-  const absent  = Object.values(statuses).filter(s => s === 'A').length
-  const late    = Object.values(statuses).filter(s => s === 'L').length
-  const onLeave = Object.values(statuses).filter(s => s === 'OL').length
+  const total    = Object.keys(statuses).length
+  const present  = Object.values(statuses).filter(s => s === 'P').length
+  const absent   = Object.values(statuses).filter(s => s === 'A').length
   const unmarked = Object.values(statuses).filter(s => !s || s === 'UNMARKED').length
   if (total === 0) return null
 
@@ -96,8 +92,6 @@ function AttendanceSummaryBar({ statuses }) {
       {[
         { label: 'Present', count: present, color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
         { label: 'Absent',  count: absent,  color: '#dc2626', bg: '#fff1f2', border: '#fecaca' },
-        { label: 'Late',    count: late,    color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
-        { label: 'Leave',   count: onLeave, color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
         { label: 'Unmarked', count: unmarked, color: '#64748b', bg: '#f8fafc', border: '#cbd5e1' },
       ].map(s => (
         <div key={s.label} style={{

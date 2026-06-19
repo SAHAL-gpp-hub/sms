@@ -43,13 +43,20 @@ def ensure_enrollments_for_legacy_students(db: Session) -> None:
         .filter(Student.class_id.isnot(None), Student.academic_year_id.isnot(None))
         .all()
     )
+    # H2 fix: previously fired one Enrollment existence query per student
+    # (N queries for N students). Load all existing (student_id, academic_year_id)
+    # pairs in one query and check membership in memory.
+    existing_pairs: set[tuple[int, int]] = set()
+    if students:
+        existing_pairs = {
+            (r[0], r[1])
+            for r in db.query(Enrollment.student_id, Enrollment.academic_year_id)
+            .filter(Enrollment.student_id.in_([s.id for s in students]))
+            .all()
+        }
     created = False
     for student in students:
-        existing = db.query(Enrollment.id).filter_by(
-            student_id=student.id,
-            academic_year_id=student.academic_year_id,
-        ).first()
-        if not existing:
+        if (student.id, student.academic_year_id) not in existing_pairs:
             _create_enrollment_for_student(db, student)
             created = True
     if created:

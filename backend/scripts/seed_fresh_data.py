@@ -412,7 +412,7 @@ def seed() -> None:
         patterns = {
             students[0].id: ["P", "P", "P", "P", "P"],
             students[1].id: ["P", "P", "A", "P", "P"],
-            students[2].id: ["P", "P", "P", "L", "P"],
+            students[2].id: ["P", "P", "P", "A", "P"],
             students[3].id: ["P", "A", "P", "P", "P"],
             students[4].id: ["A", "P", "P", "A", "P"],
         }

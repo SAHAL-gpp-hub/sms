@@ -10,15 +10,14 @@ access control.
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import Optional
 
 from app.core.database import get_db
 from app.models.base_models import ProfileCorrectionRequest, Student, Class, AcademicYear, Attendance, Exam, Enrollment
 from app.routers.auth import CurrentUser, require_role
-from app.services import fee_service, attendance_service, marks_service, report_card_service
+from app.services import academic_year_service, fee_service, attendance_service, marks_service, report_card_service
 from app.services.calendar_service import count_working_days_for_month
-from app.core.config import settings
 from app.pdf.marksheet_pdf import render_marksheet_pdf
 
 router = APIRouter(prefix="/api/v1/portal", tags=["Portal"])
@@ -67,7 +66,9 @@ def _resolve_student_id(
 
 def _resolve_enrollment(db: Session, student_id: int, academic_year_id: Optional[int] = None) -> Enrollment:
     if academic_year_id is None:
-        year = db.query(AcademicYear).filter_by(is_current=True).first()
+        # L1 fix: use the service helper (consistent with the rest of the
+        # codebase) instead of a raw query.
+        year = academic_year_service.get_current_academic_year(db)
         academic_year_id = year.id if year else None
     query = db.query(Enrollment).filter(Enrollment.student_id == student_id)
     if academic_year_id is not None:
@@ -90,9 +91,23 @@ def get_my_profile(
     student = db.query(Student).filter_by(id=sid).first()
     if not student:
         raise HTTPException(404, "Student record not found")
-    enrollment = _resolve_enrollment(db, sid)
-    cls = db.query(Class).filter_by(id=enrollment.class_id).first() if enrollment.class_id else None
-    year = db.query(AcademicYear).filter_by(id=enrollment.academic_year_id).first()
+    # H7 fix: previously called _resolve_enrollment (1-2 queries) then separate
+    # queries for Class and AcademicYear. Load enrollment + class + year in
+    # one query with joinedload.
+    enrollment = (
+        db.query(Enrollment)
+        .options(
+            joinedload(Enrollment.class_obj),
+            joinedload(Enrollment.academic_year),
+        )
+        .filter(Enrollment.student_id == sid)
+        .order_by(Enrollment.academic_year_id.desc())
+        .first()
+    )
+    if not enrollment:
+        raise HTTPException(404, "No enrollment found for this student/year")
+    cls = enrollment.class_obj
+    year = enrollment.academic_year
     class_label = f"Class {cls.name} — {cls.division}" if cls else None
     return {
         "id":               student.id,
@@ -229,9 +244,7 @@ def get_my_attendance_summary(
 
         present    = sum(1 for r in records if r.status == "P")
         absent     = sum(1 for r in records if r.status == "A")
-        late       = sum(1 for r in records if r.status == "L")
-        effective_present = present + (late if settings.LATE_COUNTS_AS_PRESENT else 0)
-        percentage = round((effective_present / working_days * 100), 1) if working_days > 0 else 0
+        percentage = round((present / working_days * 100), 1) if working_days > 0 else 0
 
         summaries.append({
             "year":         y,
@@ -240,7 +253,6 @@ def get_my_attendance_summary(
             "working_days": working_days,
             "present":      present,
             "absent":       absent,
-            "late":         late,
             "percentage":   percentage,
             "low_attendance": percentage < 75,
         })

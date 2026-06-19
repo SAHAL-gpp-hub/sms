@@ -95,13 +95,13 @@ class TestDailyAttendance:
         r2 = api.post("/attendance/bulk", json={"entries": entries})
         assert r2.status_code in (200, 201)
 
-    def test_mixed_status_palt(self, api, create_student, class_id_2):
-        """FIX: Use class_id_2 fixture."""
+    def test_mixed_status_present_absent(self, api, create_student, class_id_2):
+        """FIX: Use class_id_2 fixture. Only present/absent statuses exist."""
         sids = []
         for _ in range(4):
             sid, _ = create_student(class_id=2)
             sids.append(sid)
-        statuses = ["P", "A", "L", "OL"]
+        statuses = ["P", "A", "P", "A"]
         entries = [
             {"student_id": sid, "status": st,
              "date": past_date_str(2), "class_id": class_id_2}

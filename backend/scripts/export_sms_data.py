@@ -4,7 +4,7 @@ export_sms_data.py — SMS Data Export & Reporting
 
 Generates CSV/JSON exports for testing, analytics, and UI verification.
 Schema-aligned: uses name_en/name_gu, dob, contact, father_name (text),
-attendance status codes 'P'/'A'/'L', fee_payments.amount_paid, etc.
+attendance status codes 'P'/'A' (present/absent), fee_payments.amount_paid, etc.
 """
 
 import os
@@ -47,7 +47,6 @@ def export_attendance_report():
             COUNT(DISTINCT a.student_id)                                       AS total_students,
             SUM(CASE WHEN a.status = 'P' THEN 1 ELSE 0 END)                    AS present_days,
             SUM(CASE WHEN a.status = 'A' THEN 1 ELSE 0 END)                    AS absent_days,
-            SUM(CASE WHEN a.status = 'L' THEN 1 ELSE 0 END)                    AS late_days,
             ROUND(
                 100.0 * SUM(CASE WHEN a.status = 'P' THEN 1 ELSE 0 END)
                       / NULLIF(COUNT(*), 0), 2
@@ -60,7 +59,7 @@ def export_attendance_report():
     rows = session.execute(query).fetchall()
     path = _write_csv(
         "attendance_report.csv",
-        ["Class", "Division", "Total Students", "Present", "Absent", "Late", "Attendance %"],
+        ["Class", "Division", "Total Students", "Present", "Absent", "Attendance %"],
         rows,
     )
     print(f"   ✓ Saved to {path}  ({len(rows)} rows)")

@@ -110,16 +110,21 @@ def fee_receipt_token(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_role("admin", "student", "parent")),
 ):
-    payment = db.query(FeePayment).filter_by(id=payment_id).first()
-    if not payment:
+    # H6 fix: previously fired 3 sequential queries (FeePayment → StudentFee →
+    # Enrollment). Consolidate into a single joined query.
+    row = (
+        db.query(FeePayment, StudentFee, Enrollment)
+        .join(StudentFee, StudentFee.id == FeePayment.student_fee_id)
+        .outerjoin(Enrollment, Enrollment.id == StudentFee.enrollment_id)
+        .filter(FeePayment.id == payment_id)
+        .first()
+    )
+    if not row:
         raise HTTPException(status_code=404, detail="Payment not found")
-    student_fee = db.query(StudentFee).filter_by(id=payment.student_fee_id).first()
+    payment, student_fee, enrollment = row
     if not student_fee:
         raise HTTPException(status_code=404, detail="Payment record is invalid")
-    student_id = student_fee.student_id
-    if not student_id and student_fee.enrollment_id:
-        enrollment = db.query(Enrollment).filter_by(id=student_fee.enrollment_id).first()
-        student_id = enrollment.student_id if enrollment else None
+    student_id = student_fee.student_id or (enrollment.student_id if enrollment else None)
     if not student_id:
         raise HTTPException(status_code=404, detail="Payment student is invalid")
     ensure_student_access(db, current_user, student_id)

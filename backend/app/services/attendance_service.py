@@ -12,6 +12,11 @@ Key fixes vs original:
   4. FIX D: Today's attendance summary uses multi-value status sets so "present",
      "PRESENT", and "P" are all counted correctly.
   5. All other existing behaviour preserved.
+
+Attendance status is strictly present ("P") or absent ("A"). The former
+"Late" / "On-Leave" statuses were removed; historical rows were converted to
+"A" by migration q1a2b3c4d5e6f, and a CHECK constraint now rejects any other
+value at the DB level.
 """
 
 from collections import defaultdict
@@ -28,7 +33,6 @@ from app.models.base_models import (
 )
 from app.schemas.attendance import AttendanceEntry
 from app.services.calendar_service import count_working_days, count_working_days_for_month
-from app.core.config import settings
 
 
 ACTIVE_ENROLLMENT_STATUSES = (
@@ -37,7 +41,8 @@ ACTIVE_ENROLLMENT_STATUSES = (
     EnrollmentStatusEnum.provisional,
 )
 
-# FIX D: accept any casing of stored status values
+# FIX D: accept any casing of stored status values. Going forward only "P"/"A"
+# are written, but legacy/cased values are tolerated defensively.
 PRESENT_STATUSES = {"P", "present", "PRESENT"}
 ABSENT_STATUSES  = {"A", "absent",  "ABSENT"}
 
@@ -263,11 +268,9 @@ def get_monthly_summary(db: Session, class_id: int, year: int, month: int) -> li
         working_from = max(month_start, enrollment.enrolled_on) if enrollment else month_start
         working_days = count_working_days(db, academic_year_id, working_from, month_end)
         status_map  = att_by_student.get(student.id, {})
-        present     = sum(1 for s in status_map.values() if s == "P")
-        absent      = sum(1 for s in status_map.values() if s == "A")
-        late        = sum(1 for s in status_map.values() if s == "L")
-        effective_present = present + (late if settings.LATE_COUNTS_AS_PRESENT else 0)
-        percentage  = round((effective_present / working_days * 100), 1) if working_days > 0 else 0
+        present     = sum(1 for s in status_map.values() if s in PRESENT_STATUSES)
+        absent      = sum(1 for s in status_map.values() if s in ABSENT_STATUSES)
+        percentage  = round((present / working_days * 100), 1) if working_days > 0 else 0
 
         results.append({
             "student_id":         student.id,
@@ -277,7 +280,6 @@ def get_monthly_summary(db: Session, class_id: int, year: int, month: int) -> li
             "total_working_days": working_days,
             "days_present":       present,
             "days_absent":        absent,
-            "days_late":          late,
             "percentage":         percentage,
             "low_attendance":     percentage < 75,
         })
@@ -304,9 +306,8 @@ def get_monthly_summary_bulk(db: Session, academic_year_id: int, year: int, mont
     if not class_by_id:
         return []
 
-    present_case = case((Attendance.status == "P", 1), else_=0)
-    absent_case = case((Attendance.status == "A", 1), else_=0)
-    late_case = case((Attendance.status == "L", 1), else_=0)
+    present_case = case((Attendance.status.in_(PRESENT_STATUSES), 1), else_=0)
+    absent_case = case((Attendance.status.in_(ABSENT_STATUSES), 1), else_=0)
 
     rows = (
         db.query(
@@ -317,7 +318,6 @@ def get_monthly_summary_bulk(db: Session, academic_year_id: int, year: int, mont
             Enrollment.class_id.label("class_id"),
             func.coalesce(func.sum(present_case), 0).label("present"),
             func.coalesce(func.sum(absent_case), 0).label("absent"),
-            func.coalesce(func.sum(late_case), 0).label("late"),
         )
         .join(Student, Student.id == Enrollment.student_id)
         .outerjoin(
@@ -342,9 +342,7 @@ def get_monthly_summary_bulk(db: Session, academic_year_id: int, year: int, mont
         working_days = working_days_by_class.get(row.class_id, 0)
         present = int(row.present or 0)
         absent = int(row.absent or 0)
-        late = int(row.late or 0)
-        effective_present = present + (late if settings.LATE_COUNTS_AS_PRESENT else 0)
-        percentage = round((effective_present / working_days * 100), 1) if working_days > 0 else 0
+        percentage = round((present / working_days * 100), 1) if working_days > 0 else 0
         cls = class_by_id.get(row.class_id)
         results.append({
             "student_id": row.student_id,
@@ -356,7 +354,6 @@ def get_monthly_summary_bulk(db: Session, academic_year_id: int, year: int, mont
             "total_working_days": working_days,
             "days_present": present,
             "days_absent": absent,
-            "days_late": late,
             "percentage": percentage,
             "low_attendance": percentage < 75,
         })
@@ -493,7 +490,8 @@ def get_dashboard_stats(db: Session, academic_year_id: Optional[int] = None) -> 
             att_present += 1
         elif status in ABSENT_STATUSES:
             att_absent += 1
-        # anything else (L, late, LATE, OL…) counts as neither present nor absent
+        # Only "P"/"A" are written now; any other (legacy) value counts as
+        # neither present nor absent.
 
     att_not_marked = max(0, total_students - att_marked)
     att_total      = total_students

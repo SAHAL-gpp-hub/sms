@@ -650,6 +650,358 @@ def get_marks(db: Session, exam_id: int, class_id: int, subject_ids: Optional[li
     return {"students": result, "subjects": subject_out}
 
 
+def _grade_one_student(
+    *,
+    student,
+    enrollment,
+    subjects,
+    configs_by_subject: dict,
+    mark_map: dict,
+    include_subjects: bool,
+) -> dict:
+    """
+    Pure per-student grading core extracted from get_class_results().
+
+    Has no DB access and no side effects — everything it needs (subjects,
+    per-subject exam config, mark_map keyed by (enrollment_id, subject_id))
+    is passed in. This lets callers reuse the *exact* grading logic from
+    get_class_results() in bulk endpoints without re-querying per class.
+
+    Set include_subjects=False to skip the per-subject breakdown (used by
+    top-students / grade-distribution, which only need the headline fields).
+    """
+    total        = Decimal("0")
+    max_total    = Decimal("0")
+    has_fail     = False
+    is_incomplete = False
+    is_locked    = False
+    subject_rows: list[dict] = []
+
+    for subject in subjects:
+        config = configs_by_subject.get(subject.id)
+        eff_max_theory    = config.max_theory    if config else subject.max_theory
+        eff_max_practical = config.max_practical if config else subject.max_practical
+        max_t   = Decimal(str(eff_max_theory))
+        max_p   = Decimal(str(eff_max_practical))
+        max_sub = max_t + max_p
+
+        if max_sub == 0:
+            continue
+
+        m = mark_map.get((enrollment.id, subject.id))
+        subject_is_locked = False
+
+        if not m:
+            theory, practical, sub_total = None, None, None
+            grade, gp = "NE", 0.0
+            is_incomplete = True
+            total_for_subject = Decimal("0")
+            max_for_subject   = Decimal("0")
+
+        elif m.is_absent:
+            theory, practical, sub_total = None, None, Decimal("0")
+            grade, gp, _ = get_grade(Decimal("0"))
+            has_fail = True
+            total_for_subject = Decimal("0")
+            max_for_subject   = max_sub
+
+        elif m.locked_at is not None:
+            subject_is_locked = True
+            is_locked = True
+            theory    = m.theory_marks    or Decimal("0")
+            practical = m.practical_marks or Decimal("0")
+            sub_total = theory + practical
+            sub_pct   = (sub_total / max_sub * 100) if max_sub > 0 else Decimal("0")
+            grade, gp, _ = get_grade(sub_pct)
+            if grade == "E":
+                has_fail = True
+            total_for_subject = sub_total
+            max_for_subject   = max_sub
+
+        else:
+            theory    = m.theory_marks    or Decimal("0")
+            practical = m.practical_marks or Decimal("0")
+            sub_total = theory + practical
+            sub_pct   = (sub_total / max_sub * 100) if max_sub > 0 else Decimal("0")
+            grade, gp, _ = get_grade(sub_pct)
+            if grade == "E":
+                has_fail = True
+            total_for_subject = sub_total
+            max_for_subject   = max_sub
+
+        # Passing-marks threshold — capped to effective max for this exam
+        passing_threshold = Decimal("0")
+        if hasattr(subject, "passing_marks") and subject.passing_marks:
+            passing_threshold = (
+                max_sub * Decimal(str(subject.passing_marks))
+            ) / Decimal("100")
+
+            if sub_total is not None and sub_total < passing_threshold:
+                has_fail = True
+                if grade not in ("NE", "AB"):
+                    grade = "E"
+                    gp    = 0.0
+
+        total     += total_for_subject
+        max_total += max_for_subject
+
+        if include_subjects:
+            subject_rows.append({
+                "subject_name":    subject.name,
+                "max_theory":      eff_max_theory,
+                "max_practical":   eff_max_practical,
+                "theory_marks":    float(theory)    if theory    is not None else None,
+                "practical_marks": float(practical) if practical is not None else None,
+                "total":           float(sub_total) if sub_total is not None else None,
+                "grade":           grade,
+                "grade_point":     gp,
+                "is_locked":       subject_is_locked,
+                "is_absent":       m.is_absent if m else False,
+            })
+
+    if max_total == 0:
+        percentage    = Decimal("0")
+        overall_grade = "NE"
+        cgpa          = 0.0
+    else:
+        percentage = (
+            (total / max_total * 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        )
+        overall_grade, cgpa, _ = get_grade(percentage)
+
+    if is_incomplete:
+        result_str = "INCOMPLETE"
+    elif is_locked:
+        result_str = "LOCKED"
+    else:
+        result_str = "FAIL" if has_fail else "PASS"
+
+    return {
+        "enrollment_id": enrollment.id,
+        "student_id":    student.id,
+        "student_name":  student.name_en,
+        "roll_number":   enrollment.roll_number,
+        "subjects":      subject_rows,
+        "total_marks":   float(total),
+        "max_marks":     float(max_total),
+        "percentage":    float(percentage),
+        "cgpa":          cgpa,
+        "grade":         overall_grade,
+        "result":        result_str,
+        "is_locked":     is_locked,
+        "is_incomplete": is_incomplete,
+        "class_rank":    None,  # set by caller if needed
+    }
+
+
+def _bulk_load_exam_data(db: Session, exam_id: int, class_ids: list[int]):
+    """
+    Bulk-load everything get_class_results() needs across ALL classes in ONE
+    set of queries: enrollments, students, subjects (with per-subject exam
+    config), and marks — then return them in ready-to-use dicts.
+
+    Used by get_grade_distribution() and get_top_students() to avoid calling
+    get_class_results() once per class (which fired ~6 queries × N classes).
+    """
+    from app.models.base_models import Class, Student, Subject, Enrollment, Mark
+
+    exam = db.query(Exam).filter_by(id=exam_id).first()
+    if not exam or not exam.academic_year_id or not class_ids:
+        return None
+
+    academic_year_id = exam.academic_year_id
+
+    # 1. enrollments across all classes (one query)
+    enrollments = (
+        db.query(Enrollment)
+        .filter(
+            Enrollment.class_id.in_(class_ids),
+            Enrollment.academic_year_id == academic_year_id,
+            Enrollment.status.in_(ACTIVE_ENROLLMENT_STATUSES),
+        )
+        .all()
+    )
+    if not enrollments:
+        return {"exam": exam, "by_class": {}, "all_subject_ids": set()}
+
+    enrollment_ids = [e.id for e in enrollments]
+    student_ids    = [e.student_id for e in enrollments]
+
+    # 2. students (one query)
+    students = (
+        db.query(Student).filter(Student.id.in_(student_ids)).all()
+    )
+    student_by_id = {s.id: s for s in students}
+
+    # 3. subjects per class (one query)
+    subjects = (
+        db.query(Subject)
+        .filter(Subject.class_id.in_(class_ids))
+        .order_by(Subject.id)
+        .all()
+    )
+    subjects_by_class: dict[int, list] = {}
+    all_subject_ids: set[int] = set()
+    for subj in subjects:
+        try:
+            if not subj.is_active:
+                continue
+        except Exception:
+            pass
+        subjects_by_class.setdefault(subj.class_id, []).append(subj)
+        all_subject_ids.add(subj.id)
+
+    # 4. per-subject exam config (one query, reuses helper)
+    configs_by_subject = _fetch_configs_by_subject(db, exam_id, list(all_subject_ids))
+
+    # 5. marks (one query)
+    marks = (
+        db.query(Mark)
+        .filter(
+            Mark.exam_id == exam_id,
+            Mark.subject_id.in_(list(all_subject_ids)) if all_subject_ids else False,
+            or_(
+                Mark.enrollment_id.in_(enrollment_ids) if enrollment_ids else False,
+                Mark.enrollment_id.is_(None) & Mark.student_id.in_(student_ids) if student_ids else False,
+            ),
+        )
+        .all()
+        if all_subject_ids else []
+    )
+
+    # index marks by (enrollment_id, subject_id); fold legacy (student_id) marks in
+    mark_map: dict = {}
+    enrollment_by_student = {e.student_id: e for e in enrollments}
+    for m in marks:
+        if m.enrollment_id is not None:
+            mark_map[(m.enrollment_id, m.subject_id)] = m
+        elif m.student_id in enrollment_by_student:
+            mark_map[(enrollment_by_student[m.student_id].id, m.subject_id)] = m
+
+    # group enrollments by class for per-class grading
+    by_class: dict[int, list] = {}
+    for e in enrollments:
+        by_class.setdefault(e.class_id, []).append(e)
+
+    return {
+        "exam": exam,
+        "student_by_id": student_by_id,
+        "subjects_by_class": subjects_by_class,
+        "configs_by_subject": configs_by_subject,
+        "mark_map": mark_map,
+        "by_class": by_class,
+        "all_subject_ids": all_subject_ids,
+    }
+
+
+def get_grade_distribution(db: Session, exam_id: int, academic_year_id: int) -> list[dict]:
+    """
+    Cross-class grade distribution for an exam.
+
+    Replaces the old analytics loop that called get_class_results() once per
+    class (≈6 queries × N classes). Loads all data once via _bulk_load_exam_data()
+    and reuses the exact same per-student grading logic.
+    """
+    class_ids = [
+        r[0] for r in db.query(Class.id).filter(Class.academic_year_id == academic_year_id).all()
+    ]
+    if not class_ids:
+        return []
+
+    data = _bulk_load_exam_data(db, exam_id, class_ids)
+    if not data:
+        return []
+
+    student_by_id      = data["student_by_id"]
+    subjects_by_class  = data["subjects_by_class"]
+    configs_by_subject = data["configs_by_subject"]
+    mark_map           = data["mark_map"]
+    by_class           = data["by_class"]
+
+    buckets: dict[str, int] = {}
+    for class_id, enrollments in by_class.items():
+        subjects = subjects_by_class.get(class_id, [])
+        for enrollment in enrollments:
+            student = student_by_id.get(enrollment.student_id)
+            if not student:
+                continue
+            row = _grade_one_student(
+                student=student,
+                enrollment=enrollment,
+                subjects=subjects,
+                configs_by_subject=configs_by_subject,
+                mark_map=mark_map,
+                include_subjects=False,
+            )
+            grade = row["grade"] or "NA"
+            buckets[grade] = buckets.get(grade, 0) + 1
+
+    return [{"grade": grade, "count": count} for grade, count in sorted(buckets.items())]
+
+
+def get_top_students(
+    db: Session, exam_id: int, academic_year_id: int, limit: int = 10
+) -> list[dict]:
+    """
+    Cross-class top students for an exam, ranked by total marks.
+
+    Replaces the old analytics loop that called get_class_results() once per
+    class. class_rank here is a global rank across all classes (the per-class
+    rank in get_class_results() is unchanged and not used by this view).
+    """
+    class_ids = [
+        r[0] for r in db.query(Class.id).filter(Class.academic_year_id == academic_year_id).all()
+    ]
+    if not class_ids:
+        return []
+
+    data = _bulk_load_exam_data(db, exam_id, class_ids)
+    if not data:
+        return []
+
+    student_by_id      = data["student_by_id"]
+    subjects_by_class  = data["subjects_by_class"]
+    configs_by_subject = data["configs_by_subject"]
+    mark_map           = data["mark_map"]
+    by_class           = data["by_class"]
+
+    all_rows = []
+    for class_id, enrollments in by_class.items():
+        subjects = subjects_by_class.get(class_id, [])
+        for enrollment in enrollments:
+            student = student_by_id.get(enrollment.student_id)
+            if not student:
+                continue
+            all_rows.append(_grade_one_student(
+                student=student,
+                enrollment=enrollment,
+                subjects=subjects,
+                configs_by_subject=configs_by_subject,
+                mark_map=mark_map,
+                include_subjects=False,
+            ))
+
+    all_rows.sort(key=lambda item: (item.get("total_marks") or 0), reverse=True)
+    # Compute global rank across all classes (same style as get_class_results
+    # per-class rank — only passing students get a rank).
+    rank = 1
+    for r in all_rows:
+        if r["result"] == "PASS":
+            r["class_rank"] = rank
+            rank += 1
+    return [
+        {
+            "student_id": row["student_id"],
+            "student_name": row["student_name"],
+            "class_rank": row["class_rank"],
+            "total_marks": row["total_marks"],
+            "percentage": row["percentage"],
+            "grade": row["grade"],
+        }
+        for row in all_rows[:limit]
+    ]
+
+
 def get_class_results(db: Session, exam_id: int, class_id: int):
     """
     Computes per-student results for a given exam/class.
@@ -728,127 +1080,14 @@ def get_class_results(db: Session, exam_id: int, class_id: int):
 
     results = []
     for student in students:
-        total        = Decimal("0")
-        max_total    = Decimal("0")
-        subject_rows: list[dict] = []
-        has_fail     = False
-        is_incomplete = False
-        is_locked    = False
-
-        for subject in subjects:
-            config = configs_by_subject.get(subject.id)
-            eff_max_theory    = config.max_theory    if config else subject.max_theory
-            eff_max_practical = config.max_practical if config else subject.max_practical
-            max_t   = Decimal(str(eff_max_theory))
-            max_p   = Decimal(str(eff_max_practical))
-            max_sub = max_t + max_p
-
-            if max_sub == 0:
-                continue
-
-            enrollment = enrollment_by_student[student.id]
-            m = mark_map.get((enrollment.id, subject.id))
-            subject_is_locked = False
-
-            if not m:
-                theory, practical, sub_total = None, None, None
-                grade, gp = "NE", 0.0
-                is_incomplete = True
-                total_for_subject = Decimal("0")
-                max_for_subject   = Decimal("0")
-
-            elif m.is_absent:
-                theory, practical, sub_total = None, None, Decimal("0")
-                grade, gp, _ = get_grade(Decimal("0"))
-                has_fail = True
-                total_for_subject = Decimal("0")
-                max_for_subject   = max_sub
-
-            elif m.locked_at is not None:
-                subject_is_locked = True
-                is_locked = True
-                theory    = m.theory_marks    or Decimal("0")
-                practical = m.practical_marks or Decimal("0")
-                sub_total = theory + practical
-                sub_pct   = (sub_total / max_sub * 100) if max_sub > 0 else Decimal("0")
-                grade, gp, _ = get_grade(sub_pct)
-                if grade == "E":
-                    has_fail = True
-                total_for_subject = sub_total
-                max_for_subject   = max_sub
-
-            else:
-                theory    = m.theory_marks    or Decimal("0")
-                practical = m.practical_marks or Decimal("0")
-                sub_total = theory + practical
-                sub_pct   = (sub_total / max_sub * 100) if max_sub > 0 else Decimal("0")
-                grade, gp, _ = get_grade(sub_pct)
-                if grade == "E":
-                    has_fail = True
-                total_for_subject = sub_total
-                max_for_subject   = max_sub
-
-            # Passing-marks threshold — capped to effective max for this exam
-            passing_threshold = Decimal("0")
-            if hasattr(subject, "passing_marks") and subject.passing_marks:
-                passing_threshold = (
-                    max_sub * Decimal(str(subject.passing_marks))
-                ) / Decimal("100")
-
-                if sub_total is not None and sub_total < passing_threshold:
-                    has_fail = True
-                    if grade not in ("NE", "AB"):
-                        grade = "E"
-                        gp    = 0.0
-
-            total     += total_for_subject
-            max_total += max_for_subject
-
-            subject_rows.append({
-                "subject_name":    subject.name,
-                "max_theory":      eff_max_theory,
-                "max_practical":   eff_max_practical,
-                "theory_marks":    float(theory)    if theory    is not None else None,
-                "practical_marks": float(practical) if practical is not None else None,
-                "total":           float(sub_total) if sub_total is not None else None,
-                "grade":           grade,
-                "grade_point":     gp,
-                "is_locked":       subject_is_locked,
-                "is_absent":       m.is_absent if m else False,
-            })
-
-        if max_total == 0:
-            percentage    = Decimal("0")
-            overall_grade = "NE"
-            cgpa          = 0.0
-        else:
-            percentage = (
-                (total / max_total * 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-            )
-            overall_grade, cgpa, _ = get_grade(percentage)
-
-        if is_incomplete:
-            result_str = "INCOMPLETE"
-        elif is_locked:
-            result_str = "LOCKED"
-        else:
-            result_str = "FAIL" if has_fail else "PASS"
-
-        results.append({
-            "enrollment_id": enrollment_by_student[student.id].id,
-            "student_id":    student.id,
-            "student_name":  student.name_en,
-            "roll_number":   enrollment_by_student[student.id].roll_number,
-            "subjects":      subject_rows,
-            "total_marks":   float(total),
-            "max_marks":     float(max_total),
-            "percentage":    float(percentage),
-            "cgpa":          cgpa,
-            "grade":         overall_grade,
-            "result":        result_str,
-            "is_locked":     is_locked,
-            "is_incomplete": is_incomplete,
-        })
+        results.append(_grade_one_student(
+            student=student,
+            enrollment=enrollment_by_student[student.id],
+            subjects=subjects,
+            configs_by_subject=configs_by_subject,
+            mark_map=mark_map,
+            include_subjects=True,
+        ))
 
     # Rank only among PASS results
     passed     = [r for r in results if r["result"] == "PASS"]

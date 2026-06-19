@@ -1716,9 +1716,9 @@ textarea {
     color: #991b1b;
 }
 
-.attendance-pill.late {
-    background-color: #fffbeb;
-    color: #92400e;
+.attendance-pill.not-marked {
+    background-color: #f1f5f9;
+    color: #475569;
 }
 
 .attendance-dot {
@@ -1731,7 +1731,7 @@ textarea {
 
 .attendance-dot.present { background-color: #3b82f6; }
 .attendance-dot.absent { background-color: #ef4444; }
-.attendance-dot.late { background-color: #f59e0b; }
+.attendance-dot.not-marked { background-color: #94a3b8; }
 
 .attendance-pill-value {
     font-weight: 700;

@@ -154,11 +154,46 @@ def _latest_staff_invite(db: Session, user_id: int) -> NotificationOutbox | None
     )
 
 
-def _user_out(db: Session, user: User, invitation_url: str | None = None) -> AdminUserOut:
+def _batch_latest_staff_invites(db: Session, users) -> dict[int, NotificationOutbox]:
+    """
+    C5 fix: fetch the latest staff_registration invite for every teacher in
+    `users` in a single query, returning {user_id: NotificationOutbox}.
+
+    Order by (user_id, created_at desc, id desc) then keep the first row per
+    user_id — equivalent to _latest_staff_invite() per user, but in one query.
+    """
+    teacher_ids = [u.id for u in users if getattr(u, "role", None) == "teacher"]
+    if not teacher_ids:
+        return {}
+    rows = (
+        db.query(NotificationOutbox)
+        .filter(
+            NotificationOutbox.payload["purpose"].as_string() == "staff_registration",
+            NotificationOutbox.payload["user_id"].as_integer().in_(teacher_ids),
+        )
+        .order_by(
+            NotificationOutbox.payload["user_id"].as_integer(),
+            NotificationOutbox.created_at.desc(),
+            NotificationOutbox.id.desc(),
+        )
+        .all()
+    )
+    latest: dict[int, NotificationOutbox] = {}
+    for row in rows:
+        uid = row.payload.get("user_id")
+        if uid is not None and uid not in latest:
+            latest[uid] = row
+    return latest
+
+
+def _user_out(db: Session, user: User, invitation_url: str | None = None, latest_invite: NotificationOutbox | None = None) -> AdminUserOut:
     out = AdminUserOut.model_validate(user)
     out.invitation_url = invitation_url
     if user.role == "teacher":
-        latest_invite = _latest_staff_invite(db, user.id)
+        # C5 fix: callers may pass a pre-fetched latest_invite so listing N
+        # teachers doesn't fire N individual _latest_staff_invite() queries.
+        if latest_invite is None:
+            latest_invite = _latest_staff_invite(db, user.id)
         out.invite_status = "active" if user.is_active else "pending"
         out.last_invite_sent_at = latest_invite.created_at if latest_invite else None
         out.can_resend_invite = not user.is_active
@@ -328,14 +363,25 @@ def list_users(
 
         items = query.offset((p - 1) * ps).limit(ps).all()
 
-        role_counts = (
-            db.query(User.role, func.count(User.id))
-            .group_by(User.role)
-            .all()
+        # L2 fix: apply the same role/active/search filters to role_counts
+        # so the numbers match what's actually shown on the page.
+        rc_query = db.query(User.role, func.count(User.id))
+        if role:
+            rc_query = rc_query.filter(User.role == role)
+        if is_active is not None:
+            rc_query = rc_query.filter(User.is_active == is_active)
+        if search:
+            rc_query = rc_query.filter(
+                (User.name.ilike(search_query)) | (User.email.ilike(search_query))
             )
+        role_counts = rc_query.group_by(User.role).all()
+
+        # C5 fix: batch-load the latest staff-registration invite for the
+        # teachers on this page in ONE query instead of one per teacher.
+        latest_invites = _batch_latest_staff_invites(db, items)
 
         return {
-            "items": [_user_out(db, user) for user in items],
+            "items": [_user_out(db, user, latest_invite=latest_invites.get(user.id)) for user in items],
             "total": total,
             "total_pages": total_pages,
             "page": p,
@@ -343,7 +389,9 @@ def list_users(
             "role_counts": {role: count for role, count in role_counts},
         }
 
-    return [_user_out(db, user) for user in query.all()]
+    # C5 fix: batch-load invites for the unpaginated path too.
+    latest_invites = _batch_latest_staff_invites(db, query.all())
+    return [_user_out(db, user, latest_invite=latest_invites.get(user.id)) for user in query.all()]
 
 
 @router.get("/users/{user_id}", response_model=AdminUserOut)

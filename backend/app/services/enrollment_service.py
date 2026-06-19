@@ -91,9 +91,18 @@ def get_class_roll_list(db: Session, class_id: int, academic_year_id: int) -> li
         .all()
     )
 
+    # H1 fix: previously fired one Student query per enrollment. Pre-fetch all
+    # students for this class in one query.
+    student_ids = [e.student_id for e in enrollments]
+    students_by_id: dict[int, Student] = {}
+    if student_ids:
+        students_by_id = {
+            s.id: s for s in db.query(Student).filter(Student.id.in_(student_ids)).all()
+        }
+
     result = []
     for enroll in enrollments:
-        student = db.query(Student).filter_by(id=enroll.student_id).first()
+        student = students_by_id.get(enroll.student_id)
         if not student:
             continue
         result.append({
@@ -156,13 +165,20 @@ def backfill_enrollments(db: Session) -> dict:
         StudentStatusEnum.On_Hold:     EnrollmentStatusEnum.on_hold,
     }
 
-    for student in students:
-        existing = db.query(Enrollment).filter_by(
-            student_id=student.id,
-            academic_year_id=student.academic_year_id,
-        ).first()
+    # H3 fix: previously fired one Enrollment query per student. Load all
+    # existing (student_id, academic_year_id) pairs in one query and check
+    # membership in memory.
+    existing_pairs: set[tuple[int, int]] = set()
+    if students:
+        existing_pairs = {
+            (r[0], r[1])
+            for r in db.query(Enrollment.student_id, Enrollment.academic_year_id)
+            .filter(Enrollment.student_id.in_([s.id for s in students]))
+            .all()
+        }
 
-        if existing:
+    for student in students:
+        if (student.id, student.academic_year_id) in existing_pairs:
             skipped_enrolled += 1
             continue
 

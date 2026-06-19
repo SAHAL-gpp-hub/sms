@@ -341,12 +341,22 @@ def bulk_save_marks(
             raise HTTPException(status_code=404, detail=f"Exams not found: {sorted(missing_exam_ids)}")
         if missing_subject_ids := subject_ids - set(subjects_by_id):
             raise HTTPException(status_code=404, detail=f"Subjects not found: {sorted(missing_subject_ids)}")
+        # M1 fix: batch-load enrollments by ID for entries that carry one.
+        enrollment_ids = {e.enrollment_id for e in entries if e.enrollment_id is not None}
+        enrollments_by_id: dict = {}
+        if enrollment_ids:
+            enrollments_by_id = {
+                en.id: en
+                for en in db.query(Enrollment).filter(Enrollment.id.in_(enrollment_ids)).all()
+            }
         for entry in entries:
             exam = exams_by_id[entry.exam_id]
             subject = subjects_by_id[entry.subject_id]
             if entry.enrollment_id is not None:
-                enrolled_for_exam = db.query(Enrollment).filter_by(id=entry.enrollment_id).first()
+                enrolled_for_exam = enrollments_by_id.get(entry.enrollment_id)
             else:
+                # Legacy (student_id, class_id, year) lookup — can't batch
+                # across heterogeneous class/year combos, but this is rare.
                 enrolled_for_exam = db.query(Enrollment).filter_by(
                     student_id=entry.student_id,
                     class_id=exam.class_id,

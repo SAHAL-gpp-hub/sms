@@ -47,6 +47,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.cache import response_cache
 from app.core.security import create_access_token, decode_access_token
 from app.models.base_models import AuditLog, AcademicYear, Class, Student
 from app.routers.auth import CurrentUser, require_role
@@ -213,6 +214,10 @@ def create_new_year(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    # M5 fix: invalidate academic-years cache so GET /setup/academic-years
+    # returns fresh data immediately.
+    response_cache.invalidate_prefix("setup:academic-years")
+
     return {
         "id":         year.id,
         "label":      year.label,
@@ -245,6 +250,10 @@ def activate_year(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    # M5 fix: invalidate academic-years cache after activation.
+    response_cache.invalidate_prefix("setup:academic-years")
+
     return result
 
 

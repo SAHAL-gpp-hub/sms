@@ -43,7 +43,6 @@ class Settings(BaseSettings):
     REFRESH_COOKIE_SECURE: bool = False
     LOGIN_2FA_OTP_EXPIRE_MINUTES: int = 10
     LOGIN_2FA_MAX_ATTEMPTS: int = 5
-    LATE_COUNTS_AS_PRESENT: bool = True
     CORS_ORIGINS: list[str] = []
 
     # ── Registration guard ────────────────────────────────────────────────

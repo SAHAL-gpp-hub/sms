@@ -119,8 +119,22 @@ def _current_year_outstanding(db: Session, student_id: int) -> tuple[list[Studen
     items = _current_year_fee_items(db, student_id)
     total = Decimal("0.00")
     payable: list[StudentFee] = []
+    if not items:
+        return payable, _money(total)
+
+    # H5 fix: previously called _outstanding_for_student_fee() per item, firing
+    # one SUM(amount_paid) query per fee line. Aggregate all payments for the
+    # student's fee items in a single grouped query.
+    paid_map: dict[int, Decimal] = {
+        row[0]: Decimal(str(row[1] or 0))
+        for row in db.query(FeePayment.student_fee_id, func.sum(FeePayment.amount_paid))
+        .filter(FeePayment.student_fee_id.in_([it.id for it in items]))
+        .group_by(FeePayment.student_fee_id)
+        .all()
+    }
     for item in items:
-        outstanding = _outstanding_for_student_fee(db, item)
+        paid = paid_map.get(item.id, Decimal("0"))
+        outstanding = _money(Decimal(str(item.net_amount)) - paid)
         if outstanding > 0:
             payable.append(item)
             total += outstanding

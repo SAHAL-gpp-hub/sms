@@ -121,6 +121,15 @@ class ActivationInviteStatusEnum(str, enum.Enum):
     expired = "expired"
 
 
+class AttendanceStatusEnum(str, enum.Enum):
+    # The only two attendance statuses the system supports.
+    # NOTE: the live DB column is a plain VARCHAR(5) (not a PG enum); this enum
+    # documents the contract and is enforced by a CHECK constraint + Pydantic
+    # validation. Migration `q1a2b3c4d5e6f` converts any legacy L/OL rows to "A".
+    present = "P"
+    absent  = "A"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Reference / Setup Tables
 # ─────────────────────────────────────────────────────────────────────────────
@@ -534,6 +543,8 @@ class Attendance(Base):
     __tablename__ = "attendance"
     __table_args__ = (
         UniqueConstraint("enrollment_id", "date", name="uq_attendance_enrollment_date"),
+        # Enforce the present/absent-only contract at the DB level.
+        CheckConstraint("status IN ('P', 'A')", name="ck_attendance_status_present_absent"),
     )
 
     id         = Column(Integer, primary_key=True)
@@ -541,7 +552,10 @@ class Attendance(Base):
     student_id = Column(Integer, ForeignKey("students.id"), nullable=True, index=True)  # legacy mirror
     class_id   = Column(Integer, ForeignKey("classes.id"), nullable=True, index=True)  # legacy mirror
     date       = Column(Date, nullable=False)
-    status     = Column(String(5), nullable=False)
+    status     = Column(
+        Enum(AttendanceStatusEnum, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

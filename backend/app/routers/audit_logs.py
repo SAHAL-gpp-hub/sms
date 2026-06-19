@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -9,7 +10,7 @@ from app.schemas.audit import DataAuditLogOut
 router = APIRouter(prefix="/api/v1/audit-logs", tags=["Audit Logs"])
 
 
-@router.get("", response_model=list[DataAuditLogOut])
+@router.get("")
 def list_data_audit_logs(
     table_name: str | None = Query(None),
     action: str | None = Query(None),
@@ -26,5 +27,15 @@ def list_data_audit_logs(
         query = query.filter(DataAuditLog.action == action)
     if user_id is not None:
         query = query.filter(DataAuditLog.user_id == user_id)
-    return query.order_by(DataAuditLog.created_at.desc(), DataAuditLog.id.desc()).offset(offset).limit(limit).all()
+
+    # L5 fix: return total count so the frontend can implement pagination
+    # (e.g. "Load More" button disabled when all items fetched).
+    total = query.count()
+    logs = query.order_by(DataAuditLog.created_at.desc(), DataAuditLog.id.desc()).offset(offset).limit(limit).all()
+    return {
+        "items": [DataAuditLogOut.model_validate(log) for log in logs],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
 

@@ -6,9 +6,9 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.base_models import AcademicYear, Attendance, Class, Exam, FeePayment, StudentFee
+from app.models.base_models import AcademicYear, Attendance, Exam, FeePayment, StudentFee
 from app.routers.auth import CurrentUser, require_role
-from app.services import analytics_service, attendance_service, marks_service
+from app.services import academic_year_service, analytics_service, attendance_service, marks_service
 
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["Analytics"])
@@ -120,13 +120,10 @@ def grade_distribution(
     _: CurrentUser = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
-    buckets: dict[str, int] = {}
-    classes = db.query(Class.id).filter(Class.academic_year_id == academic_year_id).all()
-    for (class_id,) in classes:
-        for row in marks_service.get_class_results(db, exam_id=exam_id, class_id=class_id):
-            grade = row.get("grade") or "NA"
-            buckets[grade] = buckets.get(grade, 0) + 1
-    return [{"grade": grade, "count": count} for grade, count in sorted(buckets.items())]
+    # C2 fix: previously called get_class_results() once per class (≈6 queries
+    # × N classes). get_grade_distribution() loads all data once and reuses the
+    # exact same per-student grading logic.
+    return marks_service.get_grade_distribution(db, exam_id, academic_year_id)
 
 
 @router.get("/attendance-trends")
@@ -152,24 +149,11 @@ def top_students(
     db: Session = Depends(get_db),
 ):
     exam = db.query(Exam).filter(Exam.id == exam_id).first()
-    if not exam:
+    if not exam or not exam.academic_year_id:
         return []
-    classes = db.query(Class.id).filter(Class.academic_year_id == exam.academic_year_id).all()
-    all_rows = []
-    for (class_ref,) in classes:
-        all_rows.extend(marks_service.get_class_results(db, exam_id=exam_id, class_id=class_ref))
-    all_rows.sort(key=lambda item: (item.get("total_marks") or 0), reverse=True)
-    return [
-        {
-            "student_id": row["student_id"],
-            "student_name": row["student_name"],
-            "class_rank": row["class_rank"],
-            "total_marks": row["total_marks"],
-            "percentage": row["percentage"],
-            "grade": row["grade"],
-        }
-        for row in all_rows[:limit]
-    ]
+    # C2 fix: previously called get_class_results() once per class. The bulk
+    # version loads all data once and reuses the exact same grading logic.
+    return marks_service.get_top_students(db, exam_id, exam.academic_year_id, limit=limit)
 
 
 @router.get("/at-risk-attendance")
@@ -183,7 +167,9 @@ def at_risk_students(
     if academic_year_id:
         summaries = attendance_service.get_monthly_summary_bulk(db, academic_year_id, today.year, today.month)
     else:
-        current_year = db.query(AcademicYear).filter_by(is_current=True).first()
+        # M2 fix: use the service helper instead of a raw query so the
+        # year lookup is consistent with the rest of the codebase.
+        current_year = academic_year_service.get_current_academic_year(db)
         summaries = attendance_service.get_monthly_summary_bulk(db, current_year.id, today.year, today.month) if current_year else []
     rows = []
     for item in summaries:

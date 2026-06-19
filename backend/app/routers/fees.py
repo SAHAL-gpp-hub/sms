@@ -164,17 +164,22 @@ def apply_fee_plan(
 ):
     preview = _preview_fee_plan(db, data)
     try:
+        # M4 fix: resolve same-standard class IDs once (2 queries) instead of
+        # re-resolving them inside create_fee_structure_for_standard per item
+        # and again for the assign step below.
+        class_ids = fee_service.get_same_standard_class_ids(db, data.class_id, data.academic_year_id)
         for item in data.items:
-            fee_service.create_fee_structure_for_standard(db, FeeStructureCreate(
-                class_id=data.class_id,
-                fee_head_id=item.fee_head_id,
-                amount=item.amount,
-                due_date=item.due_date,
-                academic_year_id=data.academic_year_id,
-            ))
+            for class_id in class_ids:
+                fee_service.create_fee_structure(db, FeeStructureCreate(
+                    class_id=class_id,
+                    fee_head_id=item.fee_head_id,
+                    amount=item.amount,
+                    due_date=item.due_date,
+                    academic_year_id=data.academic_year_id,
+                ))
         assigned = sum(
             fee_service.assign_fees_to_class(db, class_id, data.academic_year_id)
-            for class_id in fee_service.get_same_standard_class_ids(db, data.class_id, data.academic_year_id)
+            for class_id in class_ids
         )
         _invalidate_fee_caches()
         return {**preview, "assigned": assigned}

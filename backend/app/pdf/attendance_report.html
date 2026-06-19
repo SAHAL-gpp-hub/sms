@@ -51,7 +51,6 @@
                 <th>Working Days</th>
                 <th>Present</th>
                 <th>Absent</th>
-                <th>Late</th>
                 <th>Percentage</th>
                 <th>Remark</th>
             </tr>
@@ -64,7 +63,6 @@
                 <td>{{ s.total_working_days }}</td>
                 <td>{{ s.days_present }}</td>
                 <td>{{ s.days_absent }}</td>
-                <td>{{ s.days_late }}</td>
                 <td {% if not s.low_attendance %}class="good"{% endif %}>{{ s.percentage }}%</td>
                 <td>{% if s.low_attendance %}&#9888; Low Attendance{% else %}Good{% endif %}</td>
             </tr>

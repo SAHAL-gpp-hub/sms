@@ -114,9 +114,12 @@ def reassign_rolls(
 
 
 def _serialize(db: Session, e: Enrollment) -> dict:
-    student = e.student or db.query(Student).filter_by(id=e.student_id).first()
-    class_obj = e.class_obj or db.query(Class).filter_by(id=e.class_id).first()
-    year = e.academic_year or db.query(AcademicYear).filter_by(id=e.academic_year_id).first()
+    # Relations are always eager-loaded via joinedload in list_enrollments()/
+    # get_enrollment(). We deliberately do NOT fall back to db.query(...) here:
+    # the fallbacks masked lazy-load bugs and would trigger an N+1 query per row.
+    student = e.student
+    class_obj = e.class_obj
+    year = e.academic_year
     return {
         "id":               e.id,
         "student_id":       e.student_id,

@@ -176,7 +176,7 @@ def preview_low_attendance_alerts(
         .filter(
             Attendance.date >= start,
             Attendance.date <= end,
-            Attendance.status.in_(["P", "L"] if settings.LATE_COUNTS_AS_PRESENT else ["P"]),
+            Attendance.status == "P",
         )
         .group_by(Attendance.student_id, Attendance.class_id)
         .all()

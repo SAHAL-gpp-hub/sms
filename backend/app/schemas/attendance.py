@@ -1,28 +1,22 @@
 """
 schemas/attendance.py
 
-BUG 1 FIX:
-  MonthlyAttendanceSummary previously declared fields named:
-    percentage:      float    ← correct schema name
-    low_attendance:  bool     ← correct schema name
-
-  But attendance_service.get_monthly_summary() returned a dict with keys:
-    "attendance_percentage"   ← wrong, mismatched
-    "is_low_attendance"       ← wrong, mismatched
-
-  Because the router returns the raw service dict (not a validated Pydantic
-  response), the mismatch was silent — the frontend and PDF templates received
-  None for both fields on every call.
-
-  Fix is in attendance_service.py (keys corrected to "percentage" and
-  "low_attendance").  This schema file is the authoritative contract; no
-  changes needed here, but the field names are documented clearly to prevent
-  future drift.
+Attendance status is strictly binary: "P" (present) or "A" (absent). The
+`AttendanceStatus` Literal and the DB CHECK constraint
+(ck_attendance_status_present_absent) enforce this end-to-end. Legacy "Late"
+and "On-Leave" statuses were removed; any historical rows were converted to
+"A" by migration q1a2b3c4d5e6f.
 """
 
 from pydantic import BaseModel
-from typing import Optional
+from typing import Literal, Optional
 from datetime import date
+
+
+# The only two attendance statuses the system supports. The same values are
+# stored in the attendance.status column and enforced by a DB CHECK constraint
+# (see models/base_models.py Attendance).
+AttendanceStatus = Literal["P", "A"]
 
 
 class AttendanceEntry(BaseModel):
@@ -30,7 +24,7 @@ class AttendanceEntry(BaseModel):
     student_id: Optional[int] = None
     class_id:   Optional[int] = None
     date:       date
-    status:     str   # P / A / L / OL
+    status:     AttendanceStatus   # P (present) / A (absent) — only these two
 
 
 class AttendanceBulk(BaseModel):
@@ -43,7 +37,7 @@ class AttendanceOut(BaseModel):
     student_id: Optional[int]
     class_id:   Optional[int]
     date:       date
-    status:     str
+    status:     AttendanceStatus
     model_config = {"from_attributes": True}
 
 
@@ -62,7 +56,6 @@ class MonthlyAttendanceSummary(BaseModel):
     total_working_days: int
     days_present:       int
     days_absent:        int
-    days_late:          int
     # Canonical name — service must return "percentage" (not "attendance_percentage")
     percentage:         float
     # Canonical name — service must return "low_attendance" (not "is_low_attendance")

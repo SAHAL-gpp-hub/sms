@@ -685,7 +685,7 @@ def enqueue_low_attendance_alerts(db: Session, year: int | None = None, month: i
                 Attendance.class_id == cls.id,
                 Attendance.date >= start,
                 Attendance.date <= end,
-                Attendance.status.in_(["P", "L"] if settings.LATE_COUNTS_AS_PRESENT else ["P"]),
+                Attendance.status == "P",
             )
             .group_by(Student.id)
             .all()

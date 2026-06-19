@@ -175,14 +175,18 @@ GUJARAT_STANDARD_HOLIDAYS_2025_26 = [
 
 def seed_standard_holidays(db: Session, academic_year_id: int) -> int:
     """Seeds standard Gujarat school holidays for 2025-26."""
+    # L4 fix: batch-check existing titles in one query instead of one per
+    # holiday. Note: we check (academic_year_id, title) which is sufficient
+    # for dedup — start_date is unique per title within a year.
+    existing = {
+        row[0]
+        for row in db.query(AcademicCalendar.title)
+        .filter(AcademicCalendar.academic_year_id == academic_year_id)
+        .all()
+    }
     created = 0
     for title, start, end, etype in GUJARAT_STANDARD_HOLIDAYS_2025_26:
-        exists = db.query(AcademicCalendar).filter_by(
-            academic_year_id=academic_year_id,
-            title=title,
-            start_date=start,
-        ).first()
-        if not exists:
+        if title not in existing:
             db.add(AcademicCalendar(
                 academic_year_id   = academic_year_id,
                 event_type         = etype,
