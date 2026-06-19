@@ -358,12 +358,15 @@ def generate_receipt_number(db: Session) -> str:
         with db.begin_nested():
             num = db.execute(text("SELECT nextval('receipt_number_seq')")).scalar()
     except Exception:
+        logger.warning("receipt_number_seq not available, falling back to advisory lock + MAX(id)")
         try:
             db.execute(text(f"SELECT pg_advisory_xact_lock({RECEIPT_NUMBER_LOCK_KEY})"))
         except Exception:
             pass
         num = (db.query(func.max(FeePayment.id)).scalar() or 0) + 1
-    return f"RCPT-{year}-{int(num):05d}"
+    receipt = f"RCPT-{year}-{int(num):05d}"
+    logger.info("Generated receipt number: %s", receipt)
+    return receipt
 
 
 def allocate_payment(
@@ -550,6 +553,10 @@ def allocate_payment(
 
 
 def record_payment(db: Session, data: PaymentCreate, actor_user_id: int | None = None) -> dict:
+    logger.info(
+        "record_payment start: student_id=%s amount=%s mode=%s plan=%s",
+        data.student_id, data.amount_paid, data.mode, data.installment_plan,
+    )
     student = db.query(Student).filter_by(id=data.student_id).first()
     if not student:
         raise LookupError("Student not found")
@@ -609,6 +616,14 @@ def record_payment(db: Session, data: PaymentCreate, actor_user_id: int | None =
             "balance_after": bal_sf,
         })
 
+    logger.info(
+        "record_payment success: student_id=%s receipt=%s payment_ids=%s total=%s balance_after=%s",
+        data.student_id,
+        payments[0].receipt_number,
+        [p.id for p in payments],
+        data.amount_paid,
+        total_balance_after,
+    )
     return {
         "id": payments[0].id,
         "payment_ids": [p.id for p in payments],

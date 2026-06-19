@@ -490,7 +490,7 @@ class FeePayment(Base):
     amount_paid    = Column(Numeric(10, 2), nullable=False)
     payment_date   = Column(Date, nullable=False, index=True)
     mode           = Column(String(20), nullable=False)
-    receipt_number = Column(String(30), unique=True)
+    receipt_number = Column(String(30), unique=False, index=True)
     collected_by   = Column(String(100), nullable=True)
     online_order_id = Column(Integer, ForeignKey("online_payment_orders.id"), nullable=True)
     notes          = Column(Text, nullable=True)

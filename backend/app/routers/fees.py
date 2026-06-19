@@ -11,6 +11,8 @@ layer — it did an inline query inside the router. Moved to fee_service for
 consistency and to respect the service-layer boundary.
 """
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -295,6 +297,9 @@ def get_ledger(
 # Payments
 # ---------------------------------------------------------------------------
 
+logger = logging.getLogger("sms.fees")
+
+
 @router.post("/payment", response_model=PaymentOut, status_code=201)
 def record_payment(
     data: PaymentCreate,
@@ -309,6 +314,21 @@ def record_payment(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception(
+            "fee_payment_failed",
+            extra={
+                "student_id": data.student_id,
+                "amount": str(data.amount_paid),
+                "mode": data.mode,
+                "user_id": current_user.id,
+            },
+        )
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Payment processing failed. Please retry or contact support.",
+        ) from exc
 
 
 @router.get("/payment")
