@@ -294,3 +294,8 @@ sms_frontend  | 192.168.65.1 - - [19/Jun/2026:07:36:58 +0000] "GET /api/v1/setup
 sms_frontend  | 192.168.65.1 - - [19/Jun/2026:07:37:00 +0000] "GET /api/v1/fees/defaulters?class_id=4&academic_year_id=1 HTTP/2.0" 200 2832 "https://localhost/fees/defaulters" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
 sms_db        | 2026-06-19 07:40:46.475 UTC [27] LOG:  checkpoint starting: time
 sms_db        | 2026-06-19 07:40:46.697 UTC [27] LOG:  checkpoint complete: wrote 5 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.208 s, sync=0.005 s, total=0.222 s; sync files=3, longest=0.004 s, average=0.002 s; distance=0 kB, estimate=0 kB
+sms_backend   | WARNING:  WatchFiles detected changes in 'app/services/student_service.py'. Reloading...
+sms_backend   | INFO:     Started server process [21]
+sms_backend   | INFO:     Waiting for application startup.
+sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.

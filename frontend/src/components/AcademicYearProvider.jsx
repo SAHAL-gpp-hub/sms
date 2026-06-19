@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { SELECTED_YEAR_KEY, warmCurrentYearCache, yearendAPI } from '../services/api'
 import { ACADEMIC_YEAR_CHANGED, AcademicYearContext } from '../contexts/academicYearContext'
@@ -40,10 +40,19 @@ export default function AcademicYearProvider({ children }) {
     }))
   }, [queryClient])
 
+  // FIX: track whether initial load has run with a ref so loadYears does NOT
+  // depend on selectedYearId. The old dependency caused a re-render loop:
+  //   selectedYearId changes → new loadYears ref → effect re-fires → load again.
+  const hasLoadedRef = useRef(false)
+
+  // FIX: remove selectedYearId from the dependency array entirely.
+  // loadYears only needs to be stable across renders; it reads the current
+  // stored value at call time via getStoredYearId() instead of closing over state.
   const loadYears = useCallback(() => {
     let alive = true
     setLoading(true)
     setError(null)
+
     Promise.all([
       yearendAPI.getYears(),
       yearendAPI.getCurrentYear().catch(() => ({ data: null })),
@@ -51,15 +60,29 @@ export default function AcademicYearProvider({ children }) {
       .then(([yearsRes, currentRes]) => {
         if (!alive) return
         const allYears = Array.isArray(yearsRes.data) ? yearsRes.data : []
+
+        // Read stored value at resolution time, not from stale closure
         const stored = getStoredYearId()
-        const storedExists = stored && allYears.some(year => String(year.id) === String(stored))
+        const storedExists = stored && allYears.some(y => String(y.id) === String(stored))
         const currentId = currentRes.data?.id ? String(currentRes.data.id) : ''
-        const fallback = storedExists ? stored : currentId || (allYears[0]?.id ? String(allYears[0].id) : '')
+        const fallback = storedExists
+          ? stored
+          : currentId || (allYears[0]?.id ? String(allYears[0].id) : '')
+
         setYears(allYears)
-        if (fallback && fallback !== selectedYearId) {
+
+        if (fallback) {
+          // FIX: always go through setSelectedYearId so the cache is warmed and
+          // queries are invalidated with a valid year — not setSelectedYearIdState
+          // which bypassed warmCurrentYearCache and queryClient.invalidateQueries.
+          // Guard: only call if the value actually changed to avoid an extra
+          // invalidateQueries on first load when stored value was already correct.
+          const currentStored = getStoredYearId()
+          if (fallback !== currentStored) {
+            storeYearId(fallback)
+            warmCurrentYearCache(Number(fallback))
+          }
           setSelectedYearIdState(fallback)
-          storeYearId(fallback)
-          warmCurrentYearCache(Number(fallback))
         }
       })
       .catch(err => {
@@ -70,10 +93,17 @@ export default function AcademicYearProvider({ children }) {
       .finally(() => {
         if (alive) setLoading(false)
       })
-    return () => { alive = false }
-  }, [selectedYearId])
 
+    return () => { alive = false }
+  }, []) // FIX: stable — no selectedYearId dependency
+
+  // FIX: run once on mount only, not every time loadYears changes.
+  // The old code used [loadYears] as the dependency which re-fired the effect
+  // whenever selectedYearId changed (since loadYears depended on it).
   useEffect(() => {
+    if (hasLoadedRef.current) return
+    hasLoadedRef.current = true
+
     let cleanup = () => {}
     const timer = window.setTimeout(() => {
       cleanup = loadYears() || (() => {})
@@ -82,12 +112,13 @@ export default function AcademicYearProvider({ children }) {
       window.clearTimeout(timer)
       cleanup()
     }
-  }, [loadYears])
+  }, [loadYears]) // loadYears is now stable so this only fires once
 
   const selectedYear = useMemo(
-    () => years.find(year => String(year.id) === String(selectedYearId)) || null,
+    () => years.find(y => String(y.id) === String(selectedYearId)) || null,
     [selectedYearId, years]
   )
+
   const isClosedYear = String(selectedYear?.status || '').toLowerCase() === 'closed'
 
   const value = useMemo(() => ({

@@ -181,7 +181,7 @@ export default function StudentList() {
 
   const classesQuery = useQuery({
     queryKey: ['classes', selectedYearId, refreshKey],
-    enabled: Boolean(selectedYearId),
+    enabled: selectedYearId != null && Number.isFinite(Number(selectedYearId)) && Number(selectedYearId) > 0,
     queryFn: async () => {
       const r = await setupAPI.getClasses(selectedYearId)
       return r.data || []
@@ -190,7 +190,7 @@ export default function StudentList() {
 
   const studentsQuery = useQuery({
     queryKey: ['students', selectedYearId, debouncedSearch, classFilter, page, refreshKey],
-    enabled: Boolean(selectedYearId),
+    enabled: selectedYearId != null && Number.isFinite(Number(selectedYearId)) && Number(selectedYearId) > 0,
     queryFn: async () => {
       const params = { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE, academic_year_id: selectedYearId }
       if (debouncedSearch) params.search = debouncedSearch

@@ -255,7 +255,6 @@ def get_students(
     offset: int                        = 0,
     branch_id: Optional[int]           = None,
 ) -> list[Student]:
-    ensure_enrollments_for_legacy_students(db)
     query = get_students_query(db, branch_id=branch_id).filter(Student.status == StudentStatusEnum.Active)
     if class_id is not None or class_ids or academic_year_id is not None:
         query = query.join(Enrollment, Enrollment.student_id == Student.id)
@@ -297,7 +296,6 @@ def get_students_page(
     offset: int = 0,
     branch_id: Optional[int] = None,
 ) -> tuple[list[Student], int]:
-    ensure_enrollments_for_legacy_students(db)
     query = get_students_query(db, branch_id=branch_id).filter(Student.status == StudentStatusEnum.Active)
     if class_id is not None or class_ids or academic_year_id is not None:
         query = query.join(Enrollment, Enrollment.student_id == Student.id)
@@ -428,4 +426,3 @@ def delete_student(db: Session, student_id: int, actor_user_id: int | None = Non
     )
     db.commit()
     return True
-    old_snapshot = model_snapshot(student)
