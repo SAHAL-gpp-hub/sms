@@ -2,11 +2,15 @@
   "framework": null,
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "installCommand": "cd frontend && npm install",
   "routes": [
     {
       "src": "/api/(.*)",
       "dest": "https://sms-backend-zs8v.onrender.com/api/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/$1",
+      "check": true
     },
     {
       "src": "/(.*)",
