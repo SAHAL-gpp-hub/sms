@@ -528,16 +528,20 @@ def allocate_payment(
 
     for payment in payments:
         db.refresh(payment)
-        log_data_change(
-            db,
-            user_id=actor_user_id,
-            action=DataAuditActionEnum.create,
-            table_name="fee_payments",
-            record_id=payment.id,
-            old_value=None,
-            new_value=model_snapshot(payment),
-        )
-    db.commit()
+        try:
+            log_data_change(
+                db,
+                user_id=actor_user_id,
+                action=DataAuditActionEnum.create,
+                table_name="fee_payments",
+                record_id=payment.id,
+                old_value=None,
+                new_value=model_snapshot(payment),
+            )
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            logger.warning("Audit log failed for payment %s: %s", payment.id, exc)
 
     for payment in payments:
         db.refresh(payment)

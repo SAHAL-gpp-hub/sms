@@ -399,3 +399,8 @@ sms_db        | 2026-06-19 14:44:34.116 UTC [27] LOG:  checkpoint starting: time
 sms_db        | 2026-06-19 14:44:36.757 UTC [27] LOG:  checkpoint complete: wrote 26 buffers (0.2%); 0 WAL file(s) added, 0 removed, 0 recycled; write=2.617 s, sync=0.011 s, total=2.642 s; sync files=13, longest=0.009 s, average=0.001 s; distance=121 kB, estimate=231 kB
 sms_db        | 2026-06-19 14:49:34.877 UTC [27] LOG:  checkpoint starting: time
 sms_db        | 2026-06-19 14:49:36.675 UTC [27] LOG:  checkpoint complete: wrote 18 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=1.776 s, sync=0.011 s, total=1.799 s; sync files=14, longest=0.009 s, average=0.001 s; distance=79 kB, estimate=216 kB
+sms_backend   | WARNING:  WatchFiles detected changes in 'app/services/fee_service.py'. Reloading...
+sms_backend   | INFO:     Started server process [73]
+sms_backend   | INFO:     Waiting for application startup.
+sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
