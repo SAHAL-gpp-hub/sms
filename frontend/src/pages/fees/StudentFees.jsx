@@ -119,13 +119,11 @@ function PaymentModal({ target, ledger, onClose, onSuccess }) {
         installment_plan: target.installment_plan || null,
       })
       toast.success(`Payment of ${formatINR(amt)} recorded`)
-      onSuccess(result.data)
-      onClose()
+      onClose()          // close immediately — instant feedback
+      onSuccess(result.data)  // receipt + refetch in background
     } catch (err) {
       toast.error(extractPaymentError(err).message)
-      setSaving(false)
-    } finally {
-      setSaving(false)
+      setSaving(false)   // only reset on error so user can retry
     }
   }
 
