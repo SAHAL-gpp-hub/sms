@@ -198,19 +198,25 @@ def render_fee_receipt_pdf(db: Session, payment_id: int) -> bytes | None:
         total_balance_after += max(0.0, float(sf.net_amount) - paid)
 
     # ── Render consolidated receipt ───────────────────────────────────
+    # ── Render consolidated receipt ───────────────────────────────────
     env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
     template = env.get_template("fee_receipt_template.html")
     html = template.render(
-        receipt_number=payment.receipt_number,
-        payment_date=payment.payment_date.strftime("%d-%m-%Y") if payment.payment_date else "",
-        payment_mode=payment.mode,
-        student_name=student.name_en,
-        gr_no=student.gr_number or "",
-        collected_by=payment.collected_by or "",
-        class_name=f"{cls.name}-{cls.division}" if cls else "",
-        notes=payment.notes or "",
-        allocations=allocations,
-        total_amount_paid=total_amount_paid,
-        total_balance_after=total_balance_after,
+        receipt={
+            "receipt_number": payment.receipt_number,
+            "date": payment.payment_date.strftime("%d-%m-%Y") if payment.payment_date else "",
+            "student_name": student.name_en,
+            "gr_number": student.gr_number or "—",
+            "class_name": f"{cls.name}-{cls.division}" if cls else "—",
+            "mode": payment.mode or "—",
+            "fee_items": [
+                {
+                    "fee_head": a["fee_head_name"],
+                    "amount": "{:,.0f}".format(a["amount_paid"]),
+                }
+                for a in allocations
+            ],
+            "total_paid": "{:,.0f}".format(total_amount_paid),
+        }
     )
     return _render_pdf(html)
