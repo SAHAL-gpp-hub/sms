@@ -10,13 +10,21 @@ class CreateOrderRequest(BaseModel):
     student_id: Optional[int] = None
     amount: Decimal
     scope: Literal["single_fee", "current_year"] = "single_fee"
-    payment_option: Optional[Literal["full", "half", "quarter"]] = None
+    # Month-based payment: number of months this payment covers (3/6/9/12).
+    months_to_cover: Optional[int] = None
 
     @field_validator("amount")
     @classmethod
     def validate_amount(cls, value: Decimal) -> Decimal:
         if value <= 0:
             raise ValueError("Amount must be greater than 0")
+        return value
+
+    @field_validator("months_to_cover")
+    @classmethod
+    def validate_months(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value not in (3, 6, 9, 12):
+            raise ValueError("months_to_cover must be 3, 6, 9, or 12")
         return value
 
     @model_validator(mode="after")

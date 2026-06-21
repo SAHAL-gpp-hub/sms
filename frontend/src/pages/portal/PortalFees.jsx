@@ -2,7 +2,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import toast from 'react-hot-toast'
 import { usePortalContext } from '../../layouts/portalContext'
-import { extractPaymentError, paymentAPI, portalAPI } from '../../services/api'
+import { extractPaymentError, feeAPI, paymentAPI, portalAPI } from '../../services/api'
+import { PaymentOptions } from '../../components/fees/PaymentOptions'
 
 const fmt = (n) =>
   new Intl.NumberFormat('en-IN', { style:'currency', currency:'INR', minimumFractionDigits:0 }).format(Number(n) || 0)
@@ -90,10 +91,12 @@ export default function PortalFees() {
   const [ledger,  setLedger]  = useState(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(false)
-  const [payingOption, setPayingOption] = useState('')
+  const [payingOption, setPayingOption] = useState(false)
   const [pendingPayment, setPendingPayment] = useState(null)
   const [verifyingOrderId, setVerifyingOrderId] = useState('')
   const [paymentHistory, setPaymentHistory] = useState([])
+  const [payOptions, setPayOptions] = useState(null)
+  const [selectedOption, setSelectedOption] = useState(null)
 
   const reloadLedger = useCallback(() => {
     setLoading(true); setError(false); setLedger(null)
@@ -104,7 +107,20 @@ export default function PortalFees() {
         : null
 
     if (!req) { setLoading(false); return }
-    req.then(r => { setLedger(r.data); setLoading(false) })
+    req.then(r => {
+        setLedger(r.data)
+        setLoading(false)
+        // Fetch month-based payment options alongside the ledger so the portal
+        // shows the exact same option cards as the admin panel.
+        const studentId = r.data?.student_id || selectedChildId
+        if (studentId) {
+          feeAPI.getPaymentOptions(studentId)
+            .then(res => { setPayOptions(res.data); setSelectedOption(null) })
+            .catch(() => { setPayOptions(null); setSelectedOption(null) })
+        } else {
+          setPayOptions(null); setSelectedOption(null)
+        }
+      })
        .catch(() => { setError(true); setLoading(false) })
   }, [isParent, selectedChildId])
 
@@ -141,15 +157,15 @@ export default function PortalFees() {
     return null
   }
 
-  const handlePayNow = async (paymentOption, amount) => {
+  const handlePayNow = async (monthsToCover, amount) => {
     try {
-      setPayingOption(paymentOption)
+      setPayingOption(true)
       await loadRazorpay()
       const { data: order } = await paymentAPI.createOrder({
         student_id: ledger.student_id || selectedChildId,
         amount,
         scope: 'current_year',
-        payment_option: paymentOption,
+        months_to_cover: monthsToCover ?? null,
       })
       setPendingPayment(null)
       setVerifyingOrderId(order.order_id)
@@ -178,13 +194,13 @@ export default function PortalFees() {
           } catch (err) {
             toast.error(extractPaymentError(err).message)
           } finally {
-            setPayingOption('')
+            setPayingOption(false)
             setVerifyingOrderId('')
           }
         },
         modal: {
           ondismiss: () => {
-            setPayingOption('')
+            setPayingOption(false)
             setVerifyingOrderId('')
           },
         },
@@ -193,12 +209,12 @@ export default function PortalFees() {
       const checkout = new window.Razorpay(options)
       checkout.on('payment.failed', (response) => {
         toast.error(response.error?.description || 'Payment failed')
-        setPayingOption('')
+        setPayingOption(false)
       })
       checkout.open()
     } catch (err) {
       toast.error(extractPaymentError(err).message)
-      setPayingOption('')
+      setPayingOption(false)
     }
   }
 
@@ -232,20 +248,9 @@ export default function PortalFees() {
   const arrearBalance = arrearItems.reduce((sum, item) => sum + parseFloat(item.balance || 0), 0)
   const canPayOnline = ((isParent && Boolean(selectedChildId)) || role === 'student') && currentYearBalance > 0
 
-  // Determine plan state from ledger items
-  const lockedItems = (ledger.items || []).filter(
-    item => item.invoice_type !== 'arrear' && item.installment_plan && item.installments_paid > 0
-  )
-  const planInProgress = lockedItems.length > 0
-
-  // Only offer Full/Half/Quarter chooser when no plan is in progress
-  const paymentOptions = planInProgress
-    ? []
-    : [
-        { key: 'full',    label: 'Pay Full',       amount: currentYearBalance },
-        { key: 'half',    label: 'Pay Half (1/2)',  amount: currentYearBalance / 2 },
-        { key: 'quarter', label: 'Pay Quarter (1/4)', amount: currentYearBalance / 4 },
-      ].filter(o => o.amount > 0)
+  // Month-based payment options come from the backend (same endpoint as admin),
+  // so the portal shows identical cards/logic as the admin panel.
+  const options = payOptions?.summary?.options || []
   const pendingBreakdown = pendingPayment ? paymentBreakdown(pendingPayment.amount) : null
 
   const renderFeeSection = (title, items, empty, collapsed = false) => {
@@ -345,180 +350,77 @@ export default function PortalFees() {
             </div>
           )}
         </div>
-        {canPayOnline ? (
-          <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-            {planInProgress ? (
-              /* ── Plan active: ONE combined button for the next instalment ── */
-              (() => {
-                const firstLocked = lockedItems[0]
-                const planLabel = firstLocked.installment_plan === 'half' ? 'Half' : 'Quarter'
-                const instNum = firstLocked.installments_paid + 1
-                const totalInst = firstLocked.total_installments
-                const combinedNextAmt = lockedItems.reduce(
-                  (sum, item) => sum + parseFloat(item.next_installment_amount || 0), 0
-                )
-                return (
-                  <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                    <div style={{ fontSize:'12px', fontWeight:700, color:'#0369a1', padding:'8px 10px', background:'#e0f2fe', borderRadius:'8px', border:'1px solid #bae6fd' }}>
-                      {planLabel} plan active — payment {instNum} of {totalInst}. Distributed proportionally across all fee heads.
-                    </div>
-                    {combinedNextAmt > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setPendingPayment({ key: firstLocked.installment_plan, label: `Instalment ${instNum} of ${totalInst}`, amount: combinedNextAmt })}
-                        disabled={Boolean(payingOption) || Boolean(verifyingOrderId)}
-                        style={{
-                          border: '1.5px solid #0d7377',
-                          borderRadius: '12px',
-                          padding: '14px 16px',
-                          background: '#f0fdfa',
-                          color: '#0f172a',
-                          cursor: payingOption || verifyingOrderId ? 'wait' : 'pointer',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          opacity: payingOption || verifyingOrderId ? 0.7 : 1,
-                        }}
-                      >
-                        <div style={{ textAlign: 'left' }}>
-                          <div style={{ fontSize: '13px', fontWeight: 900 }}>Pay Instalment {instNum} of {totalInst}</div>
-                          <div style={{ fontSize: '11px', fontWeight: 700, opacity: 0.7, marginTop: '2px' }}>
-                            {planLabel} plan · across {lockedItems.length} fee head{lockedItems.length > 1 ? 's' : ''}
-                          </div>
-                        </div>
-                        <div style={{ fontSize: '16px', fontWeight: 900 }}>{fmt(combinedNextAmt)}</div>
-                      </button>
-                    )}
-                  </div>
-                )
-              })()
-            ) : (
-              /* ── No plan yet: show Full / Half / Quarter + custom ── */
-              <>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))', gap:'8px' }}>
-                  {paymentOptions.map(option => (
-                    <button
-                      key={option.key}
-                      type="button"
-                      onClick={() => setPendingPayment(option)}
-                      disabled={payingOption === option.key || Boolean(verifyingOrderId)}
-                      style={{
-                        border:0, borderRadius:'12px', padding:'11px 10px', background:'#0d7377',
-                        color:'white', cursor: payingOption || verifyingOrderId ? 'wait' : 'pointer',
-                        opacity: payingOption === option.key || verifyingOrderId ? 0.7 : 1,
-                        minHeight:'58px',
-                      }}
-                    >
-                      <div style={{ fontSize:'13px', fontWeight:900 }}>{payingOption === option.key ? 'Opening…' : option.label}</div>
-                      <div style={{ fontSize:'11px', fontWeight:800, opacity:0.85, marginTop:'2px' }}>{fmt(option.amount)}</div>
-                    </button>
-                  ))}
-                </div>
+        {canPayOnline && options.length > 0 ? (
+          <>
+            <PaymentOptions
+              options={options}
+              selected={selectedOption}
+              onSelect={setSelectedOption}
+              actionLabel="Pay Now"
+              onAction={() => {
+                if (!selectedOption) return
+                setPendingPayment({
+                  months: selectedOption.months,
+                  label: selectedOption.label,
+                  amount: parseFloat(selectedOption.amount),
+                })
+              }}
+              disabled={Boolean(payingOption) || Boolean(verifyingOrderId)}
+              formatAmount={fmt}
+            />
 
-                <div style={{ display:'flex', gap:'10px', alignItems:'center', marginTop:'4px' }}>
-                  <div style={{ position:'relative', flex:1 }}>
-                    <span style={{ position:'absolute', left:'12px', top:'50%', transform:'translateY(-50%)', fontSize:'13.5px', fontWeight:700, color:'#94a3b8' }}>₹</span>
-                    <input
-                      type="number"
-                      placeholder="Enter custom amount..."
-                      style={{
-                        width: '100%',
-                        padding: '10px 12px 10px 28px',
-                        borderRadius: '10px',
-                        border: '1px solid #e2e8f0',
-                        fontSize: '13.5px',
-                        minHeight: '40px',
-                        boxSizing: 'border-box'
-                      }}
-                      id="portalCustomAmount"
-                      min="1"
-                      max={currentYearBalance}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          const val = parseFloat(e.currentTarget.value)
-                          if (val > 0 && val <= currentYearBalance) {
-                            setPendingPayment({ key: 'custom', label: 'Custom Payment', amount: val })
-                          } else {
-                            toast.error(`Amount must be between ₹1 and ${fmt(currentYearBalance)}`)
-                          }
-                        }
-                      }}
-                    />
-                  </div>
+            {/* Payment confirmation breakdown — appears once a month option is
+                chosen, before opening Razorpay. Shows fee + 2% platform charge. */}
+            {pendingPayment && pendingBreakdown && (
+              <div style={{ marginTop:'12px', border:'1px solid #dbeafe', background:'#f8fbff', borderRadius:'14px', padding:'13px 14px' }}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px', marginBottom:'10px' }}>
+                  <div style={{ fontSize:'13px', fontWeight:900, color:'#0f172a' }}>{pendingPayment.label}</div>
                   <button
                     type="button"
-                    onClick={() => {
-                      const val = parseFloat(document.getElementById('portalCustomAmount')?.value || 0)
-                      if (val > 0 && val <= currentYearBalance) {
-                        setPendingPayment({ key: 'custom', label: 'Custom Payment', amount: val })
-                      } else {
-                        toast.error(`Amount must be between ₹1 and ${fmt(currentYearBalance)}`)
-                      }
-                    }}
-                    style={{
-                      padding:'0 18px',
-                      borderRadius:'8px',
-                      height:'40px',
-                      background:'#0d7377',
-                      color:'white',
-                      border:'none',
-                      fontWeight:700,
-                      cursor:'pointer',
-                      whiteSpace:'nowrap',
-                      fontSize:'13px'
-                    }}
+                    onClick={() => { setPendingPayment(null); setSelectedOption(null) }}
+                    disabled={Boolean(payingOption)}
+                    aria-label="Cancel payment"
+                    style={{ border:0, background:'transparent', color:'#64748b', fontSize:'20px', lineHeight:1, cursor: payingOption ? 'wait' : 'pointer', padding:'0 2px' }}
                   >
-                    Pay Custom
+                    ×
                   </button>
                 </div>
-              </>
+                <div style={{ display:'grid', gap:'7px', fontSize:'13px', fontWeight:800, color:'#334155' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', gap:'12px' }}>
+                    <span>Fee Amount</span>
+                    <span>{fmtCheckout(pendingBreakdown.feeAmount)}</span>
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', gap:'12px' }}>
+                    <span>Platform Charges (2%)</span>
+                    <span>{fmtCheckout(pendingBreakdown.platformCharge)}</span>
+                  </div>
+                  <div style={{ borderTop:'1px solid #cbd5e1', marginTop:'2px', paddingTop:'8px', display:'flex', justifyContent:'space-between', gap:'12px', color:'#0f172a', fontSize:'14px' }}>
+                    <span>Total Payable</span>
+                    <span>{fmtCheckout(pendingBreakdown.totalPayable)}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handlePayNow(pendingPayment.months, pendingPayment.amount)}
+                  disabled={Boolean(payingOption) || Boolean(verifyingOrderId)}
+                  style={{
+                    width:'100%', marginTop:'12px', border:0, borderRadius:'12px', padding:'11px 12px',
+                    background:'#0f172a', color:'white', fontWeight:900, cursor: payingOption || verifyingOrderId ? 'wait' : 'pointer',
+                    opacity: payingOption || verifyingOrderId ? 0.7 : 1,
+                  }}
+                >
+                  {payingOption ? 'Opening Razorpay…' : `Pay ${fmtCheckout(pendingBreakdown.totalPayable)}`}
+                </button>
+              </div>
             )}
-          </div>
+          </>
+        ) : canPayOnline && currentYearBalance > 0 ? (
+          <div style={{ fontSize:'13px', color:'#64748b', fontWeight:700 }}>Loading payment options…</div>
         ) : (
           <div style={{ fontSize:'13px', color:'#64748b', fontWeight:700 }}>
-            {currentYearBalance > 0 ? 'Select a linked student to pay current-year fees online.' : 'Current-year fees are cleared.'}
-          </div>
-        )}
-        {pendingPayment && pendingBreakdown && (
-          <div style={{ marginTop:'12px', border:'1px solid #dbeafe', background:'#f8fbff', borderRadius:'14px', padding:'13px 14px' }}>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px', marginBottom:'10px' }}>
-              <div style={{ fontSize:'13px', fontWeight:900, color:'#0f172a' }}>{pendingPayment.label}</div>
-              <button
-                type="button"
-                onClick={() => setPendingPayment(null)}
-                disabled={Boolean(payingOption)}
-                aria-label="Cancel payment"
-                style={{ border:0, background:'transparent', color:'#64748b', fontSize:'20px', lineHeight:1, cursor: payingOption ? 'wait' : 'pointer', padding:'0 2px' }}
-              >
-                x
-              </button>
-            </div>
-            <div style={{ display:'grid', gap:'7px', fontSize:'13px', fontWeight:800, color:'#334155' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', gap:'12px' }}>
-                <span>Tuition Fee</span>
-                <span>{fmtCheckout(pendingBreakdown.feeAmount)}</span>
-              </div>
-              <div style={{ display:'flex', justifyContent:'space-between', gap:'12px' }}>
-                <span>Platform Charges</span>
-                <span>{fmtCheckout(pendingBreakdown.platformCharge)}</span>
-              </div>
-              <div style={{ borderTop:'1px solid #cbd5e1', marginTop:'2px', paddingTop:'8px', display:'flex', justifyContent:'space-between', gap:'12px', color:'#0f172a', fontSize:'14px' }}>
-                <span>Total Payable</span>
-                <span>{fmtCheckout(pendingBreakdown.totalPayable)}</span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => handlePayNow(pendingPayment.key, pendingPayment.amount)}
-              disabled={Boolean(payingOption) || Boolean(verifyingOrderId)}
-              style={{
-                width:'100%', marginTop:'12px', border:0, borderRadius:'12px', padding:'11px 12px',
-                background:'#0f172a', color:'white', fontWeight:900, cursor: payingOption || verifyingOrderId ? 'wait' : 'pointer',
-                opacity: payingOption || verifyingOrderId ? 0.7 : 1,
-              }}
-            >
-              {payingOption === pendingPayment.key ? 'Opening Razorpay…' : `Pay ${fmtCheckout(pendingBreakdown.totalPayable)}`}
-            </button>
+            {currentYearBalance > 0
+              ? 'Select a linked student to pay current-year fees online.'
+              : 'Current-year fees are cleared.'}
           </div>
         )}
       </div>

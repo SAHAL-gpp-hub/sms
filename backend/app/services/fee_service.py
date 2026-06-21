@@ -286,8 +286,6 @@ def get_student_ledger(db: Session, student_id: int) -> Optional[StudentLedger]:
         .all()
     )
 
-    PLAN_COUNTS = {"full": 1, "half": 2, "quarter": 4}
-
     items: list[StudentLedgerItem] = []
     total_due  = Decimal("0.00")
     total_paid = Decimal("0.00")
@@ -301,16 +299,6 @@ def get_student_ledger(db: Session, student_id: int) -> Optional[StudentLedger]:
         total_due  += net
         total_paid += paid
 
-        plan = sf.installment_plan
-        inst_paid = int(sf.installments_paid or 0)
-        total_inst = PLAN_COUNTS.get(plan) if plan else None
-        if plan and total_inst:
-            inst_amount = (net / Decimal(str(total_inst))).quantize(Decimal("0.01"))
-            remaining_inst = total_inst - inst_paid
-            next_inst_amount = inst_amount if remaining_inst > 0 and (net - paid) > 0 else None
-        else:
-            next_inst_amount = None
-
         items.append(StudentLedgerItem(
             fee_head_name=sf.fee_structure.fee_head.name,
             frequency=sf.fee_structure.fee_head.frequency,
@@ -321,10 +309,7 @@ def get_student_ledger(db: Session, student_id: int) -> Optional[StudentLedger]:
             enrollment_id=sf.enrollment_id,
             academic_year_id=sf.academic_year_id,
             invoice_type=sf.invoice_type or "regular",
-            installment_plan=plan,
-            installments_paid=inst_paid,
-            total_installments=total_inst,
-            next_installment_amount=next_inst_amount,
+            months_paid=int(sf.months_paid or 0),
         ))
 
     return StudentLedger(
@@ -381,29 +366,38 @@ def allocate_payment(
     actor_user_id: int | None = None,
     academic_year_id: int | None = None,
     student_fee_id: int | None = None,
-    installment_plan: str | None = None,
+    months_to_cover: int | None = None,
 ) -> list[FeePayment]:
     """
-    Allocate a payment across StudentFee rows, enforcing installment plan rules.
+    Allocate a payment across StudentFee rows for a month-based payment plan.
 
-    INSTALLMENT PLAN ENFORCEMENT
-    ────────────────────────────
-    installment_plan must be 'full', 'half', or 'quarter' (or None for legacy
-    custom-amount flows).
+    MONTH-BASED PAYMENT MODEL
+    ─────────────────────────
+    The school year is 12 months.  A payment covers a contiguous number of
+    months (3, 6, 9, or 12).  There is no plan locking — every payment is
+    flexible.
 
-    Rules:
-    1. If a StudentFee already has installment_plan set (plan_locked), the
-       payment MUST match the next scheduled instalment amount (net_amount /
-       total_installments).  Re-splitting is rejected.
-    2. If no plan is set yet (first payment), the plan is locked onto the row
-       from the installment_plan argument.
-    3. After each successful payment, installments_paid is incremented.
-    4. Overpaying beyond the scheduled instalment is rejected with ValueError.
+    months_to_cover, when provided:
+      - must be one of 3, 6, 9, or 12
+      - amount must equal per_month_rate * months_to_cover (±₹0.02) UNLESS the
+        payment clears all outstanding dues, in which case amount must equal
+        the exact remaining balance
+      - increments months_paid by months_to_cover on every fee row that
+        receives payment (capped at 12)
+
+    When months_to_cover is None (legacy / direct-amount flows), the amount is
+    distributed greedily across fee heads and months_paid is left untouched.
+
+    Payment is always distributed proportionally across fee heads when
+    months_to_cover is set, so every fee head advances at the same rate.
     """
     if amount <= 0:
         raise ValueError("Payment amount must be greater than 0")
 
-    PLAN_COUNTS = {"full": 1, "half": 2, "quarter": 4}
+    if months_to_cover is not None and months_to_cover not in (3, 6, 9, 12):
+        raise ValueError(
+            f"months_to_cover must be 3, 6, 9, or 12 (got {months_to_cover})"
+        )
 
     from sqlalchemy import or_
     query = db.query(StudentFee).outerjoin(Enrollment, Enrollment.id == StudentFee.enrollment_id).filter(
@@ -429,32 +423,26 @@ def allocate_payment(
             payable_items.append((sf, outstanding, paid_so_far))
             total_outstanding += outstanding
 
-    # ── Installment plan: lock on first payment, guard against over-paying ──
-    # Instalment amounts are always based on the TOTAL across all fee heads
-    # (frontend sends total_balance / 2 or / 4), NOT per-fee-head.
-    for sf, outstanding, paid_so_far in payable_items:
-        existing_plan = sf.installment_plan
-        inst_paid = int(sf.installments_paid or 0)
-
-        if existing_plan:
-            total_inst = PLAN_COUNTS[existing_plan]
-            if inst_paid >= total_inst:
-                fee_name = (
-                    sf.fee_structure.fee_head.name
-                    if sf.fee_structure and sf.fee_structure.fee_head
-                    else "fee"
-                )
+    # ── Validate months_to_cover amount ────────────────────────────────────
+    # The "clears all" path is allowed when amount == total_outstanding
+    # (rounding safe).  Any smaller amount must match per_month_rate * months.
+    # Per-month rate uses the SAME basis as get_payment_options: only regular
+    # (non-arrear) fee rows.  Arrears are paid separately and must not inflate
+    # the monthly rate used to validate a month-grouping payment.
+    if months_to_cover is not None and payable_items:
+        regular_original = sum(
+            Decimal(str(sf.net_amount))
+            for sf, _, _ in payable_items
+            if (sf.invoice_type or "regular") != "arrear"
+        )
+        per_month_rate = (regular_original / Decimal("12")).quantize(Decimal("0.01"))
+        if amount < total_outstanding:
+            expected = (per_month_rate * Decimal(str(months_to_cover))).quantize(Decimal("0.01"))
+            if abs(amount - expected) > Decimal("0.02"):
                 raise ValueError(
-                    f"All {total_inst} instalments for '{fee_name}' have already been paid."
+                    f"Amount ₹{amount} doesn't match {months_to_cover} months "
+                    f"× ₹{per_month_rate} = ₹{expected}"
                 )
-        elif installment_plan:
-            # First payment — lock the plan onto this fee row.
-            if installment_plan not in PLAN_COUNTS:
-                raise ValueError(
-                    f"Invalid installment plan '{installment_plan}'. Must be full, half, or quarter."
-                )
-            sf.installment_plan = installment_plan
-            sf.installments_paid = 0
 
     if amount > total_outstanding:
         raise ValueError(f"Payment amount ₹{amount} exceeds total outstanding balance ₹{total_outstanding}")
@@ -466,33 +454,36 @@ def allocate_payment(
     shared_receipt = generate_receipt_number(db)
 
     # ── Proportional allocation ───────────────────────────────────────────
-    # When an instalment plan is active (half/quarter), distribute the payment
-    # proportionally so every fee head is paid at the same rate.
-    # Example: total 750, half plan -> 375 payment
+    # When months_to_cover is set, distribute the payment proportionally across
+    # REGULAR (non-arrear) fee heads only, so every fee head advances at the
+    # same rate.  Arrears are never touched by a month-based payment.
+    # Example: regular total 750, 6-month payment = 375
     #   Tuition 500 -> 500/750 * 375 = 250
     #   Exam    150 -> 150/750 * 375 = 75
     #   Activity100 -> 100/750 * 375 = 50
-    # For full/custom payments, greedy fill is used.
-    active_plan = installment_plan or (payable_items[0][0].installment_plan if payable_items else None)
-
-    if active_plan and active_plan != "full":
-        total_original = sum(Decimal(str(sf.net_amount)) for sf, _, _ in payable_items)
-        proportional_amounts: dict[int, Decimal] = {}
+    # Otherwise greedy fill is used (covers direct/legacy flows that may also
+    # pay arrears).
+    proportional_amounts: dict[int, Decimal] = {}
+    if months_to_cover is not None:
+        # Month-based payments only ever apply to regular fee rows.
+        month_items = [
+            (sf, outstanding)
+            for sf, outstanding, _ in payable_items
+            if (sf.invoice_type or "regular") != "arrear"
+        ]
+        total_original = sum(Decimal(str(sf.net_amount)) for sf, _ in month_items) or Decimal("0.00")
         allocated_so_far = Decimal("0.00")
-        items_list = list(payable_items)
-        for i, (sf, outstanding, _) in enumerate(items_list):
-            if i == len(items_list) - 1:
+        for i, (sf, outstanding) in enumerate(month_items):
+            if i == len(month_items) - 1:
                 proportional_amounts[sf.id] = min(
                     (amount - allocated_so_far).quantize(Decimal("0.01")),
                     outstanding,
                 )
-            else:
+            elif total_original > 0:
                 share = (Decimal(str(sf.net_amount)) / total_original * amount).quantize(Decimal("0.01"))
                 share = min(share, outstanding)
                 proportional_amounts[sf.id] = share
                 allocated_so_far += share
-    else:
-        proportional_amounts = {}
 
     for sf, outstanding, _paid_so_far in payable_items:
         if remaining <= 0:
@@ -519,10 +510,9 @@ def allocate_payment(
             payments.append(payment)
             remaining = (remaining - applied).quantize(Decimal("0.01"))
 
-            # Increment the instalment counter (works whether plan was just
-            # locked above or was already locked from a prior payment).
-            if sf.installment_plan:
-                sf.installments_paid = int(sf.installments_paid or 0) + 1
+            # Advance months_paid on every regular fee row that received payment.
+            if months_to_cover is not None and (sf.invoice_type or "regular") != "arrear":
+                sf.months_paid = min(12, int(sf.months_paid or 0) + months_to_cover)
 
     db.commit()
 
@@ -558,8 +548,8 @@ def allocate_payment(
 
 def record_payment(db: Session, data: PaymentCreate, actor_user_id: int | None = None) -> dict:
     logger.info(
-        "record_payment start: student_id=%s amount=%s mode=%s plan=%s",
-        data.student_id, data.amount_paid, data.mode, data.installment_plan,
+        "record_payment start: student_id=%s amount=%s mode=%s months_to_cover=%s",
+        data.student_id, data.amount_paid, data.mode, data.months_to_cover,
     )
     student = db.query(Student).filter_by(id=data.student_id).first()
     if not student:
@@ -575,7 +565,7 @@ def record_payment(db: Session, data: PaymentCreate, actor_user_id: int | None =
         notes=data.notes,
         actor_user_id=actor_user_id,
         academic_year_id=data.academic_year_id,
-        installment_plan=data.installment_plan,
+        months_to_cover=data.months_to_cover,
     )
 
     if not payments:
@@ -789,28 +779,27 @@ def get_monthly_collections(
 
 def get_payment_options(db: Session, student_id: int) -> dict:
     """
-    Returns installment options for a student.
+    Returns month-based flexible payment options for a student.
 
-    INSTALLMENT PLAN LOGIC
-    ─────────────────────
-    Installment amounts are always derived from the ORIGINAL net_amount of each
-    StudentFee row, never from the remaining balance.  This prevents the
-    "nested installment" bug where paying half of the balance and then
-    re-splitting the remainder would result in sub-half/quarter payments that
-    don't match the original plan.
+    The school year is 12 months.  A payment always covers a contiguous number
+    of months (3, 6, 9, or 12).  After any partial payment all valid remaining
+    month groupings are offered — there is no "plan locking".
 
-    Each StudentFee row carries:
-      installment_plan   — null / 'full' / 'half' / 'quarter'
-      installments_paid  — count of instalments settled so far
+    Options logic
+    ─────────────
+        remaining_months == 12  →  show 12, 6, 3
+        remaining_months == 9   →  show 9 (clears all), 6, 3
+        remaining_months == 6   →  show 6 (clears all), 3
+        remaining_months == 3   →  show 3 (clears all)
+        remaining_months == 0   →  empty list (fully paid)
 
-    Plan totals per StudentFee:
-      full    → 1 payment of net_amount
-      half    → 2 payments of net_amount / 2
-      quarter → 4 payments of net_amount / 4
+    The per-month rate is always derived from the ORIGINAL total (never the
+    remaining balance), so a 3-month payment always costs the same per-month
+    rate regardless of how many months were already paid.  The "clears all"
+    option uses total_balance directly to avoid rounding drift.
 
-    Once any instalment has been paid (installments_paid > 0) the plan is
-    locked.  The UI must only offer the next scheduled instalment, not the
-    Full/Half/Quarter chooser.
+    Arrear invoices are excluded — they are shown separately in the UI and are
+    not payable through these month options.
 
     Return shape
     ─────────────
@@ -820,32 +809,32 @@ def get_payment_options(db: Session, student_id: int) -> dict:
         {
           "student_fee_id": int,
           "fee_head_name": str,
-          "original_amount": Decimal,     # net_amount (never changes)
-          "paid_amount": Decimal,          # sum of all FeePayment rows
-          "balance": Decimal,              # original - paid
-          "installment_plan": str|null,    # 'full'/'half'/'quarter'/null
-          "installments_paid": int,        # 0..total_installments
-          "total_installments": int,       # 1 / 2 / 4
-          "next_installment_amount": Decimal|null,  # null if fully paid
-          "plan_locked": bool,             # true once first instalment paid
+          "original_amount": Decimal,
+          "paid_amount": Decimal,
+          "balance": Decimal,
         }
       ],
       "summary": {
         "total_original": Decimal,
         "total_paid": Decimal,
         "total_balance": Decimal,
-        "plan_state": "unset" | "in_progress" | "complete",
-        # Quick-access options shown only when plan is "unset" for ALL items
+        "months_paid": int,
+        "remaining_months": int,
+        "per_month_rate": Decimal,
         "options": [
-          {"key": "full",    "label": "Full Payment",    "amount": Decimal},
-          {"key": "half",    "label": "Half Payment",    "amount": Decimal},
-          {"key": "quarter", "label": "Quarter Payment", "amount": Decimal},
-        ] | None
+          {
+            "months": int,
+            "amount": Decimal,
+            "clears_all": bool,
+            "label": "Pay for N Months",
+            "sublabel": "Clears all dues" | "N month coverage",
+          }
+        ]
       }
     }
     """
     from app.services.academic_year_service import require_current_academic_year
-    from sqlalchemy import or_
+
     try:
         year = require_current_academic_year(db)
         year_id = year.id
@@ -857,81 +846,93 @@ def get_payment_options(db: Session, student_id: int) -> dict:
         .options(joinedload(StudentFee.fee_structure).joinedload(FeeStructure.fee_head))
         .outerjoin(Enrollment, Enrollment.id == StudentFee.enrollment_id)
         .filter(or_(StudentFee.student_id == student_id, Enrollment.student_id == student_id))
+        .filter(StudentFee.invoice_type != "arrear")
     )
     if year_id:
         query = query.filter(StudentFee.academic_year_id == year_id)
 
     student_fees = query.all()
 
-    PLAN_COUNTS = {"full": 1, "half": 2, "quarter": 4}
+    # Single grouped paid-amount query — avoids N+1 per fee head.
+    sf_ids = [sf.id for sf in student_fees]
+    paid_map: dict[int, Decimal] = {}
+    if sf_ids:
+        for sf_id, total in (
+            db.query(
+                FeePayment.student_fee_id,
+                func.coalesce(func.sum(FeePayment.amount_paid), 0),
+            )
+            .filter(FeePayment.student_fee_id.in_(sf_ids))
+            .group_by(FeePayment.student_fee_id)
+            .all()
+        ):
+            paid_map[sf_id] = Decimal(str(total))
 
     fee_items = []
     total_original = Decimal("0.00")
     total_paid_all = Decimal("0.00")
+    months_paid = 0
 
     for sf in student_fees:
-        paid = Decimal(str(
-            db.query(func.coalesce(func.sum(FeePayment.amount_paid), 0))
-            .filter(FeePayment.student_fee_id == sf.id)
-            .scalar()
-        ))
+        paid = paid_map.get(sf.id, Decimal("0.00"))
         original = Decimal(str(sf.net_amount))
         balance = original - paid
-        plan = sf.installment_plan          # null / 'full' / 'half' / 'quarter'
-        inst_paid = int(sf.installments_paid or 0)
-        total_inst = PLAN_COUNTS.get(plan, 1) if plan else None
-
-        if plan and total_inst:
-            inst_amount = (original / Decimal(str(total_inst))).quantize(Decimal("0.01"))
-            remaining_inst = total_inst - inst_paid
-            next_amount = inst_amount if remaining_inst > 0 and balance > 0 else None
-        else:
-            inst_amount = None
-            next_amount = None
-
-        fee_head_name = "General Fee"
-        if sf.fee_structure and sf.fee_structure.fee_head:
-            fee_head_name = sf.fee_structure.fee_head.name
-
+        fee_head_name = (
+            sf.fee_structure.fee_head.name
+            if sf.fee_structure and sf.fee_structure.fee_head
+            else "General Fee"
+        )
         fee_items.append({
             "student_fee_id": sf.id,
             "fee_head_name": fee_head_name,
             "original_amount": original,
             "paid_amount": paid,
             "balance": balance,
-            "installment_plan": plan,
-            "installments_paid": inst_paid,
-            "total_installments": total_inst,
-            "next_installment_amount": next_amount,
-            "plan_locked": inst_paid > 0,
         })
         total_original += original
         total_paid_all += paid
+        # months_paid is written to every row together by allocate_payment(),
+        # so they are always in sync.  max() is a defensive guard only.
+        months_paid = max(months_paid, int(sf.months_paid or 0))
 
     total_balance = total_original - total_paid_all
 
-    # Determine aggregate plan state
-    plans_set = [item for item in fee_items if item["installment_plan"] is not None]
-    any_in_progress = any(item["installments_paid"] > 0 for item in fee_items)
-    all_complete = total_balance <= Decimal("0.00")
+    # Per-month rate is always derived from the ORIGINAL total.
+    per_month_rate = (total_original / Decimal("12")).quantize(Decimal("0.01"))
+    remaining_months = max(0, 12 - months_paid)
 
-    if all_complete:
-        plan_state = "complete"
-    elif any_in_progress:
-        plan_state = "in_progress"
-    else:
-        plan_state = "unset"
-
-    # Only offer Full/Half/Quarter chooser when NO plan has been started yet
-    options = None
-    if plan_state == "unset" and total_balance > 0:
-        half_amount = (total_balance / Decimal("2")).quantize(Decimal("0.01"))
-        quarter_amount = (total_balance / Decimal("4")).quantize(Decimal("0.01"))
-        options = [
-            {"key": "full",    "label": "Full Payment",    "amount": total_balance},
-            {"key": "half",    "label": "Half Payment (1/2)",  "amount": half_amount},
-            {"key": "quarter", "label": "Quarter Payment (1/4)", "amount": quarter_amount},
-        ]
+    # Build options.  The UI contract (admin + parents portal) is:
+    #   - one PRIMARY "clears all dues" card = paying exactly remaining_months
+    #   - zero or more SECONDARY cards = the smaller groupings (6 and 3 only)
+    #     that are strictly less than remaining_months.
+    # The 9-month card is NEVER a secondary — it only appears as the "clears
+    # all" primary when exactly 3 months are already paid.  The 12-month card
+    # is only the primary when nothing is paid yet.
+    VALID_STEPS = (3, 6, 9, 12)
+    options = []
+    if remaining_months > 0 and total_balance > Decimal("0.00"):
+        # Primary: clears all dues (the remaining balance in one shot).
+        # Use the exact remaining balance to avoid any rounding drift.
+        primary_months = remaining_months if remaining_months in VALID_STEPS else None
+        if primary_months is not None:
+            options.append({
+                "months": primary_months,
+                "amount": total_balance,
+                "clears_all": True,
+                "label": f"Pay for {primary_months} Months",
+                "sublabel": "Clears all dues",
+            })
+        # Secondaries: only 6 and 3 (never 9 or 12), strictly smaller than remaining.
+        for months in (6, 3):
+            if months < remaining_months:
+                amount = (per_month_rate * Decimal(str(months))).quantize(Decimal("0.01"))
+                options.append({
+                    "months": months,
+                    "amount": amount,
+                    "clears_all": False,
+                    "label": f"Pay for {months} Months",
+                    "sublabel": f"{months} month coverage",
+                })
 
     return {
         "student_id": student_id,
@@ -940,7 +941,9 @@ def get_payment_options(db: Session, student_id: int) -> dict:
             "total_original": total_original,
             "total_paid": total_paid_all,
             "total_balance": total_balance,
-            "plan_state": plan_state,
+            "months_paid": months_paid,
+            "remaining_months": remaining_months,
+            "per_month_rate": per_month_rate,
             "options": options,
         },
     }

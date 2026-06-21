@@ -473,12 +473,10 @@ class StudentFee(Base):
     academic_year_id  = Column(Integer, ForeignKey("academic_years.id"), nullable=True, index=True)
     invoice_type      = Column(String(10), nullable=False, default="regular")  # regular/arrear
     source_invoice_id = Column(Integer, ForeignKey("student_fees.id"), nullable=True)  # for arrears
-    # Installment plan columns — set when the first installment is paid.
-    # installment_plan: null = no plan chosen yet, 'half' = 2 installments,
-    #                   'quarter' = 4 installments, 'full' = paid in one shot.
-    # installments_paid: count of installments recorded so far (0 initially).
-    installment_plan   = Column(String(10), nullable=True)   # null / 'full' / 'half' / 'quarter'
-    installments_paid  = Column(Integer, nullable=False, default=0)
+    # Month-based flexible payment tracking. School year = 12 months; a payment
+    # covers a contiguous number of months (3/6/9/12). Written atomically to ALL
+    # fee rows for a student+year by allocate_payment() on every payment.
+    months_paid = Column(Integer, nullable=False, default=0)  # 0..12
 
 
 

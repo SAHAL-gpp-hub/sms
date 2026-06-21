@@ -32,7 +32,7 @@ def create_order(
             user,
             body.student_id,
             body.amount,
-            body.payment_option,
+            body.months_to_cover,
         )
     return payment_service.create_razorpay_order(db, user, body.student_fee_id, body.amount)
 

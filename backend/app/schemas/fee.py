@@ -87,11 +87,10 @@ class PaymentCreate(BaseModel):
     collected_by: Optional[str] = None
     notes: Optional[str] = None
     academic_year_id: Optional[int] = None
-    # Installment plan selected by the payer.
-    # Must be 'full', 'half', or 'quarter'.  Required on the FIRST payment
-    # for a StudentFee row.  Omit (or pass null) for subsequent installments
-    # — the plan is already locked on the DB row and enforced by the service.
-    installment_plan: Optional[str] = None
+    # Number of months this payment covers. Must be 3, 6, 9, or 12.
+    # The school year is 12 months; payments always cover a contiguous month
+    # grouping and increment months_paid on every StudentFee row.
+    months_to_cover: Optional[int] = None
 
     @field_validator("amount_paid")
     @classmethod
@@ -100,11 +99,11 @@ class PaymentCreate(BaseModel):
             raise ValueError("Payment amount must be greater than 0")
         return v
 
-    @field_validator("installment_plan")
+    @field_validator("months_to_cover")
     @classmethod
-    def validate_plan(cls, v):
-        if v is not None and v not in ("full", "half", "quarter"):
-            raise ValueError("installment_plan must be 'full', 'half', or 'quarter'")
+    def validate_months(cls, v):
+        if v is not None and v not in (3, 6, 9, 12):
+            raise ValueError("months_to_cover must be 3, 6, 9, or 12")
         return v
 
 class PaymentAllocation(BaseModel):
@@ -147,11 +146,8 @@ class StudentLedgerItem(BaseModel):
     enrollment_id: int
     academic_year_id: Optional[int] = None
     invoice_type: str = "regular"
-    # Installment plan state — populated from StudentFee columns
-    installment_plan: Optional[str] = None     # null / 'full' / 'half' / 'quarter'
-    installments_paid: int = 0
-    total_installments: Optional[int] = None   # 1 / 2 / 4 once plan set
-    next_installment_amount: Optional[Decimal] = None
+    # Month-based payment tracking — months covered so far (0..12).
+    months_paid: int = 0
 
 
 class StudentLedger(BaseModel):

@@ -283,7 +283,7 @@ def create_current_year_order(
     user: CurrentUser,
     student_id: int,
     amount: Decimal,
-    payment_option: str | None = None,
+    months_to_cover: int | None = None,
 ) -> dict[str, Any]:
     _require_razorpay_config()
     student = ensure_student_access(db, user, student_id)
@@ -296,6 +296,32 @@ def create_current_year_order(
     if amount > outstanding:
         raise HTTPException(status_code=400, detail=f"Amount exceeds current-year outstanding balance of ₹{outstanding}")
 
+    # Validate the amount matches the requested month grouping before hitting
+    # Razorpay.  The "clears all" path (amount == outstanding) is always allowed.
+    # Per-month rate excludes arrears — matches get_payment_options so the amount
+    # the parent sees on a card matches what this endpoint accepts.
+    if months_to_cover is not None and amount < outstanding:
+        regular_original = _money(
+            sum(
+                Decimal(str(sf.net_amount))
+                for sf in payable_items
+                if (sf.invoice_type or "regular") != "arrear"
+            )
+        )
+        per_month_rate = _money(regular_original / Decimal("12"))
+        expected = _money(per_month_rate * Decimal(str(months_to_cover)))
+        if abs(amount - expected) > Decimal("0.02"):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Amount ₹{amount} doesn't match {months_to_cover} months "
+                    f"× ₹{per_month_rate} = ₹{expected}"
+                ),
+            )
+
+    # Store months_to_cover as a string in payment_option (reuses existing column).
+    effective_option = str(months_to_cover) if months_to_cover is not None else None
+
     order = _create_gateway_order(
         amount=gross_amount,
         receipt=f"cy_{student_id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
@@ -303,7 +329,7 @@ def create_current_year_order(
             "student_id": str(student_id),
             "student_name": student.name_en if student else "",
             "scope": "current_year",
-            "payment_option": payment_option or "",
+            "months_to_cover": str(months_to_cover) if months_to_cover is not None else "",
             "net_amount": f"{amount:.2f}",
             "platform_charge": f"{platform_charge:.2f}",
             "gross_amount": f"{gross_amount:.2f}",
@@ -313,7 +339,7 @@ def create_current_year_order(
     db_order = OnlinePaymentOrder(
         student_id=student_id,
         scope="current_year",
-        payment_option=payment_option,
+        payment_option=effective_option,
         razorpay_order_id=order["id"],
         amount=gross_amount,
         net_amount=amount,
@@ -364,6 +390,14 @@ def mark_order_paid(
     amount = _order_net_amount(order)
     student_id = _student_id_for_order(db, order)
 
+    # Parse months_to_cover back from the payment_option column (stored as a
+    # string of an int by create_current_year_order).
+    months_to_cover = None
+    if order.payment_option and str(order.payment_option).isdigit():
+        parsed = int(order.payment_option)
+        if parsed in (3, 6, 9, 12):
+            months_to_cover = parsed
+
     order.razorpay_payment_id = payment_id
     order.razorpay_signature = signature
     order.status = "paid"
@@ -371,7 +405,7 @@ def mark_order_paid(
     db.flush()
 
     from app.services.fee_service import allocate_payment
-    
+
     academic_year_id = None
     if order.scope == "current_year":
         year = require_current_academic_year(db)
@@ -388,6 +422,7 @@ def mark_order_paid(
         actor_user_id=actor_user_id,
         academic_year_id=academic_year_id,
         student_fee_id=order.student_fee_id if order.scope != "current_year" else None,
+        months_to_cover=months_to_cover,
     )
     return payments
 

@@ -91,46 +91,45 @@ def test_fee_instalments_and_receipts(tmp_path):
         db.add(sf2)
         db.commit()
 
-        # Verify payment options
+        # Verify payment options — month-based, 0 months paid → 12/6/3 offered.
+        # total_original = 2000.00, per_month_rate = 2000/12 = 166.67
         options = fee_service.get_payment_options(db, student.id)
-        assert options["total_outstanding"] == Decimal("2000.00")
-        assert options["options"][0]["amount"] == Decimal("2000.00")  # full
-        assert options["options"][1]["amount"] == Decimal("1000.00")  # half
-        assert options["options"][2]["amount"] == Decimal("500.00")   # quarter
+        assert options["summary"]["total_balance"] == Decimal("2000.00")
+        assert options["summary"]["months_paid"] == 0
+        assert options["summary"]["remaining_months"] == 12
+        # Options returned largest-first: 12 (clears all), 6, 3
+        assert [o["months"] for o in options["summary"]["options"]] == [12, 6, 3]
+        assert options["summary"]["options"][0]["clears_all"] is True
+        assert options["summary"]["options"][0]["amount"] == Decimal("2000.00")  # clears all = exact balance
+        assert options["summary"]["options"][1]["amount"] == Decimal("1000.02")  # 6 * 166.67
+        assert options["summary"]["options"][2]["amount"] == Decimal("500.01")   # 3 * 166.67
 
-        # Pay custom amount (500.00)
+        # Pay 3 months (amount = 3 * 166.67 = 500.01), allocated proportionally.
         p1 = fee_service.record_payment(db, PaymentCreate(
             student_id=student.id,
-            amount_paid=Decimal("500.00"),
+            amount_paid=Decimal("500.01"),
             mode="Cash",
-            payment_date=date(2025, 6, 15)
+            payment_date=date(2025, 6, 15),
+            months_to_cover=3,
         ))
-        assert p1["total_amount"] == Decimal("500.00")
+        assert p1["total_amount"] == Decimal("500.01")
         assert p1["student_name"] == "Test Student"
-        assert p1["total_balance_after"] == Decimal("1500.00")
-        assert len(p1["allocations"]) == 1
-        assert p1["allocations"][0]["fee_head_name"] == "Tuition Fee"
-        assert p1["allocations"][0]["amount_applied"] == Decimal("500.00")
-        assert p1["allocations"][0]["balance_after"] == Decimal("700.00")
+        assert p1["total_balance_after"] == Decimal("1499.99")
+        # Both fee heads receive a proportional share (1200/2000 and 800/2000 of 500.01).
+        assert len(p1["allocations"]) == 2
 
-        # Pay remaining tuition fee + partial admission fee (900.00)
-        # 700 goes to Tuition Fee (balance becomes 0), 200 goes to Admission Fee (balance becomes 600)
-        p2 = fee_service.record_payment(db, PaymentCreate(
-            student_id=student.id,
-            amount_paid=Decimal("900.00"),
-            mode="UPI",
-            payment_date=date(2025, 6, 20)
-        ))
-        assert p2["total_amount"] == Decimal("900.00")
-        assert p2["total_balance_after"] == Decimal("600.00")
-        assert len(p2["allocations"]) == 2
-        
+        # After paying 3 months, options should offer 9 (clears all), 6, 3.
+        options_after = fee_service.get_payment_options(db, student.id)
+        assert options_after["summary"]["months_paid"] == 3
+        assert options_after["summary"]["remaining_months"] == 9
+        assert [o["months"] for o in options_after["summary"]["options"]] == [9, 6, 3]
+        assert options_after["summary"]["options"][0]["clears_all"] is True
+        assert options_after["summary"]["options"][0]["amount"] == Decimal("1499.99")  # exact balance
+
         # Verify monthly collections function
         collections = fee_service.get_monthly_collections(db, month=6, academic_year_id=year.id)
-        assert len(collections) == 2
-        days = {c["day"] for c in collections}
-        assert "15 Jun" in days
-        assert "20 Jun" in days
+        assert len(collections) == 1
+        assert collections[0]["day"] == "15 Jun"
         
     finally:
         db.close()

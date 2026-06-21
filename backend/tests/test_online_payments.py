@@ -337,7 +337,7 @@ def test_parent_can_create_current_year_order_and_verify_allocates_across_fee_he
             "student_id": student_id,
             "amount": "900.00",
             "scope": "current_year",
-            "payment_option": "half",
+            "months_to_cover": 9,
         },
         headers=auth(tok),
     )
@@ -361,12 +361,13 @@ def test_parent_can_create_current_year_order_and_verify_allocates_across_fee_he
         order = db.query(OnlinePaymentOrder).filter_by(razorpay_order_id="order_current_year_1").one()
         payments = db.query(FeePayment).filter_by(online_order_id=order.id).order_by(FeePayment.id).all()
         assert order.scope == "current_year"
-        assert order.payment_option == "half"
+        assert order.payment_option == "9"
         assert order.net_amount == Decimal("900.00")
         assert order.platform_charge == Decimal("18.00")
         assert order.gross_amount == Decimal("918.00")
         assert len(payments) == 2
-        assert [p.amount_paid for p in payments] == [Decimal("700.00"), Decimal("200.00")]
+        # Proportional split: Tuition 700/1200 * 900 = 525; Activity 500/1200 * 900 = 375
+        assert [p.amount_paid for p in payments] == [Decimal("525.00"), Decimal("375.00")]
         assert db.query(FeePayment).join(StudentFee).filter(
             StudentFee.student_id == student_id,
             StudentFee.invoice_type == "arrear",
@@ -384,9 +385,9 @@ def test_parent_cannot_create_current_year_order_for_unlinked_child(client, monk
         "/api/v1/payments/create-order",
         json={
             "student_id": student_id,
-            "amount": "100.00",
+            "amount": "300.00",
             "scope": "current_year",
-            "payment_option": "quarter",
+            "months_to_cover": 3,
         },
         headers=auth(tok),
     )
@@ -404,7 +405,7 @@ def test_current_year_order_rejects_amount_above_current_year_balance(client, mo
             "student_id": student_id,
             "amount": "1300.00",
             "scope": "current_year",
-            "payment_option": "full",
+            "months_to_cover": 12,
         },
         headers=auth(tok),
     )
@@ -419,7 +420,7 @@ def test_aggregate_payment_history_returns_one_order_row(client, monkeypatch):
 
     created = client.post(
         "/api/v1/payments/create-order",
-        json={"student_id": student_id, "amount": "600.00", "scope": "current_year", "payment_option": "quarter"},
+        json={"student_id": student_id, "amount": "600.00", "scope": "current_year", "months_to_cover": 6},
         headers=auth(tok),
     )
     assert created.status_code == 200, created.text
@@ -446,12 +447,12 @@ def test_aggregate_webhook_marks_paid_idempotently(client, monkeypatch):
 
     created = client.post(
         "/api/v1/payments/create-order",
-        json={"student_id": student_id, "amount": "800.00", "scope": "current_year", "payment_option": "full"},
+        json={"student_id": student_id, "amount": "900.00", "scope": "current_year", "months_to_cover": 9},
         headers=auth(tok),
     )
     assert created.status_code == 200, created.text
 
-    body = _webhook_body("order_webhook_current_year", "pay_webhook_current_year", 81600)
+    body = _webhook_body("order_webhook_current_year", "pay_webhook_current_year", 91800)
     headers = {
         "Content-Type": "application/json",
         "X-Razorpay-Signature": _webhook_signature(body),
@@ -465,9 +466,9 @@ def test_aggregate_webhook_marks_paid_idempotently(client, monkeypatch):
     try:
         order = db.query(OnlinePaymentOrder).filter_by(razorpay_order_id="order_webhook_current_year").one()
         assert order.status == "paid"
-        assert order.net_amount == Decimal("800.00")
-        assert order.platform_charge == Decimal("16.00")
-        assert order.gross_amount == Decimal("816.00")
+        assert order.net_amount == Decimal("900.00")
+        assert order.platform_charge == Decimal("18.00")
+        assert order.gross_amount == Decimal("918.00")
         assert db.query(FeePayment).filter_by(online_order_id=order.id).count() == 2
     finally:
         db.close()
