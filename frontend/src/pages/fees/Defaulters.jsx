@@ -119,17 +119,7 @@ function DefaulterCard({ d, resolveClassName }) {
 
 // ─── chart section (shown when "All Classes" selected) ───────────────────────
 
-function DonutLabel({ cx, cy, collected, total }) {
-  const pct = total > 0 ? ((collected / total) * 100).toFixed(1) : '0'
-  return (
-    <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle">
-      <tspan x={cx} dy="-8" fontSize="18" fontWeight="800" fill="var(--success-600)">{pct}%</tspan>
-      <tspan x={cx} dy="20" fontSize="10" fontWeight="600" fill="var(--text-tertiary)">collected</tspan>
-    </text>
-  )
-}
-
-function ChartsSection({ defaulters, monthlyData, selectedMonth, onMonthChange, loading, classes }) {
+function ChartsSection({ defaulters, monthlyData, selectedMonth, onMonthChange, loading, classes, isMobile = false }) {
   // --- Group by class name only (no division) ---
   const byClass = Object.values(
     defaulters.reduce((acc, d) => {
@@ -237,8 +227,12 @@ function ChartsSection({ defaulters, monthlyData, selectedMonth, onMonthChange, 
         )}
       </div>
 
-      {/* Row 2: Class stacked bar + Donut side by side */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:14 }}>
+      {/* Row 2: stacked on mobile, side-by-side on desktop */}
+      <div style={{
+        display:'grid',
+        gridTemplateColumns: isMobile ? '1fr' : '1fr 280px',
+        gap:14,
+      }}>
 
         {/* Stacked bar */}
         <div style={cardStyle}>
@@ -283,32 +277,40 @@ function ChartsSection({ defaulters, monthlyData, selectedMonth, onMonthChange, 
         {/* Donut */}
         <div style={{ ...cardStyle, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
           <div style={{ ...titleStyle, textAlign:'center' }}>Collection Ratio</div>
-          <PieChart width={200} height={160}>
-            <Pie
-              data={donutData}
-              cx={100}
-              cy={80}
-              innerRadius={52}
-              outerRadius={72}
-              paddingAngle={3}
-              dataKey="value"
-              startAngle={90}
-              endAngle={-270}
-              minAngle={4}
-            >
-              {donutData.map((_, i) => (
-                <Cell key={i} fill={DONUT_COLORS[i]} />
-              ))}
-            </Pie>
-            <Tooltip formatter={(v) => fmtINR(v)} />
-            {totalCollected + totalOutstanding > 0 && (
-              <DonutLabel
-                cx={100} cy={80}
-                collected={totalCollected}
-                total={totalCollected + totalOutstanding}
-              />
-            )}
-          </PieChart>
+          <ResponsiveContainer width="100%" height={180}>
+            <PieChart>
+              <Pie
+                data={donutData}
+                cx="50%"
+                cy="50%"
+                innerRadius={52}
+                outerRadius={72}
+                paddingAngle={3}
+                dataKey="value"
+                startAngle={90}
+                endAngle={-270}
+                minAngle={4}
+                labelLine={false}
+                label={({ cx, cy }) => (
+                  totalCollected + totalOutstanding > 0 ? (
+                    <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle">
+                      <tspan x={cx} dy="-8" fontSize="16" fontWeight="800" fill="var(--success-600)">
+                        {((totalCollected / (totalCollected + totalOutstanding)) * 100).toFixed(1)}%
+                      </tspan>
+                      <tspan x={cx} dy="20" fontSize="10" fontWeight="600" fill="var(--text-tertiary)">
+                        collected
+                      </tspan>
+                    </text>
+                  ) : null
+                )}
+              >
+                {donutData.map((_, i) => (
+                  <Cell key={i} fill={DONUT_COLORS[i]} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(v) => fmtINR(v)} />
+            </PieChart>
+          </ResponsiveContainer>
           <div style={{ display:'flex', gap:16, marginTop:4 }}>
             {donutData.map((d, i) => (
               <div key={i} style={{ display:'flex', alignItems:'center', gap:5, fontSize:11 }}>
@@ -356,6 +358,8 @@ export default function Defaulters() {
       const r = await feeAPI.getDefaulters(params)
       return r.data || []
     },
+    staleTime: 0,          // always re-fetch when the class/year key changes
+    placeholderData: [],   // show empty table (not stale previous class data) while loading
   })
 
   // Monthly collections — only fetch when "All Classes" is shown
@@ -382,9 +386,13 @@ export default function Defaulters() {
     return cls ? `Class ${cls.name} — ${cls.division}` : `Class ${classId}`
   }
 
-  const totalBalance     = defaulters.reduce((s, d) => s + (d.balance    || 0), 0)
-  const totalOutstanding = defaulters.reduce((s, d) => s + (d.total_due  || 0), 0)
-  const totalCollected   = defaulters.reduce((s, d) => s + (d.total_paid || 0), 0)
+  // Derive KPIs from the current (filtered) defaulters array only.
+  // Names match what is shown in the card labels — no aliasing.
+  const kpiOutstanding = defaulters.reduce((s, d) => s + (d.balance    || 0), 0)
+  const kpiBilled      = defaulters.reduce((s, d) => s + (d.total_due  || 0), 0)
+  const kpiCollected   = defaulters.reduce((s, d) => s + (d.total_paid || 0), 0)
+  // totalBalance is kept as an alias so the footer summary line still works
+  const totalBalance   = kpiOutstanding
 
   const classOptions       = classes.map(c => ({ value: String(c.id), label: `Class ${c.name} — ${c.division}` }))
   const yearOptions        = years.map(y => ({ value: String(y.id), label: y.label + (y.is_current ? ' (Current)' : '') }))
@@ -408,10 +416,10 @@ export default function Defaulters() {
 
   // KPI cards — only shown when a class is selected
   const kpiCards = [
-    { label: 'Defaulters',   value: defaulters.length,           color: 'var(--danger-600)',   bg: 'var(--danger-50)',   border: 'var(--danger-100)'   },
-    { label: 'Outstanding',  value: formatINR(totalBalance),     color: 'var(--danger-600)',   bg: 'var(--danger-50)',   border: 'var(--danger-100)'   },
-    { label: 'Total Billed', value: formatINR(totalOutstanding), color: 'var(--text-primary)', bg: 'var(--surface-0)',  border: 'var(--border-default)' },
-    { label: 'Collected',    value: formatINR(totalCollected),   color: 'var(--success-600)', bg: 'var(--success-50)', border: 'var(--success-100)'  },
+    { label: 'Defaulters',   value: defaulters.length,        color: 'var(--danger-600)',   bg: 'var(--danger-50)',   border: 'var(--danger-100)'   },
+    { label: 'Outstanding',  value: formatINR(kpiOutstanding), color: 'var(--danger-600)',   bg: 'var(--danger-50)',   border: 'var(--danger-100)'   },
+    { label: 'Total Billed', value: formatINR(kpiBilled),      color: 'var(--text-primary)', bg: 'var(--surface-0)',  border: 'var(--border-default)' },
+    { label: 'Collected',    value: formatINR(kpiCollected),   color: 'var(--success-600)', bg: 'var(--success-50)', border: 'var(--success-100)'  },
   ]
 
   return (
@@ -438,7 +446,7 @@ export default function Defaulters() {
           onChange={e => setClassFilter(e.target.value)}
           options={classOptions}
           placeholder="All Classes"
-          style={{ flex:1, minWidth:150 }}
+          style={{ flex:'1 1 140px', minWidth:0 }}
         />
         <Select
           value={yearFilter}
@@ -446,7 +454,7 @@ export default function Defaulters() {
           options={yearOptions}
           placeholder="All Years"
           disabled
-          style={{ flex:1, minWidth:150 }}
+          style={{ flex:'1 1 140px', minWidth:0 }}
         />
         {classFilter && (
           <button className="btn btn-ghost btn-sm" onClick={() => setClassFilter('')}>Clear</button>
@@ -479,6 +487,7 @@ export default function Defaulters() {
             onMonthChange={setSelectedMonth}
             loading={monthlyQuery.isLoading || monthlyQuery.isFetching}
             classes={classes}
+            isMobile={isMobile}
           />
         )
       ) : (
@@ -495,7 +504,7 @@ export default function Defaulters() {
                 PDF export will include exactly: {selectedClassLabel || 'All Classes'} · {selectedYearLabel || 'All Years'} · {defaulters.length} defaulter{defaulters.length !== 1 ? 's' : ''}.
               </div>
 
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))', gap:10, marginBottom:14 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:10, marginBottom:14 }}>
                 {kpiCards.map(s => (
                   <div key={s.label} style={{ background:s.bg, border:`1px solid ${s.border}`, borderRadius:12, padding:'12px 14px' }}>
                     <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-tertiary)', marginBottom:4 }}>{s.label}</div>

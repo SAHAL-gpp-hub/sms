@@ -13,12 +13,12 @@ Attaching to sms_backend, sms_db, sms_frontend
 sms_db  | 
 sms_db  | PostgreSQL Database directory appears to contain a database; Skipping initialization
 sms_db  | 
-sms_db  | 2026-06-21 16:59:46.747 UTC [1] LOG:  starting PostgreSQL 15.18 on aarch64-unknown-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
-sms_db  | 2026-06-21 16:59:46.748 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
-sms_db  | 2026-06-21 16:59:46.748 UTC [1] LOG:  listening on IPv6 address "::", port 5432
-sms_db  | 2026-06-21 16:59:46.767 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
-sms_db  | 2026-06-21 16:59:46.802 UTC [29] LOG:  database system was shut down at 2026-06-21 16:57:01 UTC
-sms_db  | 2026-06-21 16:59:46.825 UTC [1] LOG:  database system is ready to accept connections
+sms_db  | 2026-06-21 17:40:35.232 UTC [1] LOG:  starting PostgreSQL 15.18 on aarch64-unknown-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+sms_db  | 2026-06-21 17:40:35.234 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+sms_db  | 2026-06-21 17:40:35.235 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+sms_db  | 2026-06-21 17:40:35.237 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+sms_db  | 2026-06-21 17:40:35.242 UTC [29] LOG:  database system was shut down at 2026-06-21 17:38:37 UTC
+sms_db  | 2026-06-21 17:40:35.257 UTC [1] LOG:  database system is ready to accept connections
  Container sms_db Healthy 
  Container sms_backend Starting 
  Container sms_backend Started 
@@ -26,28 +26,28 @@ sms_db  | 2026-06-21 16:59:46.825 UTC [1] LOG:  database system is ready to acce
 sms_frontend  | /docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
 sms_frontend  | /docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
 sms_frontend  | /docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
-sms_frontend  | 10-listen-on-ipv6-by-default.sh: info: can not modify /etc/nginx/conf.d/default.conf (read-only file system?)
  Container sms_frontend Started 
+sms_frontend  | 10-listen-on-ipv6-by-default.sh: info: can not modify /etc/nginx/conf.d/default.conf (read-only file system?)
 sms_frontend  | /docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
 sms_frontend  | /docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
 sms_frontend  | /docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
 sms_frontend  | /docker-entrypoint.sh: Configuration complete; ready for start up
-sms_frontend  | 2026/06/21 16:59:53 [warn] 1#1: the "listen ... http2" directive is deprecated, use the "http2" directive instead in /etc/nginx/conf.d/default.conf:8
+sms_frontend  | 2026/06/21 17:40:41 [warn] 1#1: the "listen ... http2" directive is deprecated, use the "http2" directive instead in /etc/nginx/conf.d/default.conf:8
 sms_frontend  | nginx: [warn] the "listen ... http2" directive is deprecated, use the "http2" directive instead in /etc/nginx/conf.d/default.conf:8
-sms_frontend  | 2026/06/21 16:59:53 [notice] 1#1: using the "epoll" event method
-sms_frontend  | 2026/06/21 16:59:53 [notice] 1#1: nginx/1.31.1
-sms_frontend  | 2026/06/21 16:59:53 [notice] 1#1: built by gcc 15.2.0 (Alpine 15.2.0) 
-sms_frontend  | 2026/06/21 16:59:53 [notice] 1#1: OS: Linux 6.12.72-linuxkit
-sms_frontend  | 2026/06/21 16:59:53 [notice] 1#1: getrlimit(RLIMIT_NOFILE): 1048576:1048576
-sms_frontend  | 2026/06/21 16:59:53 [notice] 1#1: start worker processes
-sms_frontend  | 2026/06/21 16:59:53 [notice] 1#1: start worker process 21
-sms_frontend  | 2026/06/21 16:59:53 [notice] 1#1: start worker process 22
-sms_frontend  | 2026/06/21 16:59:53 [notice] 1#1: start worker process 23
-sms_frontend  | 2026/06/21 16:59:53 [notice] 1#1: start worker process 24
-sms_frontend  | 2026/06/21 16:59:53 [notice] 1#1: start worker process 25
-sms_frontend  | 2026/06/21 16:59:53 [notice] 1#1: start worker process 26
-sms_frontend  | 2026/06/21 16:59:53 [notice] 1#1: start worker process 27
-sms_frontend  | 2026/06/21 16:59:53 [notice] 1#1: start worker process 28
+sms_frontend  | 2026/06/21 17:40:41 [notice] 1#1: using the "epoll" event method
+sms_frontend  | 2026/06/21 17:40:41 [notice] 1#1: nginx/1.31.1
+sms_frontend  | 2026/06/21 17:40:41 [notice] 1#1: built by gcc 15.2.0 (Alpine 15.2.0) 
+sms_frontend  | 2026/06/21 17:40:41 [notice] 1#1: OS: Linux 6.12.72-linuxkit
+sms_frontend  | 2026/06/21 17:40:41 [notice] 1#1: getrlimit(RLIMIT_NOFILE): 1048576:1048576
+sms_frontend  | 2026/06/21 17:40:41 [notice] 1#1: start worker processes
+sms_frontend  | 2026/06/21 17:40:41 [notice] 1#1: start worker process 20
+sms_frontend  | 2026/06/21 17:40:41 [notice] 1#1: start worker process 21
+sms_frontend  | 2026/06/21 17:40:41 [notice] 1#1: start worker process 22
+sms_frontend  | 2026/06/21 17:40:41 [notice] 1#1: start worker process 23
+sms_frontend  | 2026/06/21 17:40:41 [notice] 1#1: start worker process 24
+sms_frontend  | 2026/06/21 17:40:41 [notice] 1#1: start worker process 25
+sms_frontend  | 2026/06/21 17:40:41 [notice] 1#1: start worker process 26
+sms_frontend  | 2026/06/21 17:40:41 [notice] 1#1: start worker process 27
 sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
 sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
 sms_backend   | INFO:     Will watch for changes in these directories: ['/app']
@@ -57,7 +57,68 @@ sms_backend   | INFO:     Started server process [10]
 sms_backend   | INFO:     Waiting for application startup.
 sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
 sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
-sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:00:34 +0000] "GET /api/v1/pdf/token/receipt/164 HTTP/2.0" 200 336 "https://localhost/fees/student/307" "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:40:54 +0000] "GET /fees/student/307 HTTP/2.0" 200 1231 "https://localhost/fees/defaulters" "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:40:55 +0000] "GET /assets/index-CMdqGkhE.js HTTP/2.0" 200 399090 "https://localhost/fees/student/307" "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:40:55 +0000] "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/2.0" 200 1231 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:40:55 +0000] "GET /assets/index-CL1rxbf5.css HTTP/2.0" 200 31216 "https://localhost/fees/student/307" "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:40:55 +0000] "GET /assets/auth-D_h_1456.js HTTP/2.0" 200 9712 "https://localhost/fees/student/307" "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:40:55 +0000] "GET /assets/Layout-oywmDYoJ.js HTTP/2.0" 200 12777 "-" "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:40:55 +0000] "GET /assets/academicYearContext-ClBr3ikg.js HTTP/2.0" 200 325 "-" "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:40:55 +0000] "GET /vite.svg HTTP/2.0" 200 1231 "https://localhost/fees/student/307" "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:40:55 +0000] "GET /assets/logo-ZX2l_2q9.svg HTTP/2.0" 200 2917467 "https://localhost/fees/student/307" "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:40:55 +0000] "GET /assets/StudentFees-h06QVREu.js HTTP/2.0" 200 16532 "-" "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:40:55 +0000] "GET /assets/PaymentOptions-BpRQ6cMf.js HTTP/2.0" 200 2269 "-" "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:40:55 +0000] "GET /assets/UI-L_Y3mf1n.js HTTP/2.0" 200 15233 "-" "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:40:55 +0000] "GET /api/v1/yearend/current-year HTTP/2.0" 200 112 "https://localhost/fees/student/307" "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:40:55 +0000] "GET /api/v1/auth/me HTTP/2.0" 200 302 "https://localhost/fees/student/307" "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:40:56 +0000] "GET /api/v1/yearend/years HTTP/2.0" 200 166 "https://localhost/fees/student/307" "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:40:56 +0000] "GET /api/v1/yearend/current-year HTTP/2.0" 200 112 "https://localhost/fees/student/307" "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:40:56 +0000] "GET /api/v1/yearend/current-year HTTP/2.0" 200 112 "https://localhost/fees/student/307" "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:40:56 +0000] "GET /api/v1/fees/payments/307 HTTP/2.0" 200 394 "https://localhost/fees/student/307" "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:40:56 +0000] "GET /api/v1/fees/payment-options/307 HTTP/2.0" 200 512 "https://localhost/fees/student/307" "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:40:56 +0000] "GET /api/v1/fees/ledger/307 HTTP/2.0" 200 778 "https://localhost/fees/student/307" "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:15 +0000] "GET /fees/student/307 HTTP/2.0" 304 0 "https://localhost/fees/defaulters" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:15 +0000] "GET /assets/index-CMdqGkhE.js HTTP/2.0" 304 0 "https://localhost/fees/student/307" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:15 +0000] "GET /assets/auth-D_h_1456.js HTTP/2.0" 304 0 "https://localhost/fees/student/307" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:15 +0000] "GET /assets/index-CL1rxbf5.css HTTP/2.0" 304 0 "https://localhost/fees/student/307" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:15 +0000] "GET /assets/Layout-oywmDYoJ.js HTTP/2.0" 304 0 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:15 +0000] "GET /assets/academicYearContext-ClBr3ikg.js HTTP/2.0" 304 0 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:15 +0000] "GET /vite.svg HTTP/2.0" 304 0 "https://localhost/fees/student/307" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:15 +0000] "GET /assets/logo-ZX2l_2q9.svg HTTP/2.0" 304 0 "https://localhost/fees/student/307" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:15 +0000] "GET /assets/UI-L_Y3mf1n.js HTTP/2.0" 304 0 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:15 +0000] "GET /assets/StudentFees-h06QVREu.js HTTP/2.0" 304 0 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:15 +0000] "GET /assets/PaymentOptions-BpRQ6cMf.js HTTP/2.0" 304 0 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:15 +0000] "GET /api/v1/yearend/current-year HTTP/2.0" 200 112 "https://localhost/fees/student/307" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:15 +0000] "GET /api/v1/auth/me HTTP/2.0" 200 302 "https://localhost/fees/student/307" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:15 +0000] "GET /api/v1/yearend/current-year HTTP/2.0" 200 112 "https://localhost/fees/student/307" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:15 +0000] "GET /api/v1/yearend/years HTTP/2.0" 200 166 "https://localhost/fees/student/307" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:15 +0000] "GET /api/v1/yearend/current-year HTTP/2.0" 200 112 "https://localhost/fees/student/307" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:15 +0000] "GET /api/v1/fees/ledger/307 HTTP/2.0" 200 778 "https://localhost/fees/student/307" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:15 +0000] "GET /api/v1/fees/payments/307 HTTP/2.0" 200 394 "https://localhost/fees/student/307" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:15 +0000] "GET /api/v1/fees/payment-options/307 HTTP/2.0" 200 512 "https://localhost/fees/student/307" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:16 +0000] "GET /assets/Defaulters-Lt3qtu2_.js HTTP/2.0" 200 17449 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:16 +0000] "GET /assets/PieChart-Bqz9e2fn.js HTTP/2.0" 200 364271 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:16 +0000] "GET /assets/useQuery-BNprBQEP.js HTTP/2.0" 200 8730 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:16 +0000] "GET /assets/AreaChart-BHudeQ2a.js HTTP/2.0" 200 23941 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:17 +0000] "GET /api/v1/fees/monthly-collections?month=6&academic_year_id=1 HTTP/2.0" 200 252 "https://localhost/fees/defaulters" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:17 +0000] "GET /api/v1/setup/classes?academic_year_id=1 HTTP/2.0" 200 3227 "https://localhost/fees/defaulters" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:17 +0000] "GET /api/v1/fees/defaulters?academic_year_id=1 HTTP/2.0" 200 135232 "https://localhost/fees/defaulters" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:21 +0000] "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/2.0" 304 0 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:31 +0000] "GET /api/v1/fees/defaulters?class_id=6&academic_year_id=1 HTTP/2.0" 200 3089 "https://localhost/fees/defaulters" "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:47 +0000] "GET /api/v1/fees/defaulters?class_id=45&academic_year_id=1 HTTP/2.0" 200 3013 "https://localhost/fees/defaulters" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:51 +0000] "GET /vite.svg HTTP/2.0" 304 0 "https://localhost/fees/student/899" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:51 +0000] "GET /api/v1/fees/payments/899 HTTP/2.0" 200 2 "https://localhost/fees/student/899" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:51 +0000] "GET /api/v1/fees/payment-options/899 HTTP/2.0" 200 830 "https://localhost/fees/student/899" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:51 +0000] "GET /api/v1/fees/ledger/899 HTTP/2.0" 200 786 "https://localhost/fees/student/899" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:55 +0000] "POST /api/v1/fees/payment HTTP/2.0" 201 512 "https://localhost/fees/student/899" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:55 +0000] "GET /api/v1/fees/payment-options/899 HTTP/2.0" 200 518 "https://localhost/fees/student/899" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:55 +0000] "GET /api/v1/fees/ledger/899 HTTP/2.0" 200 789 "https://localhost/fees/student/899" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:55 +0000] "GET /api/v1/fees/payments/899 HTTP/2.0" 200 395 "https://localhost/fees/student/899" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:57 +0000] "GET /api/v1/pdf/token/receipt/167 HTTP/2.0" 200 336 "https://localhost/fees/student/899" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
 sms_backend   | WARNI [weasyprint] Ignored `print-color-adjust: exact` at 14:13, unknown property.
-sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:00:35 +0000] "GET /api/v1/pdf/receipt/164?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzgyMDYxMjk0LCJpYXQiOjE3ODIwNjEyMzQsImp0aSI6IjY1MDZkYmM4LWQ0ZTYtNGZlMy04MDAwLTZiYmQ2Y2VkMzQ3MSIsInR5cCI6InBkZi1kb3dubG9hZCIsInJlc291cmNlIjoicmVjZWlwdDoxNjQifQ.7ptxTjVWhauGmBzE1EAx1a8JZQqiZ5ShzipNqtInQF8 HTTP/2.0" 200 148657 "https://localhost/fees/student/307" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:00:35 +0000] "GET /favicon.ico HTTP/2.0" 200 1231 "https://localhost/api/v1/pdf/receipt/164?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzgyMDYxMjk0LCJpYXQiOjE3ODIwNjEyMzQsImp0aSI6IjY1MDZkYmM4LWQ0ZTYtNGZlMy04MDAwLTZiYmQ2Y2VkMzQ3MSIsInR5cCI6InBkZi1kb3dubG9hZCIsInJlc291cmNlIjoicmVjZWlwdDoxNjQifQ.7ptxTjVWhauGmBzE1EAx1a8JZQqiZ5ShzipNqtInQF8" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:58 +0000] "GET /api/v1/pdf/receipt/167?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzgyMDYzNzc3LCJpYXQiOjE3ODIwNjM3MTcsImp0aSI6IjY2ODQ0NDVmLTlkMWMtNGFiNi04ZjUzLTEzYzljMDgxNDU1YyIsInR5cCI6InBkZi1kb3dubG9hZCIsInJlc291cmNlIjoicmVjZWlwdDoxNjcifQ.M5-DjyvOqLc7al35cZPhUTt-V_DHrnO1-q6VZtyQEtw HTTP/2.0" 200 148814 "https://localhost/fees/student/899" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:41:58 +0000] "GET /favicon.ico HTTP/2.0" 200 1231 "https://localhost/api/v1/pdf/receipt/167?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzgyMDYzNzc3LCJpYXQiOjE3ODIwNjM3MTcsImp0aSI6IjY2ODQ0NDVmLTlkMWMtNGFiNi04ZjUzLTEzYzljMDgxNDU1YyIsInR5cCI6InBkZi1kb3dubG9hZCIsInJlc291cmNlIjoicmVjZWlwdDoxNjcifQ.M5-DjyvOqLc7al35cZPhUTt-V_DHrnO1-q6VZtyQEtw" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:42:03 +0000] "GET /api/v1/setup/classes?academic_year_id=1 HTTP/2.0" 200 3227 "https://localhost/fees/defaulters" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:42:03 +0000] "GET /api/v1/fees/monthly-collections?month=6&academic_year_id=1 HTTP/2.0" 200 252 "https://localhost/fees/defaulters" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:42:03 +0000] "GET /api/v1/fees/defaulters?academic_year_id=1 HTTP/2.0" 200 135071 "https://localhost/fees/defaulters" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [21/Jun/2026:17:42:07 +0000] "GET /api/v1/fees/defaulters?class_id=45&academic_year_id=1 HTTP/2.0" 200 2852 "https://localhost/fees/defaulters" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
