@@ -81,6 +81,73 @@ export async function openSignedPdf(tokenPath, pdfPath, params = {}) {
   }
 }
 
+// Like openSignedPdf, but for endpoints that render in a background job and
+// return { job_id, poll_url } instead of a PDF. Polls the status endpoint
+// until the PDF is ready, then streams it into the same popup as a blob.
+// Used for the class marksheet (40 students → too slow for a sync request).
+export async function openSignedPdfWithPoll(tokenPath, pdfPath, params = {}, opts = {}) {
+  const pollIntervalMs = opts.pollIntervalMs ?? 1500
+  const timeoutMs = opts.timeoutMs ?? 120000
+  const popup = createPdfLoadingWindow()
+  try {
+    const { data } = await api.get(tokenPath, { params })
+    const query = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.set(key, value)
+    })
+    query.set('token', data.token)
+
+    // First hit returns {job_id, poll_url}; subsequent hits are the PDF blob
+    // (done), a 500 (error), or {status:"pending"}.
+    const startUrl = `/api/v1${pdfPath}?${query.toString()}`
+    const started = await api.get(startUrl, { params })
+    if (started.data?.job_id && started.data?.poll_url) {
+      const deadline = Date.now() + timeoutMs
+      const statusUrl = `/api/v1${started.data.poll_url.replace(/^\/api\/v1/, '')}`
+      while (Date.now() < deadline) {
+        let res
+        try {
+          res = await api.get(statusUrl, { responseType: 'blob', validateStatus: s => s < 500 })
+        } catch {
+          // network blip — keep polling until timeout
+          await new Promise(r => setTimeout(r, pollIntervalMs))
+          continue
+        }
+        if (res.status === 200 && res.data?.type?.includes('application/pdf')) {
+          const blobUrl = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
+          if (popup) {
+            popup.location.replace(blobUrl)
+            setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000)
+          } else {
+            window.open(blobUrl, '_blank', 'noopener,noreferrer')
+          }
+          return
+        }
+        if (res.status >= 400) {
+          // 500 = render failed; read the detail message from the blob if possible
+          let detail = 'PDF generation failed'
+          try {
+            detail = JSON.parse(await res.data.text())?.detail || detail
+          } catch { /* keep default */ }
+          throw new Error(detail)
+        }
+        await new Promise(r => setTimeout(r, pollIntervalMs))
+      }
+      throw new Error('PDF generation timed out — please try again.')
+    }
+
+    // Backward-compat: endpoint returned a PDF directly (no job).
+    if (started.data?.type?.includes('application/pdf')) {
+      const blobUrl = window.URL.createObjectURL(new Blob([started.data], { type: 'application/pdf' }))
+      if (popup) popup.location.replace(blobUrl)
+      else window.open(blobUrl, '_blank', 'noopener,noreferrer')
+    }
+  } catch (err) {
+    if (popup && !popup.closed) popup.close()
+    throw err
+  }
+}
+
 export async function openProtectedPdf(path, params = {}, fallbackFileName = 'document.pdf') {
   const popup = createPdfLoadingWindow()
   try {

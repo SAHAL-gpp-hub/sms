@@ -145,6 +145,22 @@ async def lifespan(app: FastAPI):
             )
     else:
         logger.info("Skipping startup database initialization because the database dependency is overridden.")
+
+    # ── WeasyPrint warm-up ───────────────────────────────────────────────────
+    # The first WeasyPrint call per process pays a 2–4s import + font/CSS init
+    # cost. Prime it in a daemon thread at boot so no real request eats that.
+    import threading
+
+    def _warmup_weasyprint():
+        try:
+            from weasyprint import HTML
+            HTML(string="<html><body>.</body></html>").write_pdf()
+            logger.info("WeasyPrint warmed up.")
+        except Exception:  # noqa: BLE001 — never block boot on warm-up failure
+            logger.warning("WeasyPrint warm-up failed; first request will pay init cost.", exc_info=True)
+
+    threading.Thread(target=_warmup_weasyprint, daemon=True).start()
+
     app.state.notification_stop_event = asyncio.Event()
     app.state.notification_worker_task = None
     app.state.token_cleanup_stop_event = asyncio.Event()

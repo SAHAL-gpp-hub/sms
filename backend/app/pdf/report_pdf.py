@@ -1,24 +1,41 @@
+import base64
+import io
+import logging
+import os
+from datetime import date
+from functools import lru_cache
+
 from jinja2 import Environment, FileSystemLoader
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
+
 from app.models.base_models import (
     AcademicYear, Class, Enrollment, Exam,
-    FeePayment, Student, StudentFee,
+    FeePayment, FeeStructure, Student, StudentFee,
 )
-from app.services.fee_service import get_defaulters
+from app.pdf import pdf_cache
 from app.services.attendance_service import get_monthly_summary
+from app.services.fee_service import get_defaulters
 from app.services.marks_service import get_class_results, get_subjects
-from datetime import date
-import os
+
+logger = logging.getLogger("sms.pdf")
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__))
 MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
           'July', 'August', 'September', 'October', 'November', 'December']
 
+# ── Fix 2: a single long-lived Jinja2 environment per module ──────────────────
+# Previously every render function rebuilt Environment(loader=FileSystemLoader),
+# which re-reads and re-compiles template source on every request. Jinja2 caches
+# compiled templates on the Environment, so a module-level env amortizes that.
+_env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
+_env.finalize = lambda x: '' if x is None else x  # render None as "" like before
+
 
 def _html_renderer():
     from weasyprint import HTML
     return HTML
+
 
 def _render_pdf(html: str) -> bytes:
     return _html_renderer()(
@@ -27,21 +44,51 @@ def _render_pdf(html: str) -> bytes:
     ).write_pdf()
 
 
+# ── Fix 1: embed the logo as a base64 data URL once, at first use ─────────────
+# Before, every render resolved `logo.jpeg` from disk via base_url (and once per
+# page for multi-page docs). Reading it once and caching the data URL removes
+# all per-render disk I/O.
+@lru_cache(maxsize=1)
+def _logo_b64() -> str:
+    path = os.path.join(TEMPLATE_DIR, "logo.jpeg")
+    try:
+        with open(path, "rb") as f:
+            data = base64.b64encode(f.read()).decode()
+        return f"data:image/jpeg;base64,{data}"
+    except OSError as exc:
+        logger.warning("Could not read logo at %s: %s — templates will fall back.", path, exc)
+        return ""
+
+
+# ── Fix 4 helper: merge multiple single-page PDFs into one document ──────────
+def _merge_pdfs(pdf_list: list[bytes]) -> bytes:
+    from pypdf import PdfWriter
+    writer = PdfWriter()
+    for pdf_bytes in pdf_list:
+        writer.append(io.BytesIO(pdf_bytes))
+    buf = io.BytesIO()
+    writer.write(buf)
+    return buf.getvalue()
+
+
 def render_defaulter_report(db: Session, academic_year_id: int = None) -> bytes:
-    defaulters = get_defaulters(db, academic_year_id=academic_year_id)
+    # link_legacy=False: the defaulter PDF is a READ path. Self-healing of legacy
+    # unlinked fees is a write and should not run on every report download — the
+    # interactive defaulters list (admin UI) keeps link_legacy=True.
+    defaulters = get_defaulters(db, academic_year_id=academic_year_id, link_legacy=False)
     year = db.query(AcademicYear).filter_by(is_current=True).first()
 
     total_outstanding = sum(d["balance"] for d in defaulters)
     total_collected = sum(d["total_paid"] for d in defaulters)
 
-    env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
-    template = env.get_template("defaulter_report.html")
+    template = _env.get_template("defaulter_report.html")
     html = template.render(
         defaulters=defaulters,
         academic_year=year.label if year else "2025-26",
         total_outstanding=total_outstanding,
         total_collected=total_collected,
-        generated_date=date.today().strftime("%d %B %Y")
+        generated_date=date.today().strftime("%d %B %Y"),
+        logo_src=_logo_b64(),
     )
     return _render_pdf(html)
 
@@ -50,14 +97,14 @@ def render_attendance_report(db: Session, class_id: int, year: int, month: int) 
     cls = db.query(Class).filter_by(id=class_id).first()
     summary = get_monthly_summary(db, class_id, year, month)
 
-    env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
-    template = env.get_template("attendance_report.html")
+    template = _env.get_template("attendance_report.html")
     html = template.render(
         summary=summary,
         class_name=cls.name if cls else "—",
         month_name=MONTHS[month - 1],
         year=year,
-        generated_date=date.today().strftime("%d %B %Y")
+        generated_date=date.today().strftime("%d %B %Y"),
+        logo_src=_logo_b64(),
     )
     return _render_pdf(html)
 
@@ -75,16 +122,15 @@ def render_result_report(db: Session, exam_id: int, class_id: int) -> bytes:
     if not results:
         return None
 
-    env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
-    env.finalize = lambda x: '' if x is None else x
-    template = env.get_template("result_report.html")
+    template = _env.get_template("result_report.html")
     html = template.render(
         results=results,
         subjects=subject_names,
         class_name=cls.name if cls else "—",
         exam_name=exam.name if exam else "Exam",
         academic_year=year.label if year else "2025-26",
-        generated_date=date.today().strftime("%d %B %Y")
+        generated_date=date.today().strftime("%d %B %Y"),
+        logo_src=_logo_b64(),
     )
     return _render_pdf(html)
 
@@ -95,9 +141,8 @@ def render_tc_pdf(db: Session, student_id: int, reason: str, conduct: str) -> by
     if not data:
         return None
 
-    env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
-    template = env.get_template("tc_template.html")
-    html = template.render(**data)
+    template = _env.get_template("tc_template.html")
+    html = template.render(**data, logo_src=_logo_b64())
     return _render_pdf(html)
 
 
@@ -109,7 +154,19 @@ def render_fee_receipt_pdf(db: Session, payment_id: int) -> bytes | None:
     payment_id are grouped onto ONE receipt — so paying ₹750 split across
     Tuition/Exam/Activity produces a single receipt listing all three lines,
     not three separate PDFs.
+
+    Fix 3: previously fired one SUM(amount_paid) query per sibling payment AND
+    one per StudentFee in `all_student_fees` (5–10 queries for a typical split
+    payment). Now both are collapsed into a single grouped query.
+    Fix 8: receipts are immutable once a payment is recorded, so the rendered
+    PDF is cached in Redis for repeat downloads.
     """
+    # ── Fix 8: serve from cache before doing any DB work ──────────────────────
+    cache_key = pdf_cache.receipt_key(payment_id)
+    cached = pdf_cache.cache_get(cache_key)
+    if cached:
+        return cached
+
     payment = db.query(FeePayment).filter(FeePayment.id == payment_id).first()
     if not payment:
         return None
@@ -149,36 +206,12 @@ def render_fee_receipt_pdf(db: Session, payment_id: int) -> bytes | None:
     else:
         cls = None
 
-    # ── Build allocation rows (one per sibling payment) ──────────────
-    allocations = []
-    total_amount_paid = 0.0
-
-    for p in sibling_payments:
-        sf = db.query(StudentFee).filter_by(id=p.student_fee_id).first()
-        if not sf:
-            continue
-
-        fee_head_name = "General Fee"
-        if sf.fee_structure is not None and sf.fee_structure.fee_head is not None:
-            fee_head_name = sf.fee_structure.fee_head.name
-
-        total_paid_for_sf = float(
-            db.query(func.coalesce(func.sum(FeePayment.amount_paid), 0))
-            .filter(FeePayment.student_fee_id == sf.id)
-            .scalar()
-        )
-        balance_after = max(0.0, float(sf.net_amount) - total_paid_for_sf)
-
-        allocations.append({
-            "fee_head_name": fee_head_name,
-            "amount_paid": float(p.amount_paid or 0),
-            "balance_after": balance_after,
-        })
-        total_amount_paid += float(p.amount_paid or 0)
-
     # ── Total outstanding across ALL student fees ────────────────────
+    # Fetched BEFORE allocations because the joined StudentFee rows (with their
+    # fee_head names) are reused for both code paths below.
     all_student_fees = (
         db.query(StudentFee)
+        .options(joinedload(StudentFee.fee_structure).joinedload(FeeStructure.fee_head))
         .outerjoin(Enrollment, Enrollment.id == StudentFee.enrollment_id)
         .filter(
             or_(
@@ -188,19 +221,63 @@ def render_fee_receipt_pdf(db: Session, payment_id: int) -> bytes | None:
         )
         .all()
     )
+    all_sf_ids = {sf.id for sf in all_student_fees}
+    sibling_sf_ids = {p.student_fee_id for p in sibling_payments}
+
+    # ── Fix 3: ONE grouped query for every paid-to-date sum we need ────────
+    # Covers both the per-StudentFee balances (for the receipt's sibling rows
+    # and the total outstanding). Replaces one SUM query per fee head.
+    ids_for_paid_sums = list(all_sf_ids | sibling_sf_ids)
+    paid_sums: dict[int, float] = {}
+    if ids_for_paid_sums:
+        rows = (
+            db.query(
+                FeePayment.student_fee_id,
+                func.coalesce(func.sum(FeePayment.amount_paid), 0),
+            )
+            .filter(FeePayment.student_fee_id.in_(ids_for_paid_sums))
+            .group_by(FeePayment.student_fee_id)
+            .all()
+        )
+        paid_sums = {sf_id: float(total) for sf_id, total in rows}
+
+    # Index all_student_fees by id so sibling rows resolve without per-row queries
+    sf_by_id = {sf.id: sf for sf in all_student_fees}
+
+    # ── Build allocation rows (one per sibling payment) ──────────────
+    allocations = []
+    total_amount_paid = 0.0
+
+    for p in sibling_payments:
+        sf = sf_by_id.get(p.student_fee_id)
+        if sf is None:
+            # Sibling fee isn't in the student's own set — fetch once as a fallback
+            sf = db.query(StudentFee).filter_by(id=p.student_fee_id).first()
+        if not sf:
+            continue
+
+        fee_head_name = "General Fee"
+        if sf.fee_structure is not None and sf.fee_structure.fee_head is not None:
+            fee_head_name = sf.fee_structure.fee_head.name
+
+        total_paid_for_sf = paid_sums.get(sf.id, 0.0)
+        balance_after = max(0.0, float(sf.net_amount) - total_paid_for_sf)
+
+        allocations.append({
+            "fee_head_name": fee_head_name,
+            "amount_paid": float(p.amount_paid or 0),
+            "balance_after": balance_after,
+        })
+        total_amount_paid += float(p.amount_paid or 0)
+
+    # ── Total outstanding (from pre-fetched paid_sums dict — no DB calls) ───
     total_balance_after = 0.0
     for sf in all_student_fees:
-        paid = float(
-            db.query(func.coalesce(func.sum(FeePayment.amount_paid), 0))
-            .filter(FeePayment.student_fee_id == sf.id)
-            .scalar()
-        )
+        paid = paid_sums.get(sf.id, 0.0)
         total_balance_after += max(0.0, float(sf.net_amount) - paid)
 
     # ── Render consolidated receipt ───────────────────────────────────
-    # ── Render consolidated receipt ───────────────────────────────────
-    env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
-    template = env.get_template("fee_receipt_template.html")
+    template = _env.get_template("fee_receipt_template.html")
     html = template.render(
         receipt={
             "receipt_number": payment.receipt_number,
@@ -217,6 +294,12 @@ def render_fee_receipt_pdf(db: Session, payment_id: int) -> bytes | None:
                 for a in allocations
             ],
             "total_paid": "{:,.0f}".format(total_amount_paid),
-        }
+        },
+        logo_src=_logo_b64(),
     )
-    return _render_pdf(html)
+    pdf = _render_pdf(html)
+
+    # ── Fix 8: cache the rendered PDF for repeat downloads ────────────────
+    if pdf:
+        pdf_cache.cache_set(cache_key, pdf)
+    return pdf

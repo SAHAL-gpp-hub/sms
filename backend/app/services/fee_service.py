@@ -660,24 +660,33 @@ def get_defaulters(
     db: Session,
     class_id: Optional[int] = None,
     academic_year_id: Optional[int] = None,
+    link_legacy: bool = True,
 ):
     """
     Returns students with outstanding fee balance, using a single SQL query
     with GROUP BY instead of a Python loop with one query per student.
+
+    link_legacy: when True (default), self-heal any StudentFee rows that lack
+        an enrollment_id by linking them to their Enrollment. This is a WRITE
+        and must not run on every read path — pass link_legacy=False from the
+        defaulter PDF report, and keep True only for the interactive admin
+        defaulters list. Once the data is fully migrated (no legacy unlinked
+        rows), this flag and the linking block can be removed entirely.
     """
-    ensure_enrollments_for_legacy_students(db)
-    unlinked_fees = db.query(StudentFee).filter(StudentFee.enrollment_id.is_(None)).all()
-    linked_any = False
-    for fee in unlinked_fees:
-        enrollment = db.query(Enrollment).filter_by(
-            student_id=fee.student_id,
-            academic_year_id=fee.academic_year_id,
-        ).first()
-        if enrollment:
-            fee.enrollment_id = enrollment.id
-            linked_any = True
-    if linked_any:
-        db.commit()
+    if link_legacy:
+        ensure_enrollments_for_legacy_students(db)
+        unlinked_fees = db.query(StudentFee).filter(StudentFee.enrollment_id.is_(None)).all()
+        linked_any = False
+        for fee in unlinked_fees:
+            enrollment = db.query(Enrollment).filter_by(
+                student_id=fee.student_id,
+                academic_year_id=fee.academic_year_id,
+            ).first()
+            if enrollment:
+                fee.enrollment_id = enrollment.id
+                linked_any = True
+        if linked_any:
+            db.commit()
     payment_totals = (
         db.query(
             FeePayment.student_fee_id.label("student_fee_id"),

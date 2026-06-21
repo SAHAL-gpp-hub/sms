@@ -3,7 +3,7 @@
 import { memo, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { marksAPI, setupAPI, extractError, openSignedPdf } from '../../services/api'
+import { marksAPI, setupAPI, extractError, openSignedPdf, openSignedPdfWithPoll } from '../../services/api'
 import {
   PageHeader, FilterRow, Select, EmptyState,
   TableSkeleton, TabBar, InlineBanner, ConfirmModal, ReadonlyBanner, ScreenState,
@@ -2191,7 +2191,7 @@ export default function MarksEntry() {
                   Class Result PDF
                 </button>
                 <button
-                  onClick={() => openSignedPdf(`/pdf/token/marksheet/class/${selectedClass}`, `/pdf/marksheet/class/${selectedClass}`, { exam_id: selectedExam })}
+                  onClick={() => openSignedPdfWithPoll(`/pdf/token/marksheet/class/${selectedClass}`, `/pdf/marksheet/class/${selectedClass}`, { exam_id: selectedExam })}
                   className="btn btn-secondary"
                   style={{ textDecoration: 'none', fontSize: '12.5px' }}
                 >

@@ -1,7 +1,7 @@
 // Reports.jsx — Refined professional UI
 import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
-import { extractError, marksAPI, openSignedPdf, reportCardsAPI, setupAPI } from '../../services/api'
+import { extractError, marksAPI, openSignedPdf, openSignedPdfWithPoll, reportCardsAPI, setupAPI } from '../../services/api'
 import { getAuthUser } from '../../services/auth'
 import { PageHeader, Select } from '../../components/UI'
 import { useAcademicYear } from '../../contexts/academicYearContext'
@@ -442,7 +442,7 @@ export default function Reports() {
               href="#"
               onClick={async e => {
                 e.preventDefault()
-                await openSignedPdf(`/pdf/token/marksheet/class/${msClass}`, `/pdf/marksheet/class/${msClass}`, { exam_id: msExam })
+                await openSignedPdfWithPoll(`/pdf/token/marksheet/class/${msClass}`, `/pdf/marksheet/class/${msClass}`, { exam_id: msExam })
                 setTimeout(refreshReportCards, 1200)
               }}
               label="Download Marksheets"

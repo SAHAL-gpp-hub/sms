@@ -1,14 +1,16 @@
 """PDF download routes guarded by short-lived signed URL tokens."""
 
+import logging
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 from typing import Optional
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
 from app.core.security import create_access_token, decode_access_token
 from app.models.base_models import Enrollment, FeePayment, StudentFee
 from app.routers.auth import CurrentUser, ensure_class_access, ensure_student_access, require_role
+from app.pdf import job_store
 from app.pdf.marksheet_pdf import render_marksheet_pdf
 from app.pdf.report_pdf import (
     render_fee_receipt_pdf,
@@ -17,6 +19,8 @@ from app.pdf.report_pdf import (
     render_result_report
 )
 from app.services import report_card_service
+
+logger = logging.getLogger("sms.pdf.router")
 
 router = APIRouter(prefix="/api/v1/pdf", tags=["PDF"])
 
@@ -161,19 +165,72 @@ def generate_class_marksheet(
     class_id: int,
     exam_id: int = Query(...),
     token: str | None = Query(None),
-    db: Session = Depends(get_db)
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db),
 ):
+    """Kick off a class marksheet as a background job and return a poll URL.
+
+    A full-class marksheet (40 students) can take 10–20s to render even when
+    parallelized — too long for a synchronous request that browsers/proxies
+    may time out. The client polls GET /marksheet/class/{id}/status/{job_id}
+    until the PDF is ready, then navigates to it.
+
+    NB: this endpoint now returns JSON ({job_id, poll_url}) instead of a PDF.
+    """
     _require_pdf_token(token, f"marksheet:class:{class_id}:exam:{exam_id}")
-    pdf = render_marksheet_pdf(db, exam_id, class_id)
-    if not pdf:
-        raise HTTPException(status_code=404, detail="No marks found for this class")
-    report_card_service.upsert_class_report_cards(db, class_id=class_id, exam_id=exam_id)
-    db.commit()
-    return Response(
-        content=pdf,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"inline; filename=marksheet_class_{class_id}.pdf"}
-    )
+    jid = job_store.create_job()
+
+    def _run():
+        # Use a fresh session — BackgroundTasks run after the request session
+        # has been closed by the get_db dependency.
+        with SessionLocal() as job_db:
+            try:
+                pdf = render_marksheet_pdf(job_db, exam_id, class_id)
+                if not pdf:
+                    job_store.set_error(jid, "No marks found for this class")
+                    return
+                report_card_service.upsert_class_report_cards(
+                    job_db, class_id=class_id, exam_id=exam_id
+                )
+                job_db.commit()
+                job_store.set_done(jid, pdf)
+            except Exception as exc:  # noqa: BLE001 — surface any failure to the client
+                logger.exception("Class marksheet job %s failed", jid)
+                job_store.set_error(jid, str(exc))
+
+    if background_tasks is not None:
+        background_tasks.add_task(_run)
+    else:  # defensive — FastAPI always injects BackgroundTasks
+        _run()
+
+    return JSONResponse({
+        "job_id": jid,
+        "status": "pending",
+        "poll_url": f"/api/v1/pdf/marksheet/class/{class_id}/status/{jid}",
+    })
+
+
+@router.get("/marksheet/class/{class_id}/status/{job_id}")
+def class_marksheet_status(class_id: int, job_id: str):
+    """Poll a class marksheet job. Returns pending JSON, the PDF, or an error."""
+    job = job_store.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job["status"] == "done":
+        pdf = job["pdf"]
+        job_store.cleanup(job_id)  # free memory now that the client has it
+        return Response(
+            content=pdf,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"inline; filename=marksheet_class_{class_id}.pdf",
+                "Cache-Control": "no-store",
+            },
+        )
+    if job["status"] == "error":
+        job_store.cleanup(job_id)
+        raise HTTPException(status_code=500, detail=job["error"])
+    return {"status": "pending", "job_id": job_id}
 
 
 @router.get("/report/defaulters")
