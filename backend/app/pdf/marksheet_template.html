@@ -2,12 +2,9 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Fee Receipt — Iqra English Medium School</title>
+    <title>Student Marksheet — Iqra English Medium School</title>
     <style>
-        @page {
-            size: A4;
-            margin: 16mm 18mm;
-        }
+        @page { size: A4; margin: 10mm 12mm; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
@@ -19,88 +16,63 @@
             print-color-adjust: exact;
         }
 
-        /* ── RECEIPT SHELL ── */
-        .receipt {
+        /* ── SHELL ── */
+        .result-incomplete {
+            display: inline-block;
+            padding: 5px 22px;
+            font-size: 14px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            background: #fff8e6;
+            color: #b7791f;
+            border: 1.5px solid #f6ad55;
+        }
+
+    .result-locked {
+        display: inline-block;
+        padding: 5px 22px;
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: 2px;
+        background: #edf2f7;
+        color: #4a5568;
+        border: 1.5px solid #718096;
+    }
+        .marksheet {
             border: 1.5px solid #1a3a6b;
-            padding: 20px 24px 24px;
+            padding: 18px 20px 20px;
             background: white;
-            min-height: 250mm;
+            min-height: 267mm;
             display: flex;
             flex-direction: column;
         }
+        .page-break { page-break-after: always; }
 
         /* ── HEADER ── */
-        .header-wrapper {
-            display: table;
+        .header-table {
             width: 100%;
-            border-bottom: 2.5px solid #1a3a6b;
-            padding-bottom: 14px;
-            margin-bottom: 16px;
+            border-collapse: collapse;
+            border-bottom: 2px solid #1a3a6b;
+            margin-bottom: 14px;
         }
-        .header-logo-cell {
-            display: table-cell;
-            width: 68px;
-            vertical-align: middle;
-        }
-        .header-logo-cell img {
-            width: 56px;
-            height: 56px;
-            display: block;
+        .header-table td { vertical-align: middle; padding: 0 0 12px 0; }
+        .logo-cell { width: 66px; }
+        .school-logo {
+            width: 56px; height: 56px;
             object-fit: contain;
-        }
-        .header-school-cell {
-            display: table-cell;
-            vertical-align: middle;
-            padding-left: 10px;
+            display: block;
         }
         .school-name {
-            font-size: 20px;
-            font-weight: 700;
-            color: #1a3a6b;
-            letter-spacing: 0.4px;
-            line-height: 1.2;
+            font-size: 20px; font-weight: 700;
+            color: #1a3a6b; letter-spacing: 0.5px;
         }
-        .school-address {
-            font-size: 11px;
-            color: #555;
-            margin-top: 3px;
-        }
-        .header-receipt-cell {
-            display: table-cell;
-            vertical-align: middle;
-            text-align: right;
-            white-space: nowrap;
-        }
-        .receipt-title {
-            font-size: 15px;
-            font-weight: 700;
-            color: #1a3a6b;
-            text-transform: uppercase;
+        .exam-cell { text-align: right; white-space: nowrap; }
+        .report-title {
+            font-size: 14px; font-weight: 700;
+            color: #1a3a6b; text-transform: uppercase;
             letter-spacing: 1.5px;
         }
-        .receipt-number {
-            font-size: 11px;
-            color: #555;
-            margin-top: 4px;
-        }
-        .receipt-date {
-            font-size: 11px;
-            color: #555;
-            margin-top: 2px;
-        }
-
-        /* ── SECTION TITLE ── */
-        .section-title {
-            font-size: 10px;
-            font-weight: 700;
-            color: #1a3a6b;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            border-left: 3px solid #1a3a6b;
-            padding-left: 7px;
-            margin-bottom: 8px;
-            margin-top: 14px;
-        }
+        .report-year { font-size: 11px; color: #718096; margin-top: 4px; }
 
         /* ── STUDENT INFO ── */
         .info-table {
@@ -109,187 +81,156 @@
             background: #f4f7fc;
             border: 1px solid #d0daf0;
             border-left: 3px solid #2a5298;
-            margin-bottom: 4px;
+            margin-bottom: 14px;
+            table-layout: fixed;
         }
         .info-table td {
-            padding: 6px 10px 5px 10px;
+            padding: 6px 8px 4px 8px;
             vertical-align: bottom;
+            word-break: break-word;
+            overflow: hidden;
         }
         .info-label {
-            font-size: 9px;
-            font-weight: 700;
-            color: #718096;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            display: block;
-            margin-bottom: 2px;
-        }
-        .info-value {
-            font-size: 12px;
-            font-weight: 600;
-            color: #111;
-            border-bottom: 1px dotted #b0bcdb;
-            display: block;
+            font-size: 9.5px; font-weight: 700;
+            color: #718096; text-transform: uppercase;
+            letter-spacing: 0.4px;
             padding-bottom: 2px;
         }
-        .info-divider {
-            width: 16px;
+        .info-value {
+            font-size: 12px; font-weight: 600; color: #111;
+            border-bottom: 1px dotted #b0bcdb;
+            padding-bottom: 2px;
         }
 
-        /* ── PAYMENT TABLE ── */
-        .payment-table {
+        /* ── MARKS TABLE ── */
+        .marks-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 6px;
+            margin-bottom: 14px;
+            flex: 1;
         }
-        .payment-table thead tr {
+        .marks-table th {
             background: #1a3a6b;
-        }
-        .payment-table th {
             color: white;
-            padding: 9px 12px;
-            font-size: 11px;
-            font-weight: 600;
-            text-align: left;
+            padding: 9px 6px;
+            font-size: 11px; font-weight: 600;
+            text-align: center;
         }
-        .payment-table th.col-amount {
-            text-align: right;
-        }
-        .payment-table td {
-            padding: 9px 12px;
+        .marks-table th.col-subject { text-align: left; width: 26%; }
+        .marks-table td {
+            padding: 8px 6px;
             font-size: 12px;
+            text-align: center;
             border-bottom: 1px solid #e8edf6;
         }
-        .payment-table td.col-amount {
-            text-align: right;
-            font-weight: 500;
+        .marks-table td.col-subject { text-align: left; font-weight: 500; }
+        .marks-table tr.even-row td { background: #f7f9ff; }
+        .marks-table tr.odd-row  td { background: white; }
+        .marks-table tr.fail-row td { background: #fff5f5; }
+        .marks-table td.fail-subject { color: #c0392b; font-weight: 600; }
+        .marks-table td.fail-mark    { color: #c0392b; font-weight: 700; }
+        .marks-table td.absent-cell  { color: #d97706; font-style: italic; }
+        .marks-table tr.grand-total td {
+            background: #1a3a6b;
+            color: white;
+            font-weight: 700;
+            font-size: 12px;
+            border: none;
+            padding: 9px 10px;
         }
-        .payment-table tr.even-row td { background: #f7f9ff; }
-        .payment-table tr.odd-row  td { background: white; }
+        .marks-table tr.grand-total td.col-subject { text-align: left; }
 
-        /* ── TOTAL SUMMARY ── */
-        .total-row {
+        /* ── SUMMARY BAR ── */
+        .summary-table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 10px;
+            border: 1px solid #d0daf0;
             margin-bottom: 20px;
         }
-        .total-row td {
-            padding: 0;
+        .summary-table td {
+            text-align: center;
+            padding: 12px 14px;
+            border-right: 1px solid #d0daf0;
+            vertical-align: middle;
         }
-        .total-box {
+        .summary-table td:last-child { border-right: none; }
+        .summary-label {
+            display: block;
+            font-size: 9px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.5px;
+            color: #718096; margin-bottom: 6px;
+        }
+        .summary-value {
+            display: block;
+            font-size: 20px; font-weight: 700; color: #1a3a6b; line-height: 1;
+        }
+        .perf-bar-bg {
+            height: 5px; background: #e0e6f0;
+            margin-top: 7px;
+            overflow: hidden;
+        }
+        .perf-bar-fill {
+            height: 5px; background: #2a5298;
+        }
+        .result-pass {
             display: inline-block;
-            float: right;
-            border: 1.5px solid #27ae60;
-            background: #f0fff6;
-            padding: 10px 22px;
-            text-align: right;
+            padding: 5px 22px;
+            font-size: 14px; font-weight: 800; letter-spacing: 2px;
+            background: #ebfaf2; color: #1a6b45; border: 1.5px solid #34c77b;
         }
-        .total-label {
-            font-size: 10px;
-            font-weight: 700;
-            color: #555;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            display: block;
-            margin-bottom: 4px;
-        }
-        .total-amount {
-            font-size: 26px;
-            font-weight: 800;
-            color: #1a6b45;
-            line-height: 1;
-            display: block;
-        }
-        .clearfix::after {
-            content: "";
-            display: table;
-            clear: both;
+        .result-fail {
+            display: inline-block;
+            padding: 5px 22px;
+            font-size: 14px; font-weight: 800; letter-spacing: 2px;
+            background: #fff0f0; color: #c0392b; border: 1.5px solid #e74c3c;
         }
 
-        /* ── PAYMENT MODE BADGE ── */
-        .mode-badge {
-            display: inline-block;
-            padding: 3px 10px;
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            background: #edf2f7;
-            color: #2d3748;
-            border: 1px solid #cbd5e0;
-        }
-
-        /* ── SIGNATURE SECTION ── */
+        /* ── SIGNATURES ── */
         .sig-section {
-            margin-top: auto;
             border-top: 1px solid #d0daf0;
             padding-top: 14px;
-            display: table;
+            margin-bottom: 12px;
+            margin-top: auto;
+        }
+        .sig-table {
             width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
         }
-        .sig-left {
-            display: table-cell;
-            vertical-align: bottom;
-            width: 60%;
-        }
-        .sig-right {
-            display: table-cell;
-            vertical-align: bottom;
+        .sig-table td {
             text-align: center;
-            width: 40%;
-            padding-left: 20px;
+            vertical-align: bottom;
+            padding: 0 20px;
+            border-right: 1px solid #d0daf0;
         }
-        .sig-space {
-            height: 46px;
-            display: block;
-        }
+        .sig-table td:last-child { border-right: none; }
+        .sig-space { height: 44px; display: block; }
         .sig-line {
-            border-top: 1.5px solid #333;
-            margin: 0 20px;
+            border-top: 1px solid #555;
+            margin: 0 10px;
         }
         .sig-label {
             display: block;
-            font-size: 10px;
-            font-weight: 700;
-            color: #4a5568;
-            margin-top: 5px;
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
-            text-align: center;
+            font-size: 10px; font-weight: 700;
+            color: #4a5568; margin-top: 6px;
+            text-transform: uppercase; letter-spacing: 0.3px;
         }
 
         /* ── FOOTER ── */
         .footer {
-            margin-top: 14px;
-            display: table;
-            width: 100%;
-        }
-        .footer-left {
-            display: table-cell;
-            font-size: 9px;
-            color: #aaa;
-            vertical-align: middle;
-        }
-        .footer-right {
-            display: table-cell;
-            text-align: right;
-            font-size: 9px;
-            color: #aaa;
-            vertical-align: middle;
-        }
-        .footer-divider {
+            text-align: center;
+            font-size: 9px; color: #aaa;
             border-top: 1px solid #e8e8e8;
-            margin-bottom: 7px;
+            padding-top: 7px;
         }
 
         /* ── SCREEN PREVIEW ── */
         @media screen {
-            body { background: #edf0f5; padding: 24px; }
-            .receipt {
-                max-width: 700px;
-                margin: 0 auto;
-                box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+            body { background: #edf0f5; padding: 20px; }
+            .marksheet {
+                max-width: 860px;
+                margin: 0 auto 28px auto;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.10);
                 min-height: auto;
             }
         }
@@ -297,96 +238,167 @@
 </head>
 <body>
 
-<div class="receipt">
+{% for student in students %}
+<div class="marksheet {% if not loop.last %}page-break{% endif %}">
 
     <!-- HEADER -->
-    <div class="header-wrapper">
-        <div class="header-logo-cell">
-            <img src="logo.jpeg" alt="School Logo">
-        </div>
-        <div class="header-school-cell">
-            <div class="school-name">IQRA ENGLISH MEDIUM SCHOOL</div>
-            <div class="school-address">Palanpur, Gujarat</div>
-        </div>
-        <div class="header-receipt-cell">
-            <div class="receipt-title">Fee Receipt</div>
-            <div class="receipt-number">{{ receipt.receipt_number }}</div>
-            <div class="receipt-date">{{ receipt.date }}</div>
-        </div>
-    </div>
-
-    <!-- STUDENT DETAILS -->
-    <div class="section-title">Student Details</div>
-    <table class="info-table">
+    <table class="header-table">
         <tr>
-            <td style="width:110px">
-                <span class="info-label">Student Name</span>
-                <span class="info-value">{{ receipt.student_name }}</span>
+            <td class="logo-cell">
+                <img src="logo.jpeg" class="school-logo" alt="Logo">
             </td>
-            <td class="info-divider"></td>
             <td>
-                <span class="info-label">GR Number</span>
-                <span class="info-value">{{ receipt.gr_number }}</span>
+                <div class="school-name">IQRA ENGLISH MEDIUM SCHOOL</div>
             </td>
-            <td class="info-divider"></td>
-            <td style="width:120px">
-                <span class="info-label">Class</span>
-                <span class="info-value">{{ receipt.class_name }}</span>
-            </td>
-            <td class="info-divider"></td>
-            <td style="width:120px">
-                <span class="info-label">Payment Mode</span>
-                <span class="info-value">
-                    <span class="mode-badge">{{ receipt.mode }}</span>
-                </span>
+            <td class="exam-cell">
+                <div class="report-title">{{ exam_name }}</div>
+                <div class="report-year">Academic Year: {{ academic_year }}</div>
             </td>
         </tr>
     </table>
 
-    <!-- PAYMENT ALLOCATION -->
-    <div class="section-title">Payment Allocation</div>
-    <table class="payment-table">
+    <!-- STUDENT INFO -->
+    <table class="info-table">
+        <colgroup>
+            <col style="width:120px">
+            <col>
+            <col style="width:15px">
+            <col style="width:105px">
+            <col>
+        </colgroup>
+        <tr>
+            <td class="info-label">Student Name</td>
+            <td class="info-value">{{ student.name_en }}</td>
+            <td></td>
+            <td class="info-label">Roll Number</td>
+            <td class="info-value">{{ student.roll_number or '—' }}</td>
+        </tr>
+        <tr>
+            <td class="info-label">Class / Div</td>
+            <td class="info-value">{{ student.class_name }} — Div {{ student.division }}</td>
+            <td></td>
+            <td class="info-label">GR Number</td>
+            <td class="info-value">{{ student.gr_number or '—' }}</td>
+        </tr>
+        <tr>
+            <td class="info-label">Date of Birth</td>
+            <td class="info-value">{{ student.dob }}</td>
+            <td></td>
+            <td class="info-label"></td>
+            <td style="border-bottom:none;"></td>
+        </tr>
+    </table>
+
+    <!-- MARKS TABLE -->
+    <table class="marks-table">
         <thead>
             <tr>
-                <th>Fee Head</th>
-                <th class="col-amount">Amount Applied</th>
+                <th class="col-subject">Subject</th>
+                <th>Max Theory</th>
+                <th>Max Practical</th>
+                <th>Theory Marks</th>
+                <th>Practical Marks</th>
+                <th>Total Marks</th>
+                <th>Percentage</th>
             </tr>
         </thead>
         <tbody>
-            {% for item in receipt.fee_items %}
-            <tr class="{{ 'even-row' if loop.index is even else 'odd-row' }}">
-                <td>{{ item.fee_head }}</td>
-                <td class="col-amount">₹{{ item.amount }}</td>
+            {% for sub in student.subjects %}
+            {% set is_fail   = sub.grade == 'E' or sub.grade == 'F' %}
+            {% set is_absent = sub.theory_marks is none %}
+            {% set row_class = 'fail-row' if is_fail else ('even-row' if loop.index is even else 'odd-row') %}
+            <tr class="{{ row_class }}">
+                <td class="col-subject {% if is_fail %}fail-subject{% endif %}">{{ sub.subject_name }}</td>
+                <td>{{ sub.max_theory }}</td>
+                <td>{{ sub.max_practical if sub.max_practical > 0 else '—' }}</td>
+                {% if is_absent %}
+                    <td class="absent-cell" colspan="4">ABSENT</td>
+                {% else %}
+                    <td {% if is_fail %}class="fail-mark"{% endif %}>{{ sub.theory_marks | int }}</td>
+                    <td>{{ sub.practical_marks | int if sub.practical_marks else '—' }}</td>
+                    <td><strong {% if is_fail %}class="fail-mark"{% endif %}>{{ sub.total | int }}</strong></td>
+                    <td>{{ "%.1f"|format(sub.total / (sub.max_theory + sub.max_practical) * 100) }}%</td>
+                {% endif %}
             </tr>
             {% endfor %}
+            <tr class="grand-total">
+                <td class="col-subject">GRAND TOTAL</td>
+                <td colspan="4"></td>
+                <td>{{ student.total_marks | int }} / {{ student.max_marks | int }}</td>
+                <td>{{ "%.2f"|format(student.percentage) }}%</td>
+            </tr>
         </tbody>
     </table>
 
-    <!-- TOTAL PAID -->
-    <div class="clearfix">
-        <div class="total-box">
-            <span class="total-label">Total Paid</span>
-            <span class="total-amount">₹{{ receipt.total_paid }}</span>
-        </div>
-    </div>
+    <!-- SUMMARY BAR -->
+    <table class="summary-table">
+        <tr>
+            <td style="width:40%">
+                <span class="summary-label">Overall Percentage</span>
+                <span class="summary-value">{{ "%.2f"|format(student.percentage) }}%</span>
+                <div class="perf-bar-bg">
+                    <div class="perf-bar-fill" style="width:{{ [student.percentage, 100] | min }}%;"></div>
+                </div>
+            </td>
+            <td style="width:25%">
+                <span class="summary-label">Class Rank</span>
+                <span class="summary-value">
+                    {% if student.class_rank is not none %}#{{ student.class_rank }}{% else %}—{% endif %}
+                </span>
+            </td>
+            <td style="width:35%">
+                <span class="summary-label">Result</span><br>
 
-    <!-- SIGNATURE -->
+                {% if student.result == 'PASS' %}
+                    <span class="result-pass">PASS</span>
+
+                {% elif student.result == 'FAIL' %}
+                    <span class="result-fail">FAIL</span>
+
+                {% elif student.result == 'INCOMPLETE' %}
+                    <span class="result-incomplete">INCOMPLETE</span>
+
+                {% elif student.result == 'LOCKED' %}
+                    <span class="result-locked">LOCKED</span>
+
+                {% else %}
+                    <span>—</span>
+                {% endif %}
+            </td>
+        </tr>
+    </table>
+
+    <!-- SIGNATURES -->
     <div class="sig-section">
-        <div class="sig-left"></div>
-        <div class="sig-right">
-            <span class="sig-space"></span>
-            <div class="sig-line"></div>
-            <span class="sig-label">Authorized Signature</span>
-        </div>
+        <table class="sig-table">
+            <tr>
+                <td>
+                    <span class="sig-space"></span>
+                    <div class="sig-line"></div>
+                    <span class="sig-label">Class Teacher</span>
+                </td>
+                <td>
+                    <span class="sig-space"></span>
+                    <div class="sig-line"></div>
+                    <span class="sig-label">Principal</span>
+                </td>
+                <td>
+                    <span class="sig-space"></span>
+                    <div class="sig-line"></div>
+                    <span class="sig-label">Parent / Guardian</span>
+                </td>
+            </tr>
+        </table>
     </div>
 
     <!-- FOOTER -->
-    <div class="footer-divider"></div>
     <div class="footer">
-        <div class="footer-left">Computer-generated receipt</div>
+        Generated on {{ generated_date }}&nbsp;&middot;&nbsp;Iqra English Medium School, Palanpur&nbsp;&middot;&nbsp;Computer-generated report
     </div>
 
 </div>
+{% endfor %}
 
 </body>
 </html>
+
