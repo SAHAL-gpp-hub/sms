@@ -355,22 +355,29 @@ export default function PortalFees() {
             <PaymentOptions
               options={options}
               selected={selectedOption}
-              onSelect={setSelectedOption}
-              actionLabel="Pay Now"
-              onAction={() => {
-                if (!selectedOption) return
+              onSelect={(opt) => {
+                setSelectedOption(opt)
+                // Selecting a month card immediately surfaces the payment
+                // breakdown (fee + 2% platform charge + total) so the parent
+                // sees the full amount before paying. PaymentOptions hides its
+                // own action button (hideAction), making the breakdown panel's
+                // Pay button the single CTA.
                 setPendingPayment({
-                  months: selectedOption.months,
-                  label: selectedOption.label,
-                  amount: parseFloat(selectedOption.amount),
+                  months: opt.months,
+                  label: opt.label,
+                  amount: parseFloat(opt.amount),
                 })
               }}
+              actionLabel="Pay Now"
+              onAction={() => {}}
               disabled={Boolean(payingOption) || Boolean(verifyingOrderId)}
               formatAmount={fmt}
+              hideAction
             />
 
             {/* Payment confirmation breakdown — appears once a month option is
-                chosen, before opening Razorpay. Shows fee + 2% platform charge. */}
+                chosen, before opening Razorpay. Shows fee + 2% platform charge.
+                This is the single Pay CTA for the portal. */}
             {pendingPayment && pendingBreakdown && (
               <div style={{ marginTop:'12px', border:'1px solid #dbeafe', background:'#f8fbff', borderRadius:'14px', padding:'13px 14px' }}>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px', marginBottom:'10px' }}>

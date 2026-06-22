@@ -547,7 +547,11 @@ def enqueue_document_notification(
     return log
 
 
-def enqueue_payment_confirmation(db: Session, payment_id: int) -> NotificationLog | None:
+def enqueue_payment_confirmation(
+    db: Session,
+    payment_id: int,
+    total_amount: Decimal | None = None,
+) -> NotificationLog | None:
     if not settings.AUTO_SEND_PAYMENT_CONFIRMATION:
         return None
 
@@ -565,7 +569,10 @@ def enqueue_payment_confirmation(db: Session, payment_id: int) -> NotificationLo
     if not student:
         return None
 
-    amount = f"₹{Decimal(str(payment.amount_paid)):.0f}"
+    # When total_amount is provided, use it (covers the full payment session);
+    # otherwise fall back to this single fee-head row's amount (legacy callers).
+    display_amount = total_amount if total_amount is not None else Decimal(str(payment.amount_paid))
+    amount = f"₹{display_amount:.0f}"
     guardian_name = student.father_name or "Parent"
     try:
         from app.routers.pdf import create_receipt_download_token
@@ -575,13 +582,15 @@ def enqueue_payment_confirmation(db: Session, payment_id: int) -> NotificationLo
     except Exception as exc:
         raise RuntimeError(f"Could not create receipt link: {exc}") from exc
 
+    # Use receipt_number as the idempotency key so the whole payment session
+    # (all fee-head rows sharing the same receipt) only triggers ONE notification.
     return enqueue_document_notification(
         db,
         student_id=student.id,
         notification_type="payment_confirmed",
         channel="whatsapp",
         phone=student.guardian_phone or student.contact,
-        idempotency_key=f"payment_receipt:{payment.id}:whatsapp",
+        idempotency_key=f"payment_receipt:{payment.receipt_number}:whatsapp",
         document_link=receipt_link,
         filename=f"{payment.receipt_number}.pdf",
         caption=f"Dear {guardian_name}, fee payment receipt for {student.name_en}. Amount {amount}.",

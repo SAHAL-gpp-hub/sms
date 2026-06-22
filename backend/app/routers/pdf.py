@@ -24,6 +24,11 @@ logger = logging.getLogger("sms.pdf.router")
 
 router = APIRouter(prefix="/api/v1/pdf", tags=["PDF"])
 
+# How long (seconds) a one-shot PDF download token is valid.
+# Class marksheets can take 10-20 s to render, so the token window must be
+# longer than that to avoid the frontend re-requesting a token mid-poll.
+_PDF_TOKEN_TTL = 120  # 2 minutes
+
 
 def _require_pdf_token(token: str | None, resource: str) -> None:
     if not token:
@@ -36,14 +41,14 @@ def _require_pdf_token(token: str | None, resource: str) -> None:
         raise HTTPException(status_code=403, detail="PDF download token does not match this resource")
 
 
-def _pdf_token(current_user: CurrentUser, resource: str) -> dict:
+def _pdf_token(current_user: CurrentUser, resource: str, ttl: int = _PDF_TOKEN_TTL) -> dict:
     token = create_access_token(
         subject=current_user.id,
         role=current_user.role,
-        expires_delta=timedelta(seconds=60),
+        expires_delta=timedelta(seconds=ttl),
         extra_claims={"typ": "pdf-download", "resource": resource},
     )
-    return {"token": token, "expires_in": 60, "resource": resource}
+    return {"token": token, "expires_in": ttl, "resource": resource}
 
 
 def create_receipt_download_token(payment_id: int, expires_seconds: int = 3600 * 24 * 30) -> str:
@@ -54,6 +59,8 @@ def create_receipt_download_token(payment_id: int, expires_seconds: int = 3600 *
         extra_claims={"typ": "pdf-download", "resource": f"receipt:{payment_id}"},
     )
 
+
+# ── Token endpoints ────────────────────────────────────────────────────────────
 
 @router.get("/token/marksheet/student/{student_id}")
 def student_marksheet_token(
@@ -114,8 +121,7 @@ def fee_receipt_token(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_role("admin", "student", "parent")),
 ):
-    # H6 fix: previously fired 3 sequential queries (FeePayment → StudentFee →
-    # Enrollment). Consolidate into a single joined query.
+    # Consolidate into a single joined query instead of 3 sequential ones.
     row = (
         db.query(FeePayment, StudentFee, Enrollment)
         .join(StudentFee, StudentFee.id == FeePayment.student_fee_id)
@@ -134,6 +140,9 @@ def fee_receipt_token(
     ensure_student_access(db, current_user, student_id)
     return _pdf_token(current_user, f"receipt:{payment_id}")
 
+
+# ── PDF download endpoints ─────────────────────────────────────────────────────
+
 @router.get("/marksheet/student/{student_id}")
 def generate_student_marksheet(
     student_id: int,
@@ -150,7 +159,9 @@ def generate_student_marksheet(
         db,
         student_id=student_id,
         exam_id=exam_id,
-        pdf_path=f"/api/v1/pdf/marksheet/student/{student_id}?exam_id={exam_id}&class_id={class_id}",
+        # Store a path relative to the API root (no leading /api/v1) so the
+        # frontend can build the full URL with its own base URL.
+        pdf_path=f"/pdf/marksheet/student/{student_id}?exam_id={exam_id}&class_id={class_id}",
     )
     db.commit()
     return Response(
@@ -170,19 +181,21 @@ def generate_class_marksheet(
 ):
     """Kick off a class marksheet as a background job and return a poll URL.
 
-    A full-class marksheet (40 students) can take 10–20s to render even when
-    parallelized — too long for a synchronous request that browsers/proxies
-    may time out. The client polls GET /marksheet/class/{id}/status/{job_id}
-    until the PDF is ready, then navigates to it.
+    A full-class marksheet (40 students) can take 10-20 s to render even when
+    parallelised — too long for a synchronous HTTP request that browsers or
+    proxies may time out. The client polls GET /marksheet/class/{id}/status/{jid}
+    until the PDF is ready, then navigates directly to it.
 
-    NB: this endpoint now returns JSON ({job_id, poll_url}) instead of a PDF.
+    Returns JSON: { job_id, status, poll_url, retry_after_ms }
+    poll_url is intentionally path-only (no /api/v1 prefix) so the frontend
+    Axios instance can prepend its configured baseURL without doubling it.
     """
     _require_pdf_token(token, f"marksheet:class:{class_id}:exam:{exam_id}")
     jid = job_store.create_job()
 
     def _run():
-        # Use a fresh session — BackgroundTasks run after the request session
-        # has been closed by the get_db dependency.
+        # Use a fresh DB session — BackgroundTasks run after the request
+        # session has already been closed by the get_db dependency.
         with SessionLocal() as job_db:
             try:
                 pdf = render_marksheet_pdf(job_db, exam_id, class_id)
@@ -194,7 +207,7 @@ def generate_class_marksheet(
                 )
                 job_db.commit()
                 job_store.set_done(jid, pdf)
-            except Exception as exc:  # noqa: BLE001 — surface any failure to the client
+            except Exception as exc:  # noqa: BLE001
                 logger.exception("Class marksheet job %s failed", jid)
                 job_store.set_error(jid, str(exc))
 
@@ -203,22 +216,33 @@ def generate_class_marksheet(
     else:  # defensive — FastAPI always injects BackgroundTasks
         _run()
 
+    # FIX: poll_url must NOT include the /api/v1 prefix.
+    # The frontend Axios instance already has baseURL="/api/v1", so prepending
+    # it here would produce /api/v1/api/v1/... (404 loop seen in logs).
     return JSONResponse({
         "job_id": jid,
         "status": "pending",
-        "poll_url": f"/api/v1/pdf/marksheet/class/{class_id}/status/{jid}",
+        "poll_url": f"/pdf/marksheet/class/{class_id}/status/{jid}",
+        # Hint to the frontend: wait at least this long before the first poll.
+        # Prevents the tight 1-second retry loop visible in logs.
+        "retry_after_ms": 2000,
     })
 
 
 @router.get("/marksheet/class/{class_id}/status/{job_id}")
 def class_marksheet_status(class_id: int, job_id: str):
-    """Poll a class marksheet job. Returns pending JSON, the PDF, or an error."""
+    """Poll a class marksheet job. Returns pending JSON, the PDF, or an error.
+
+    Pending response includes retry_after_ms so the frontend can implement
+    sensible exponential backoff instead of hammering every second.
+    """
     job = job_store.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+
     if job["status"] == "done":
         pdf = job["pdf"]
-        job_store.cleanup(job_id)  # free memory now that the client has it
+        job_store.cleanup(job_id)  # free in-process memory once delivered
         return Response(
             content=pdf,
             media_type="application/pdf",
@@ -227,11 +251,19 @@ def class_marksheet_status(class_id: int, job_id: str):
                 "Cache-Control": "no-store",
             },
         )
+
     if job["status"] == "error":
         job_store.cleanup(job_id)
         raise HTTPException(status_code=500, detail=job["error"])
-    return {"status": "pending", "job_id": job_id}
 
+    # Still pending — tell the client how long to wait before polling again.
+    return JSONResponse(
+        {"status": "pending", "job_id": job_id, "retry_after_ms": 2000},
+        status_code=202,
+    )
+
+
+# ── Report endpoints ───────────────────────────────────────────────────────────
 
 @router.get("/report/defaulters")
 def defaulter_report(

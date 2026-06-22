@@ -30,6 +30,12 @@ export function PaymentOptions({
   onAction,
   disabled = false,
   formatAmount = formatINR,
+  // When true, only the option cards render (no action button). Used by
+  // PortalFees, which renders its own payment-breakdown panel (fee + 2%
+  // platform charge) with a single "Pay" CTA below the cards, so the parent
+  // sees the full charge before opening Razorpay. Leaving the internal button
+  // visible would produce two competing CTAs.
+  hideAction = false,
 }) {
   if (!options.length) return null
 
@@ -111,8 +117,9 @@ export function PaymentOptions({
         </div>
       )}
 
-      {/* Action button — only rendered once an option is selected */}
-      {selected && (
+      {/* Action button — only rendered once an option is selected, and only
+          when the caller hasn't chosen to render its own CTA (hideAction). */}
+      {selected && !hideAction && (
         <button
           type="button"
           onClick={onAction}

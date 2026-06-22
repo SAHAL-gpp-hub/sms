@@ -6,7 +6,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -372,6 +372,26 @@ def mark_order_paid(
     signature: str | None = None,
     actor_user_id: int | None = None,
 ) -> list[FeePayment]:
+    # Serialize concurrent processing of the same order (e.g. client /verify
+    # and Razorpay /webhook firing at the same time).  The advisory
+    # transaction lock is held until COMMIT, guaranteeing that the second
+    # caller sees the FeePayments inserted by the first.
+    try:
+        db.execute(text("SELECT pg_advisory_xact_lock(:oid)"), {"oid": order.id})
+    except Exception:
+        pass  # Non-PostgreSQL engines: no-op (SQLite tests, etc.)
+
+    # Re-read order status inside the lock to pick up any commit by another
+    # thread that arrived just before us.
+    db.refresh(order)
+    if order.status == "paid":
+        return (
+            db.query(FeePayment)
+            .filter_by(online_order_id=order.id)
+            .order_by(FeePayment.id)
+            .all()
+        )
+
     existing_payments = (
         db.query(FeePayment)
         .filter_by(online_order_id=order.id)
@@ -379,12 +399,11 @@ def mark_order_paid(
         .all()
     )
     if existing_payments:
-        if order.status != "paid":
-            order.razorpay_payment_id = payment_id
-            order.razorpay_signature = signature
-            order.status = "paid"
-            order.paid_at = datetime.now(timezone.utc)
-            db.commit()
+        order.razorpay_payment_id = payment_id
+        order.razorpay_signature = signature
+        order.status = "paid"
+        order.paid_at = datetime.now(timezone.utc)
+        db.commit()
         return existing_payments
 
     amount = _order_net_amount(order)

@@ -91,19 +91,19 @@ export async function openSignedPdfWithPoll(tokenPath, pdfPath, params = {}, opt
   const popup = createPdfLoadingWindow()
   try {
     const { data } = await api.get(tokenPath, { params })
-    const query = new URLSearchParams()
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') query.set(key, value)
-    })
-    query.set('token', data.token)
 
     // First hit returns {job_id, poll_url}; subsequent hits are the PDF blob
     // (done), a 500 (error), or {status:"pending"}.
-    const startUrl = `/api/v1${pdfPath}?${query.toString()}`
-    const started = await api.get(startUrl, { params })
+    // pdfPath is path-only (e.g. /pdf/marksheet/class/2). The Axios instance
+    // already has baseURL=/api/v1, so we pass params through Axios rather than
+    // hand-building the URL — prepending /api/v1 here would yield
+    // /api/v1/api/v1/... (the 404 loop seen in production logs).
+    const started = await api.get(pdfPath, { params: { ...params, token: data.token } })
     if (started.data?.job_id && started.data?.poll_url) {
       const deadline = Date.now() + timeoutMs
-      const statusUrl = `/api/v1${started.data.poll_url.replace(/^\/api\/v1/, '')}`
+      // poll_url comes back path-only from the backend; strip any /api/v1
+      // prefix defensively, then let Axios add the baseURL.
+      const statusUrl = started.data.poll_url.replace(/^\/api\/v1/, '')
       while (Date.now() < deadline) {
         let res
         try {

@@ -533,15 +533,16 @@ def allocate_payment(
             db.rollback()
             logger.warning("Audit log failed for payment %s: %s", payment.id, exc)
 
-    for payment in payments:
-        db.refresh(payment)
+    # Send ONE notification per payment session (all fee-head rows share the
+    # same receipt_number so the PDF is already a consolidated receipt).
+    if payments:
         try:
             from app.services.notification_service import enqueue_payment_confirmation
-            enqueue_payment_confirmation(db, payment.id)
+            enqueue_payment_confirmation(db, payments[0].id, total_amount=amount)
             db.commit()
         except Exception as exc:
             db.rollback()
-            logger.warning("Could not queue payment confirmation for payment %s: %s", payment.id, exc)
+            logger.warning("Could not queue payment confirmation: %s", exc)
 
     return payments
 

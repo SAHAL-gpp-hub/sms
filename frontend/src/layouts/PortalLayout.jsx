@@ -420,12 +420,15 @@ export default function PortalLayout() {
           touch-action:manipulation;
         }
 
-        .portal-main .card,
-        .portal-main [style*="background: white"],
-        .portal-main [style*="background:#fff"],
-        .portal-main [style*="background: '#fff'"] {
-          border-radius:16px;
-          box-shadow:var(--shadow-card);
+        /* Portal pages use intentionally varied backgrounds (hero gradients,
+           warning/info banners, the blue payment-breakdown panel, etc.).
+           Earlier this rule matched any element whose inline style contained
+           "background: white"/"#fff", which clobbered those backgrounds with a
+           uniform box-shadow/border-radius and produced mismatched, overlapping
+           card styling. We now scope styling to the explicit .card class only. */
+        .portal-main .card {
+          border-radius: 16px;
+          box-shadow: var(--shadow-card);
         }
 
         @media (min-width:521px) {

@@ -7,30 +7,21 @@ export function ReceiptModal({ payment, onClose }) {
   const isMulti = payment.allocations && payment.allocations.length > 0
 
   const handlePrint = async () => {
-    // record_payment returns both `id` (first payment) and `payment_ids` (all payments
-    // when one amount is split across multiple fee heads). Prefer payment_ids so every
-    // receipt PDF is opened; fall back to single id for backward compat.
-    const ids = payment.payment_ids?.length
-      ? payment.payment_ids
-      : payment.id
-        ? [payment.id]
-        : []
-
-    if (ids.length === 0) {
+    // All fee-head allocations in one payment session share the same
+    // receipt_number, and the PDF renderer consolidates siblings — so
+    // downloading the first payment_id is enough for the full receipt.
+    const pid = payment.payment_ids?.[0] || payment.id
+    if (!pid) {
       toast.error('Payment ID is missing — cannot generate receipt')
       console.error('ReceiptModal: payment has no id or payment_ids', payment)
       return
     }
 
-    let opened = 0
-    for (const pid of ids) {
-      try {
-        await feeAPI.downloadReceipt(pid)
-        opened++
-      } catch (err) {
-        console.error('ReceiptModal: failed to open receipt PDF for payment', pid, err)
-        toast.error(`Failed to open receipt (payment ${pid})`)
-      }
+    try {
+      await feeAPI.downloadReceipt(pid)
+    } catch (err) {
+      console.error('ReceiptModal: failed to open receipt PDF for payment', pid, err)
+      toast.error('Failed to open receipt')
     }
   }
 

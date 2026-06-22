@@ -1,7 +1,5 @@
 from datetime import datetime, timezone
-
 from sqlalchemy.orm import Session
-
 from app.models.base_models import Enrollment, Exam, ReportCard
 
 
@@ -15,8 +13,10 @@ def upsert_report_card(
     student_id: int,
     exam_id: int,
     pdf_path: str,
+    # Accept a pre-fetched Exam so callers in a loop don't each re-query it.
+    _exam: Exam | None = None,
 ) -> ReportCard | None:
-    exam = _get_exam(db, exam_id)
+    exam = _exam or _get_exam(db, exam_id)
     if not exam:
         return None
 
@@ -49,6 +49,8 @@ def upsert_class_report_cards(
     class_id: int,
     exam_id: int,
 ) -> int:
+    # FIX: fetch the exam once here; pass it into upsert_report_card so the
+    # per-student loop doesn't re-issue the same query 40 times.
     exam = _get_exam(db, exam_id)
     if not exam:
         return 0
@@ -64,10 +66,14 @@ def upsert_class_report_cards(
             db,
             student_id=enrollment.student_id,
             exam_id=exam_id,
+            # FIX: path must NOT include /api/v1 prefix — the frontend Axios
+            # instance already has that as its baseURL. Storing the full path
+            # would produce doubled prefixes when the frontend constructs URLs.
             pdf_path=(
-                f"/api/v1/pdf/marksheet/student/{enrollment.student_id}"
+                f"/pdf/marksheet/student/{enrollment.student_id}"
                 f"?exam_id={exam_id}&class_id={class_id}"
             ),
+            _exam=exam,  # reuse the already-fetched exam object
         )
         if report_card:
             count += 1

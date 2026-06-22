@@ -135,7 +135,7 @@ def test_payment_confirmation_enqueue_is_idempotent():
         assert len(outbox) == 1
         assert logs[0].notification_type == "payment_confirmed"
         assert logs[0].template_name == "payment_receipt_pdf"
-        assert logs[0].idempotency_key == "payment_receipt:1:whatsapp"
+        assert logs[0].idempotency_key == "payment_receipt:RCPT-TEST-001:whatsapp"
         assert outbox[0].payload.get("message_type") == "document"
         assert "/api/v1/pdf/receipt/1?token=" in outbox[0].payload.get("document_link", "")
     finally:
