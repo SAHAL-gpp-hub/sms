@@ -786,6 +786,129 @@ def get_monthly_collections(
     ]
 
 
+def get_collection_summary(
+    db: Session,
+    class_id: Optional[int] = None,
+    academic_year_id: Optional[int] = None,
+) -> dict:
+    """
+    Returns overall collection totals for ALL enrolled students (not just
+    defaulters).  Used by the KPI cards and donut chart on the Defaulters page
+    so that "Collected" includes students who have fully paid as well as those
+    who have only partially paid.
+
+    Returns { total_due, total_paid, total_balance, total_students, defaulters,
+              by_class: [{ class_name, total_due, total_paid, total_balance }] }
+    """
+    payment_totals = (
+        db.query(
+            FeePayment.student_fee_id.label("student_fee_id"),
+            func.coalesce(func.sum(FeePayment.amount_paid), 0).label("total_paid"),
+        )
+        .group_by(FeePayment.student_fee_id)
+        .subquery()
+    )
+
+    # --- Per-student aggregation (for overall totals + defaulter count) ---
+    fee_totals = (
+        db.query(
+            Enrollment.student_id.label("student_id"),
+            Enrollment.class_id.label("class_id"),
+            Enrollment.academic_year_id.label("academic_year_id"),
+            func.coalesce(func.sum(StudentFee.net_amount), 0).label("total_due"),
+            func.sum(func.coalesce(payment_totals.c.total_paid, 0)).label("total_paid"),
+        )
+        .select_from(StudentFee)
+        .join(Enrollment, Enrollment.id == StudentFee.enrollment_id)
+        .outerjoin(payment_totals, payment_totals.c.student_fee_id == StudentFee.id)
+    )
+
+    if academic_year_id is not None:
+        fee_totals = fee_totals.filter(Enrollment.academic_year_id == academic_year_id)
+    else:
+        fee_totals = fee_totals.filter(Enrollment.status.in_(ACTIVE_ENROLLMENT_STATUSES))
+
+    if class_id is not None:
+        fee_totals = fee_totals.filter(Enrollment.class_id == class_id)
+
+    rows = (
+        fee_totals
+        .group_by(
+            Enrollment.student_id, Enrollment.class_id, Enrollment.academic_year_id
+        )
+        .all()
+    )
+
+    total_due = Decimal("0.00")
+    total_paid = Decimal("0.00")
+    total_students = 0
+    defaulters = 0
+
+    for r in rows:
+        due  = Decimal(str(r.total_due))
+        paid = Decimal(str(r.total_paid))
+        balance = due - paid
+        total_due  += due
+        total_paid += paid
+        total_students += 1
+        if balance > 0:
+            defaulters += 1
+
+    # --- Per-grade aggregation (for the stacked bar chart) ---
+    # Group by Class.name (grade) only, collapsing divisions (7-A, 7-B, ...)
+    # into a single bar per grade.  Otherwise the chart shows duplicate
+    # "Class 9" bars, one per division.
+    class_rows = (
+        db.query(
+            Class.name.label("name"),
+            func.coalesce(func.sum(StudentFee.net_amount), 0).label("total_due"),
+            func.sum(func.coalesce(payment_totals.c.total_paid, 0)).label("total_paid"),
+        )
+        .select_from(StudentFee)
+        .join(Enrollment, Enrollment.id == StudentFee.enrollment_id)
+        .outerjoin(Class, Class.id == Enrollment.class_id)
+        .outerjoin(payment_totals, payment_totals.c.student_fee_id == StudentFee.id)
+    )
+
+    if academic_year_id is not None:
+        class_rows = class_rows.filter(Enrollment.academic_year_id == academic_year_id)
+    else:
+        class_rows = class_rows.filter(Enrollment.status.in_(ACTIVE_ENROLLMENT_STATUSES))
+
+    if class_id is not None:
+        class_rows = class_rows.filter(Enrollment.class_id == class_id)
+
+    class_rows = (
+        class_rows
+        .group_by(Class.name)
+        .order_by(
+            (func.coalesce(func.sum(StudentFee.net_amount), 0)
+             - func.sum(func.coalesce(payment_totals.c.total_paid, 0))).desc()
+        )
+        .all()
+    )
+
+    by_class = []
+    for cr in class_rows:
+        due  = Decimal(str(cr.total_due))
+        paid = Decimal(str(cr.total_paid))
+        by_class.append({
+            "class_name":   cr.name or "—",
+            "total_due":    float(due),
+            "total_paid":   float(paid),
+            "total_balance": float(due - paid),
+        })
+
+    return {
+        "total_students": total_students,
+        "defaulters": defaulters,
+        "total_due":  float(total_due),
+        "total_paid": float(total_paid),
+        "total_balance": float(total_due - total_paid),
+        "by_class": by_class,
+    }
+
+
 def get_payment_options(db: Session, student_id: int) -> dict:
     """
     Returns month-based flexible payment options for a student.

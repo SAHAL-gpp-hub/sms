@@ -39,6 +39,7 @@ router = APIRouter(prefix="/api/v1/fees", tags=["Fees"])
 def _invalidate_fee_caches() -> None:
     response_cache.invalidate_prefix("defaulters:")
     response_cache.invalidate_prefix("dashboard_stats:")
+    response_cache.invalidate_prefix("collection-summary:")
 
 
 # ---------------------------------------------------------------------------
@@ -369,6 +370,17 @@ def get_defaulters(
     data = fee_service.get_defaulters(db, class_id, academic_year_id)
     response_cache.set(cache_key, data, settings.RESPONSE_CACHE_TTL_SECONDS)
     return data
+
+
+@router.get("/collection-summary")
+def get_collection_summary(
+    class_id:         Optional[int] = Query(None),
+    academic_year_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_role("admin")),
+):
+    """Overall collection totals for ALL students (not just defaulters)."""
+    return fee_service.get_collection_summary(db, class_id, academic_year_id)
 
 
 @router.get("/monthly-collections")

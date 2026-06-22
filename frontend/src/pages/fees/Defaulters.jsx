@@ -119,22 +119,34 @@ function DefaulterCard({ d, resolveClassName }) {
 
 // ─── chart section (shown when "All Classes" selected) ───────────────────────
 
-function ChartsSection({ defaulters, monthlyData, selectedMonth, onMonthChange, loading, classes, isMobile = false }) {
-  // --- Group by class name only (no division) ---
-  const byClass = Object.values(
-    defaulters.reduce((acc, d) => {
-      const cls = classes.find(c => c.id === d.class_id)
-      const k = cls ? classDisplayName(cls.name) : `Class ${d.class_id}`
-      if (!acc[k]) acc[k] = { name: k, Collected: 0, Outstanding: 0 }
-      acc[k].Collected   += d.total_paid
-      acc[k].Outstanding += d.balance
-      return acc
-    }, {})
-  ).sort((a, b) => (b.Outstanding - a.Outstanding))
+function ChartsSection({ defaulters, monthlyData, selectedMonth, onMonthChange, loading, classes, isMobile = false, summary = {} }) {
+  // --- Group by class ---
+  // Use summary.by_class (ALL students) when available, falling back to
+  // defaulter-only aggregation for backward compatibility while loading.
+  const byClass = summary.by_class?.length
+    ? summary.by_class.map(c => ({
+        name: classDisplayName(c.class_name),
+        Collected: c.total_paid,
+        Outstanding: c.total_balance,
+      }))
+    : Object.values(
+        defaulters.reduce((acc, d) => {
+          const cls = classes.find(c => c.id === d.class_id)
+          const k = cls ? classDisplayName(cls.name) : `Class ${d.class_id}`
+          if (!acc[k]) acc[k] = { name: k, Collected: 0, Outstanding: 0 }
+          acc[k].Collected   += d.total_paid
+          acc[k].Outstanding += d.balance
+          return acc
+        }, {})
+      ).sort((a, b) => (b.Outstanding - a.Outstanding))
 
   // --- Donut ---
-  const totalCollected   = defaulters.reduce((s, d) => s + (d.total_paid || 0), 0)
-  const totalOutstanding = defaulters.reduce((s, d) => s + (d.balance   || 0), 0)
+  // Use collection-summary totals (ALL students) so the donut reflects the
+  // real picture: collected vs outstanding across the entire school/class,
+  // including students who have fully paid.
+  const totalCollected   = summary.total_paid   ?? defaulters.reduce((s, d) => s + (d.total_paid || 0), 0)
+  const totalBilled      = summary.total_due    ?? defaulters.reduce((s, d) => s + (d.total_due  || 0), 0)
+  const totalOutstanding = totalBilled - totalCollected
   const donutData = [
     { name: 'Collected',   value: totalCollected   },
     { name: 'Outstanding', value: totalOutstanding },
@@ -362,6 +374,22 @@ export default function Defaulters() {
     placeholderData: [],   // show empty table (not stale previous class data) while loading
   })
 
+  // Collection summary — ALL students, not just defaulters.
+  // Used by KPI cards and donut chart to show the real "Collected" total
+  // (including students who have fully paid).
+  const summaryQuery = useQuery({
+    queryKey: ['collection-summary', classFilter, yearFilter],
+    queryFn: async () => {
+      const params = {}
+      if (classFilter) params.class_id = classFilter
+      if (yearFilter)  params.academic_year_id = yearFilter
+      const r = await feeAPI.getCollectionSummary(params)
+      return r.data || { total_due: 0, total_paid: 0, total_balance: 0, total_students: 0, defaulters: 0 }
+    },
+    staleTime: 0,
+    placeholderData: { total_due: 0, total_paid: 0, total_balance: 0, total_students: 0, defaulters: 0 },
+  })
+
   // Monthly collections — only fetch when "All Classes" is shown
   const monthlyQuery = useQuery({
     queryKey: ['monthly-collections', yearFilter, selectedMonth],
@@ -386,11 +414,13 @@ export default function Defaulters() {
     return cls ? `Class ${cls.name} — ${cls.division}` : `Class ${classId}`
   }
 
-  // Derive KPIs from the current (filtered) defaulters array only.
-  // Names match what is shown in the card labels — no aliasing.
-  const kpiOutstanding = defaulters.reduce((s, d) => s + (d.balance    || 0), 0)
-  const kpiBilled      = defaulters.reduce((s, d) => s + (d.total_due  || 0), 0)
-  const kpiCollected   = defaulters.reduce((s, d) => s + (d.total_paid || 0), 0)
+  // KPI totals from the collection-summary endpoint (ALL students, not just
+  // defaulters).  Falls back to the defaulter-scope reduce while summary loads.
+  const summary = summaryQuery.data || {}
+  const kpiOutstanding = summary.total_balance ?? defaulters.reduce((s, d) => s + (d.balance    || 0), 0)
+  const kpiBilled      = summary.total_due    ?? defaulters.reduce((s, d) => s + (d.total_due  || 0), 0)
+  const kpiCollected   = summary.total_paid   ?? defaulters.reduce((s, d) => s + (d.total_paid || 0), 0)
+  const kpiDefaulterCount = summary.defaulters ?? defaulters.length
   // totalBalance is kept as an alias so the footer summary line still works
   const totalBalance   = kpiOutstanding
 
@@ -416,7 +446,7 @@ export default function Defaulters() {
 
   // KPI cards — only shown when a class is selected
   const kpiCards = [
-    { label: 'Defaulters',   value: defaulters.length,        color: 'var(--danger-600)',   bg: 'var(--danger-50)',   border: 'var(--danger-100)'   },
+    { label: 'Defaulters',   value: kpiDefaulterCount,          color: 'var(--danger-600)',   bg: 'var(--danger-50)',   border: 'var(--danger-100)'   },
     { label: 'Outstanding',  value: formatINR(kpiOutstanding), color: 'var(--danger-600)',   bg: 'var(--danger-50)',   border: 'var(--danger-100)'   },
     { label: 'Total Billed', value: formatINR(kpiBilled),      color: 'var(--text-primary)', bg: 'var(--surface-0)',  border: 'var(--border-default)' },
     { label: 'Collected',    value: formatINR(kpiCollected),   color: 'var(--success-600)', bg: 'var(--success-50)', border: 'var(--success-100)'  },
@@ -488,6 +518,7 @@ export default function Defaulters() {
             loading={monthlyQuery.isLoading || monthlyQuery.isFetching}
             classes={classes}
             isMobile={isMobile}
+            summary={summary}
           />
         )
       ) : (

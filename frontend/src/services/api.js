@@ -402,6 +402,8 @@ export const feeAPI = {
   downloadReceipt: (paymentId) =>
     openSignedPdf(`/pdf/token/receipt/${paymentId}`, `/pdf/receipt/${paymentId}`),
   getDefaulters: (params)    => api.get('/fees/defaulters', { params: withSelectedYear(params) }),
+  getCollectionSummary: (params) =>
+    api.get('/fees/collection-summary', { params: withSelectedYear(params) }),
   getMonthlyCollections: (params) =>
     api.get('/fees/monthly-collections', { params }),
   getPaymentOptions: (studentId) => api.get(`/fees/payment-options/${studentId}`),
