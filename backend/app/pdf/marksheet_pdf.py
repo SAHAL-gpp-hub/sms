@@ -96,6 +96,18 @@ def render_marksheet_pdf(
         return pdf_bytes
 
     # ── Class path: one HTML chunk per student, rendered in parallel ────────
+    # Check the on-disk cache first — re-opens of a generated class marksheet
+    # go from 10-20s (full WeasyPrint render) to <50ms (file read).
+    # The cache is busted whenever marks are saved, locked, or unlocked
+    # (see pdf_file_cache.invalidate_prefix calls in marks_service / yearend_service).
+    from app.pdf import pdf_file_cache
+
+    file_cache_key = f"marksheet:class:{class_id}:exam:{exam_id}"
+    cached_path = pdf_file_cache.get_cached_pdf(file_cache_key)
+    if cached_path is not None:
+        logger.info("Class marksheet cache hit for class=%s exam=%s", class_id, exam_id)
+        return cached_path.read_bytes()
+
     logo = _logo_b64()
     render_ctx = dict(
         exam_name=exam.name if exam else "Exam",
@@ -107,13 +119,17 @@ def render_marksheet_pdf(
 
     if len(html_chunks) == 1:
         # Degenerate case: class has one student — no pool overhead.
-        return _html_renderer()(
+        pdf_bytes = _html_renderer()(
             string=html_chunks[0], base_url=TEMPLATE_DIR
         ).write_pdf()
+    else:
+        # Local import keeps the pool out of the single-student hot path.
+        from app.pdf.pdf_worker import render_html_chunks_parallel
+        pdf_pages = render_html_chunks_parallel(
+            [(chunk, TEMPLATE_DIR) for chunk in html_chunks]
+        )
+        pdf_bytes = _merge_pdfs(pdf_pages)
 
-    # Local import keeps the pool out of the single-student hot path.
-    from app.pdf.pdf_worker import render_html_chunks_parallel
-    pdf_pages = render_html_chunks_parallel(
-        [(chunk, TEMPLATE_DIR) for chunk in html_chunks]
-    )
-    return _merge_pdfs(pdf_pages)
+    # Store to disk for instant re-opens.
+    pdf_file_cache.store_pdf(file_cache_key, pdf_bytes)
+    return pdf_bytes

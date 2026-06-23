@@ -3,7 +3,7 @@
 import logging
 from datetime import timedelta
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from sqlalchemy.orm import Session
 from typing import Optional
 from app.core.database import SessionLocal, get_db
@@ -233,7 +233,8 @@ def generate_class_marksheet(
                     job_db, class_id=class_id, exam_id=exam_id
                 )
                 job_db.commit()
-                job_store.set_done(jid, pdf)
+                file_key = f"marksheet:class:{class_id}:exam:{exam_id}"
+                job_store.set_done(jid, pdf, file_cache_key=file_key)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("Class marksheet job %s failed", jid)
                 job_store.set_error(jid, str(exc))
@@ -269,7 +270,27 @@ def class_marksheet_status(class_id: int, job_id: str):
 
     if job["status"] == "done":
         pdf = job["pdf"]
+        file_cache_key = job.get("file_cache_key")
         job_store.cleanup(job_id)  # free in-process memory once delivered
+
+        # Try FileResponse from the on-disk cache (zero-copy sendfile streaming).
+        # Falls back to Response(content=bytes) if the file was evicted between
+        # render and delivery (race with marks invalidation).
+        if file_cache_key:
+            from app.pdf import pdf_file_cache
+
+            cached_path = pdf_file_cache.get_cached_pdf(file_cache_key)
+            if cached_path is not None:
+                try:
+                    return FileResponse(
+                        cached_path,
+                        media_type="application/pdf",
+                        filename=f"marksheet_class_{class_id}.pdf",
+                        headers={"Cache-Control": "no-store"},
+                    )
+                except (FileNotFoundError, OSError):
+                    pass  # File was evicted mid-delivery — fall through
+
         return _pdf_response(pdf, f"marksheet_class_{class_id}.pdf")
 
     if job["status"] == "error":

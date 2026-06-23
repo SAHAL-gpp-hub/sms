@@ -535,6 +535,27 @@ def bulk_save_marks(db: Session, entries: list[MarkEntry]):
 
     db.commit()
     db.info.pop("class_results_cache", None)
+
+    # Invalidate cached PDFs that depend on these marks:
+    #   - class marksheets (on-disk cache, per class+exam)
+    #   - single-student marksheets + result reports (in-memory cache)
+    # exams_by_id is populated unconditionally at the top of this function
+    # (line ~383), so we can derive class_id for each affected exam here.
+    try:
+        from app.pdf import pdf_cache, pdf_file_cache
+        for exam in exams_by_id.values():
+            # Class marksheets are cached on disk, keyed per class+exam.
+            # invalidate_prefix slugifies and string-matches the stored filename.
+            pdf_file_cache.invalidate_prefix(
+                f"marksheet:class:{exam.class_id}:exam:{exam.id}"
+            )
+        # Result reports are keyed by exam+class; wipe the whole report bucket
+        # (short TTL cache, cheap to rebuild) to avoid stale class results.
+        pdf_cache.invalidate_prefix("pdf:report:results")
+        pdf_cache.invalidate_prefix("pdf:marksheet:student")
+    except Exception:  # noqa: BLE001 — never break a marks save on cache cleanup
+        pass
+
     return {"saved": len(entries)}
 
 
@@ -558,6 +579,16 @@ def unlock_marks_for_year(db: Session, academic_year_id: int):
         .update({Mark.locked_at: None}, synchronize_session=False)
     )
     db.commit()
+
+    # Unlock affects all marksheets and result reports for this year.
+    try:
+        from app.pdf import pdf_cache, pdf_file_cache
+        pdf_file_cache.invalidate_prefix("marksheet:")
+        pdf_cache.invalidate_prefix("pdf:report:results")
+        pdf_cache.invalidate_prefix("pdf:marksheet:student")
+    except Exception:  # noqa: BLE001
+        pass
+
     return {"unlocked": unlocked}
 
 

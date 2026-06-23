@@ -25,14 +25,14 @@ def create_job() -> str:
     """Register a new pending job; return its id."""
     jid = str(uuid.uuid4())
     with _lock:
-        _store[jid] = {"status": "pending", "pdf": None, "error": None}
+        _store[jid] = {"status": "pending", "pdf": None, "error": None, "file_cache_key": None}
     return jid
 
 
-def set_done(jid: str, pdf: bytes) -> None:
+def set_done(jid: str, pdf: bytes, file_cache_key: str | None = None) -> None:
     with _lock:
         if jid in _store:
-            _store[jid].update({"status": "done", "pdf": pdf})
+            _store[jid].update({"status": "done", "pdf": pdf, "file_cache_key": file_cache_key})
 
 
 def set_error(jid: str, msg: str) -> None:

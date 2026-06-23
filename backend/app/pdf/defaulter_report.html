@@ -15,12 +15,11 @@
         .header {
             display: flex;
             align-items: center;
-            gap: 14px;
             border-bottom: 2px solid #1a3a6b;
             padding-bottom: 10px;
             margin-bottom: 14px;
         }
-        .header-logo { flex-shrink: 0; width: 56px; height: 56px; }
+        .header-logo { flex-shrink: 0; width: 56px; height: 56px; margin-right: 14px; }
         .header-logo img { width: 56px; height: 56px; object-fit: contain; }
         .header-text { flex: 1; text-align: center; }
         .header-spacer { flex-shrink: 0; width: 56px; }
@@ -33,11 +32,18 @@
         .meta .scope { color: #1a3a6b; font-weight: bold; }
 
         /* ── Summary cards ──────────────────────────────────────── */
-        .summary-box {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 8px;
+        /* NOTE: uses a table (table-layout: fixed) instead of CSS grid,
+           because WeasyPrint 60.x does not support grid/gap. */
+        .summary-table {
+            width: 100%;
+            table-layout: fixed;
+            border-collapse: separate;
+            border-spacing: 8px 0;
             margin-bottom: 14px;
+        }
+        .summary-table td {
+            width: 25%;
+            vertical-align: top;
         }
         .sum-card {
             border: 1px solid #e0e0e0; border-radius: 6px;
@@ -45,7 +51,7 @@
         }
         .sum-value {
             font-size: 18px; font-weight: bold;
-            color: #c0392b; word-break: break-word; line-height: 1.1;
+            color: #c0392b; overflow-wrap: break-word; line-height: 1.1;
         }
         .sum-value.green { color: #1a7a45; }
         .sum-value.neutral { color: #1a3a6b; }
@@ -110,46 +116,6 @@
             font-size: 9px; color: #999;
             border-top: 1px solid #eee; padding-top: 8px;
         }
-
-        /* ── Screen preview only (does not affect the PDF) ──────── */
-        @media screen {
-            body {
-                max-width: 1100px;
-                margin: 0 auto;
-                padding: 16px;
-                background: #f4f6fa;
-            }
-            .header, .summary-box, .table-wrap, .footer {
-                background: #fff;
-                padding: 16px;
-                border-radius: 8px;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-                margin-bottom: 14px;
-            }
-            .summary-box { padding: 10px; background: transparent; box-shadow: none; }
-            .sum-card { background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
-            .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-            table { min-width: 720px; }
-        }
-
-        @media screen and (max-width: 720px) {
-            .summary-box { grid-template-columns: 1fr 1fr; }
-            .sum-value { font-size: 16px; }
-            .school-name { font-size: 17px; }
-            .report-title { font-size: 12px; letter-spacing: 1px; }
-            .header-logo, .header-logo img { width: 44px; height: 44px; }
-            .header-spacer { width: 44px; }
-        }
-
-        @media screen and (max-width: 460px) {
-            .summary-box { grid-template-columns: 1fr; gap: 8px; }
-            body { padding: 8px; }
-            .header, .footer { padding: 12px; }
-            .school-name { font-size: 15px; }
-            .sum-value { font-size: 17px; }
-            .header { flex-wrap: wrap; justify-content: center; }
-            .header-spacer { display: none; }
-        }
     </style>
 </head>
 <body>
@@ -169,24 +135,26 @@
         <div class="header-spacer"></div>
     </div>
 
-    <div class="summary-box">
-        <div class="sum-card">
-            <div class="sum-value">{{ defaulters|length }}</div>
-            <div class="sum-label">Defaulters</div>
-        </div>
-        <div class="sum-card">
-            <div class="sum-value">₹{{ "{:,.0f}".format(total_outstanding) }}</div>
-            <div class="sum-label">Outstanding</div>
-        </div>
-        <div class="sum-card">
-            <div class="sum-value green">₹{{ "{:,.0f}".format(total_collected) }}</div>
-            <div class="sum-label">Collected</div>
-        </div>
-        <div class="sum-card">
-            <div class="sum-value neutral">₹{{ "{:,.0f}".format(total_due) }}</div>
-            <div class="sum-label">Total Billed</div>
-        </div>
-    </div>
+    <table class="summary-table">
+        <tr>
+            <td><div class="sum-card">
+                <div class="sum-value">{{ defaulters|length }}</div>
+                <div class="sum-label">Defaulters</div>
+            </div></td>
+            <td><div class="sum-card">
+                <div class="sum-value">₹{{ "{:,.0f}".format(total_outstanding) }}</div>
+                <div class="sum-label">Outstanding</div>
+            </div></td>
+            <td><div class="sum-card">
+                <div class="sum-value green">₹{{ "{:,.0f}".format(total_collected) }}</div>
+                <div class="sum-label">Collected</div>
+            </div></td>
+            <td><div class="sum-card">
+                <div class="sum-value neutral">₹{{ "{:,.0f}".format(total_due) }}</div>
+                <div class="sum-label">Total Billed</div>
+            </div></td>
+        </tr>
+    </table>
 
     {% if defaulters|length == 0 %}
         <div class="empty">

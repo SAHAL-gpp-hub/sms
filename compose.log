@@ -13,41 +13,41 @@ Attaching to sms_backend, sms_db, sms_frontend
 sms_db  | 
 sms_db  | PostgreSQL Database directory appears to contain a database; Skipping initialization
 sms_db  | 
-sms_db  | 2026-06-23 07:08:35.468 UTC [1] LOG:  starting PostgreSQL 15.18 on aarch64-unknown-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
-sms_db  | 2026-06-23 07:08:35.470 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
-sms_db  | 2026-06-23 07:08:35.470 UTC [1] LOG:  listening on IPv6 address "::", port 5432
-sms_db  | 2026-06-23 07:08:35.471 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
-sms_db  | 2026-06-23 07:08:35.474 UTC [28] LOG:  database system was shut down at 2026-06-23 07:06:24 UTC
-sms_db  | 2026-06-23 07:08:35.481 UTC [1] LOG:  database system is ready to accept connections
+sms_db  | 2026-06-23 17:00:02.430 UTC [1] LOG:  starting PostgreSQL 15.18 on aarch64-unknown-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+sms_db  | 2026-06-23 17:00:02.432 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+sms_db  | 2026-06-23 17:00:02.433 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+sms_db  | 2026-06-23 17:00:02.434 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+sms_db  | 2026-06-23 17:00:02.437 UTC [28] LOG:  database system was shut down at 2026-06-23 16:57:14 UTC
+sms_db  | 2026-06-23 17:00:02.447 UTC [1] LOG:  database system is ready to accept connections
  Container sms_db Healthy 
  Container sms_backend Starting 
  Container sms_backend Started 
  Container sms_frontend Starting 
- Container sms_frontend Started 
 sms_frontend  | /docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
 sms_frontend  | /docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
 sms_frontend  | /docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+ Container sms_frontend Started 
 sms_frontend  | 10-listen-on-ipv6-by-default.sh: info: can not modify /etc/nginx/conf.d/default.conf (read-only file system?)
 sms_frontend  | /docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
 sms_frontend  | /docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
 sms_frontend  | /docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
 sms_frontend  | /docker-entrypoint.sh: Configuration complete; ready for start up
-sms_frontend  | 2026/06/23 07:08:41 [warn] 1#1: the "listen ... http2" directive is deprecated, use the "http2" directive instead in /etc/nginx/conf.d/default.conf:8
+sms_frontend  | 2026/06/23 17:00:08 [warn] 1#1: the "listen ... http2" directive is deprecated, use the "http2" directive instead in /etc/nginx/conf.d/default.conf:8
 sms_frontend  | nginx: [warn] the "listen ... http2" directive is deprecated, use the "http2" directive instead in /etc/nginx/conf.d/default.conf:8
-sms_frontend  | 2026/06/23 07:08:41 [notice] 1#1: using the "epoll" event method
-sms_frontend  | 2026/06/23 07:08:41 [notice] 1#1: nginx/1.31.1
-sms_frontend  | 2026/06/23 07:08:41 [notice] 1#1: built by gcc 15.2.0 (Alpine 15.2.0) 
-sms_frontend  | 2026/06/23 07:08:41 [notice] 1#1: OS: Linux 6.12.72-linuxkit
-sms_frontend  | 2026/06/23 07:08:41 [notice] 1#1: getrlimit(RLIMIT_NOFILE): 1048576:1048576
-sms_frontend  | 2026/06/23 07:08:41 [notice] 1#1: start worker processes
-sms_frontend  | 2026/06/23 07:08:41 [notice] 1#1: start worker process 21
-sms_frontend  | 2026/06/23 07:08:41 [notice] 1#1: start worker process 22
-sms_frontend  | 2026/06/23 07:08:41 [notice] 1#1: start worker process 23
-sms_frontend  | 2026/06/23 07:08:41 [notice] 1#1: start worker process 24
-sms_frontend  | 2026/06/23 07:08:41 [notice] 1#1: start worker process 25
-sms_frontend  | 2026/06/23 07:08:41 [notice] 1#1: start worker process 26
-sms_frontend  | 2026/06/23 07:08:41 [notice] 1#1: start worker process 27
-sms_frontend  | 2026/06/23 07:08:41 [notice] 1#1: start worker process 28
+sms_frontend  | 2026/06/23 17:00:08 [notice] 1#1: using the "epoll" event method
+sms_frontend  | 2026/06/23 17:00:08 [notice] 1#1: nginx/1.31.1
+sms_frontend  | 2026/06/23 17:00:08 [notice] 1#1: built by gcc 15.2.0 (Alpine 15.2.0) 
+sms_frontend  | 2026/06/23 17:00:08 [notice] 1#1: OS: Linux 6.12.72-linuxkit
+sms_frontend  | 2026/06/23 17:00:08 [notice] 1#1: getrlimit(RLIMIT_NOFILE): 1048576:1048576
+sms_frontend  | 2026/06/23 17:00:08 [notice] 1#1: start worker processes
+sms_frontend  | 2026/06/23 17:00:08 [notice] 1#1: start worker process 20
+sms_frontend  | 2026/06/23 17:00:08 [notice] 1#1: start worker process 21
+sms_frontend  | 2026/06/23 17:00:08 [notice] 1#1: start worker process 22
+sms_frontend  | 2026/06/23 17:00:08 [notice] 1#1: start worker process 23
+sms_frontend  | 2026/06/23 17:00:08 [notice] 1#1: start worker process 24
+sms_frontend  | 2026/06/23 17:00:08 [notice] 1#1: start worker process 25
+sms_frontend  | 2026/06/23 17:00:08 [notice] 1#1: start worker process 26
+sms_frontend  | 2026/06/23 17:00:08 [notice] 1#1: start worker process 27
 sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
 sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
 sms_backend   | INFO:     Will watch for changes in these directories: ['/app']
@@ -57,182 +57,30 @@ sms_backend   | INFO:     Started server process [10]
 sms_backend   | INFO:     Waiting for application startup.
 sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
 sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:08:54 +0000] "GET /admin/users HTTP/2.0" 200 1231 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:08:54 +0000] "GET /assets/index-sua39B13.js HTTP/2.0" 200 399023 "https://localhost/admin/users" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:08:54 +0000] "GET /assets/index-CL1rxbf5.css HTTP/2.0" 200 31216 "https://localhost/admin/users" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:08:54 +0000] "GET /assets/auth-D_h_1456.js HTTP/2.0" 200 9712 "https://localhost/admin/users" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:08:54 +0000] "GET /assets/Layout-CxRryCgq.js HTTP/2.0" 200 12777 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:08:54 +0000] "GET /assets/academicYearContext-ClBr3ikg.js HTTP/2.0" 200 325 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:08:54 +0000] "GET /vite.svg HTTP/2.0" 200 1231 "https://localhost/admin/users" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:08:54 +0000] "GET /assets/logo-ZX2l_2q9.svg HTTP/2.0" 200 2917467 "https://localhost/admin/users" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:08:54 +0000] "GET /assets/UserManagement-DIvIFiOa.js HTTP/2.0" 200 53348 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:08:54 +0000] "GET /assets/UI-L_Y3mf1n.js HTTP/2.0" 200 15233 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:08:54 +0000] "GET /api/v1/yearend/current-year HTTP/2.0" 200 112 "https://localhost/admin/users" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:08:54 +0000] "GET /api/v1/auth/me HTTP/2.0" 200 302 "https://localhost/admin/users" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:08:54 +0000] "GET /api/v1/yearend/current-year HTTP/2.0" 200 112 "https://localhost/admin/users" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:08:54 +0000] "GET /api/v1/yearend/current-year HTTP/2.0" 200 112 "https://localhost/admin/users" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:08:54 +0000] "GET /api/v1/yearend/years HTTP/2.0" 200 166 "https://localhost/admin/users" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:08:54 +0000] "GET /api/v1/admin/users?role=teacher HTTP/2.0" 200 319 "https://localhost/admin/users" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:08:54 +0000] "GET /api/v1/admin/teachers/5/assignments HTTP/2.0" 200 78 "https://localhost/admin/users" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:08:56 +0000] "GET /api/v1/setup/classes?academic_year_id=1 HTTP/2.0" 200 3227 "https://localhost/admin/users" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:08:56 +0000] "GET /api/v1/admin/portal/accounts HTTP/2.0" 200 1177 "https://localhost/admin/users" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:08:56 +0000] "GET /api/v1/students/?limit=200&academic_year_id=1 HTTP/2.0" 200 137583 "https://localhost/admin/users" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:08:56 +0000] "GET /api/v1/admin/portal/link-status?academic_year_id=1 HTTP/2.0" 200 283874 "https://localhost/admin/users" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:09:04 +0000] "GET /assets/Dashboard-DNQVNQ4D.js HTTP/2.0" 200 33243 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:09:04 +0000] "GET /assets/PieChart-CNSoE6TE.js HTTP/2.0" 200 364271 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:09:04 +0000] "GET /assets/useQuery-BTRkq0w-.js HTTP/2.0" 200 8730 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:09:04 +0000] "GET /assets/OnboardingEmptyState-DxcM456f.js HTTP/2.0" 200 2168 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:09:04 +0000] "GET /api/v1/admin/correction-requests?status=pending HTTP/2.0" 200 2 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:09:04 +0000] "GET /api/v1/marks/exam-names?academic_year_id=1 HTTP/2.0" 200 52 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:09:04 +0000] "GET /api/v1/admin/users?page=1&page_size=1 HTTP/2.0" 200 417 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:09:04 +0000] "GET /api/v1/analytics/attendance-trends?academic_year_id=1 HTTP/2.0" 200 309 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:09:04 +0000] "GET /api/v1/admin/notifications/otp-failures?status=failed&limit=5 HTTP/2.0" 200 5095 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:09:05 +0000] "GET /api/v1/attendance/dashboard-stats?academic_year_id=1 HTTP/2.0" 200 1545 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:09:05 +0000] "GET /api/v1/analytics/class-performance?academic_year_id=1&exam_name=Unit+Test+1 HTTP/2.0" 200 661 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_db        | 2026-06-23 07:13:35.579 UTC [26] LOG:  checkpoint starting: time
-sms_db        | 2026-06-23 07:13:35.609 UTC [26] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.011 s, sync=0.002 s, total=0.032 s; sync files=2, longest=0.001 s, average=0.001 s; distance=0 kB, estimate=0 kB
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:40:48 +0000] "GET /api/v1/admin/correction-requests?status=pending HTTP/2.0" 200 2 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:40:48 +0000] "GET /api/v1/admin/notifications/otp-failures?status=failed&limit=5 HTTP/2.0" 200 5095 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:40:48 +0000] "GET /api/v1/analytics/attendance-trends?academic_year_id=1 HTTP/2.0" 200 309 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:40:48 +0000] "GET /api/v1/marks/exam-names?academic_year_id=1 HTTP/2.0" 200 52 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:40:48 +0000] "GET /api/v1/admin/users?page=1&page_size=1 HTTP/2.0" 200 417 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:40:48 +0000] "GET /api/v1/attendance/dashboard-stats?academic_year_id=1 HTTP/2.0" 200 1545 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:40:48 +0000] "GET /api/v1/analytics/class-performance?academic_year_id=1&exam_name=Unit+Test+1 HTTP/2.0" 200 661 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
-sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/marksheet_pdf.py'. Reloading...
-sms_backend   | INFO:     Started server process [41]
-sms_backend   | INFO:     Waiting for application startup.
-sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
-sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/marksheet_pdf.py'. Reloading...
-sms_backend   | INFO:     Started server process [59]
-sms_backend   | INFO:     Waiting for application startup.
-sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
-sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/pdf_cache.py'. Reloading...
-sms_backend   | INFO:     Started server process [77]
-sms_backend   | INFO:     Waiting for application startup.
-sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
-sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/report_pdf.py'. Reloading...
-sms_backend   | INFO:     Started server process [95]
-sms_backend   | INFO:     Waiting for application startup.
-sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
-sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/report_pdf.py'. Reloading...
-sms_backend   | Process SpawnProcess-6:
-sms_backend   | Traceback (most recent call last):
-sms_backend   |   File "/usr/local/lib/python3.11/multiprocessing/process.py", line 314, in _bootstrap
-sms_backend   |     self.run()
-sms_backend   |   File "/usr/local/lib/python3.11/multiprocessing/process.py", line 108, in run
-sms_backend   |     self._target(*self._args, **self._kwargs)
-sms_backend   |   File "/usr/local/lib/python3.11/site-packages/uvicorn/_subprocess.py", line 80, in subprocess_started
-sms_backend   |     target(sockets=sockets)
-sms_backend   |   File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 65, in run
-sms_backend   |     return asyncio.run(self.serve(sockets=sockets))
-sms_backend   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-sms_backend   |   File "/usr/local/lib/python3.11/asyncio/runners.py", line 190, in run
-sms_backend   |     return runner.run(main)
-sms_backend   |            ^^^^^^^^^^^^^^^^
-sms_backend   |   File "/usr/local/lib/python3.11/asyncio/runners.py", line 118, in run
-sms_backend   |     return self._loop.run_until_complete(task)
-sms_backend   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-sms_backend   |   File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
-sms_backend   |   File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 69, in serve
-sms_backend   |     await self._serve(sockets)
-sms_backend   |   File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 76, in _serve
-sms_backend   |     config.load()
-sms_backend   |   File "/usr/local/lib/python3.11/site-packages/uvicorn/config.py", line 434, in load
-sms_backend   |     self.loaded_app = import_from_string(self.app)
-sms_backend   |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-sms_backend   |   File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
-sms_backend   |     module = importlib.import_module(module_str)
-sms_backend   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-sms_backend   |   File "/usr/local/lib/python3.11/importlib/__init__.py", line 126, in import_module
-sms_backend   |     return _bootstrap._gcd_import(name[level:], package, level)
-sms_backend   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-sms_backend   |   File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-sms_backend   |   File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-sms_backend   |   File "<frozen importlib._bootstrap>", line 1147, in _find_and_load_unlocked
-sms_backend   |   File "<frozen importlib._bootstrap>", line 690, in _load_unlocked
-sms_backend   |   File "<frozen importlib._bootstrap_external>", line 940, in exec_module
-sms_backend   |   File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-sms_backend   |   File "/app/app/main.py", line 36, in <module>
-sms_backend   |     from app.routers import (
-sms_backend   |   File "/app/app/routers/pdf.py", line 14, in <module>
-sms_backend   |     from app.pdf.marksheet_pdf import render_marksheet_pdf
-sms_backend   |   File "/app/app/pdf/marksheet_pdf.py", line 13, in <module>
-sms_backend   |     from app.pdf.report_pdf import _logo_b64, _merge_pdfs
-sms_backend   |   File "/app/app/pdf/report_pdf.py", line 148
-sms_backend   |     return pdf(db: Session, class_id: int, year: int, month: int) -> bytes:
-sms_backend   |                  ^
-sms_backend   | SyntaxError: invalid syntax
-sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/report_pdf.py'. Reloading...
-sms_backend   | INFO:     Started server process [115]
-sms_backend   | INFO:     Waiting for application startup.
-sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
-sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/report_pdf.py'. Reloading...
-sms_backend   | INFO:     Started server process [133]
-sms_backend   | INFO:     Waiting for application startup.
-sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
-sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/report_pdf.py'. Reloading...
-sms_backend   | INFO:     Started server process [151]
-sms_backend   | INFO:     Waiting for application startup.
-sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
-sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/report_pdf.py'. Reloading...
-sms_backend   | INFO:     Started server process [169]
-sms_backend   | INFO:     Waiting for application startup.
-sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
-sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/report_pdf.py'. Reloading...
-sms_backend   | INFO:     Started server process [187]
-sms_backend   | INFO:     Waiting for application startup.
-sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
-sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/marksheet_pdf.py'. Reloading...
-sms_backend   | INFO:     Started server process [205]
-sms_backend   | INFO:     Waiting for application startup.
-sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
-sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/marksheet_pdf.py'. Reloading...
-sms_backend   | INFO:     Started server process [223]
-sms_backend   | INFO:     Waiting for application startup.
-sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
-sms_backend   | WARNING:  WatchFiles detected changes in 'app/routers/pdf.py'. Reloading...
-sms_backend   | INFO:     Started server process [241]
-sms_backend   | INFO:     Waiting for application startup.
-sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
-sms_backend   | WARNING:  WatchFiles detected changes in 'app/routers/pdf.py'. Reloading...
-sms_backend   | INFO:     Started server process [259]
-sms_backend   | INFO:     Waiting for application startup.
-sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
-sms_backend   | WARNING:  WatchFiles detected changes in 'app/routers/pdf.py'. Reloading...
-sms_backend   | INFO:     Started server process [277]
-sms_backend   | INFO:     Waiting for application startup.
-sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
-sms_backend   | WARNING:  WatchFiles detected changes in 'app/routers/pdf.py'. Reloading...
-sms_backend   | INFO:     Started server process [295]
-sms_backend   | INFO:     Waiting for application startup.
-sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
-sms_backend   | WARNING:  WatchFiles detected changes in 'app/routers/pdf.py'. Reloading...
-sms_backend   | INFO:     Started server process [313]
-sms_backend   | INFO:     Waiting for application startup.
-sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
-sms_backend   | WARNING:  WatchFiles detected changes in 'app/routers/pdf.py'. Reloading...
-sms_backend   | INFO:     Started server process [331]
-sms_backend   | INFO:     Waiting for application startup.
-sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
-sms_backend   | WARNING:  WatchFiles detected changes in 'app/routers/pdf.py'. Reloading...
-sms_backend   | INFO:     Started server process [349]
-sms_backend   | INFO:     Waiting for application startup.
-sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:00 +0000] "GET /reports HTTP/2.0" 200 1231 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:00 +0000] "GET /assets/index-BrkJw0sf.js HTTP/2.0" 200 399517 "https://localhost/reports" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:00 +0000] "GET /assets/index-CL1rxbf5.css HTTP/2.0" 200 31216 "https://localhost/reports" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:00 +0000] "GET /assets/auth-D_h_1456.js HTTP/2.0" 200 9712 "https://localhost/reports" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:01 +0000] "GET /assets/Layout-BeCbrcn8.js HTTP/2.0" 200 12777 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:01 +0000] "GET /assets/academicYearContext-ClBr3ikg.js HTTP/2.0" 200 325 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:01 +0000] "GET /vite.svg HTTP/2.0" 200 1231 "https://localhost/reports" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:01 +0000] "GET /assets/logo-ZX2l_2q9.svg HTTP/2.0" 200 2917467 "https://localhost/reports" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:01 +0000] "GET /assets/Reports-ACJu7prF.js HTTP/2.0" 200 12253 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:01 +0000] "GET /assets/UI-L_Y3mf1n.js HTTP/2.0" 200 15233 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:01 +0000] "GET /api/v1/yearend/current-year HTTP/2.0" 200 112 "https://localhost/reports" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:01 +0000] "GET /api/v1/auth/me HTTP/2.0" 200 302 "https://localhost/reports" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:01 +0000] "GET /api/v1/yearend/years HTTP/2.0" 200 166 "https://localhost/reports" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:01 +0000] "GET /api/v1/setup/classes?academic_year_id=1 HTTP/2.0" 200 3227 "https://localhost/reports" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:01 +0000] "GET /api/v1/yearend/current-year HTTP/2.0" 200 112 "https://localhost/reports" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:01 +0000] "GET /api/v1/yearend/current-year HTTP/2.0" 200 112 "https://localhost/reports" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:07 +0000] "GET /api/v1/pdf/token/report/defaulters?academic_year_id=1 HTTP/2.0" 200 390 "https://localhost/reports" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:10 +0000] "GET /api/v1/pdf/report/defaulters?academic_year_id=1&token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzgyMjM0MTg3LCJpYXQiOjE3ODIyMzQwNjcsImp0aSI6IjBlYTFiM2VlLWE4MzgtNGQ3ZS1hMjNiLWMxYjM4ZGI3MTQ3MyIsInR5cCI6InBkZi1kb3dubG9hZCIsInJlc291cmNlIjoicmVwb3J0OmRlZmF1bHRlcnM6eWVhcj0xOmNsYXNzPWFsbCJ9.D3YufEBR1PNRljewgCPe1bDAjcFijT3M85XlHyCTFJk HTTP/2.0" 200 277876 "https://localhost/reports" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:10 +0000] "GET /favicon.ico HTTP/2.0" 200 1231 "https://localhost/api/v1/pdf/report/defaulters?academic_year_id=1&token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzgyMjM0MTg3LCJpYXQiOjE3ODIyMzQwNjcsImp0aSI6IjBlYTFiM2VlLWE4MzgtNGQ3ZS1hMjNiLWMxYjM4ZGI3MTQ3MyIsInR5cCI6InBkZi1kb3dubG9hZCIsInJlc291cmNlIjoicmVwb3J0OmRlZmF1bHRlcnM6eWVhcj0xOmNsYXNzPWFsbCJ9.D3YufEBR1PNRljewgCPe1bDAjcFijT3M85XlHyCTFJk" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:41 +0000] "GET /api/v1/marks/exams?class_id=1&academic_year_id=1 HTTP/2.0" 200 352 "https://localhost/reports" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:43 +0000] "GET /api/v1/report-cards?class_id=1&exam_id=1&limit=200&academic_year_id=1 HTTP/2.0" 307 0 "https://localhost/reports" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:43 +0000] "GET /api/v1/pdf/token/marksheet/class/1?exam_id=1 HTTP/2.0" 200 367 "https://localhost/reports" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:43 +0000] "GET /api/v1/pdf/marksheet/class/1?exam_id=1&token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzgyMjM0MjIzLCJpYXQiOjE3ODIyMzQxMDMsImp0aSI6Ijc0YzZjOWE4LTk4ZDAtNDExZS1hZWNmLTIxOTQ1ODliMzcyNyIsInR5cCI6InBkZi1kb3dubG9hZCIsInJlc291cmNlIjoibWFya3NoZWV0OmNsYXNzOjE6ZXhhbToxIn0.SjksruF0LMf8W1qBQw1p_c4HElF1NWoMTIV2AXbYBYk HTTP/2.0" 200 170 "https://localhost/reports" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:43 +0000] "GET /api/v1/pdf/marksheet/class/1/status/60490f06-58f7-49cb-8f2d-6db8831ddf99 HTTP/2.0" 202 90 "https://localhost/reports" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_backend   | {"timestamp": "2026-06-23T17:01:43.968763+00:00", "level": "INFO", "logger": "sms.pdf_worker", "message": "Creating PDF render pool with 4 workers."}
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:46 +0000] "GET /api/v1/pdf/marksheet/class/1/status/60490f06-58f7-49cb-8f2d-6db8831ddf99 HTTP/2.0" 200 3037587 "https://localhost/reports" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:17:01:48 +0000] "GET /api/v1/report-cards?class_id=1&exam_id=1&limit=200&academic_year_id=1 HTTP/2.0" 307 0 "https://localhost/reports" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"

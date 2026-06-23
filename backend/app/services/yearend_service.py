@@ -1074,6 +1074,16 @@ def lock_marks_for_year(
     )
     db.commit()
 
+    # Locking changes computed results (LOCKED vs PASS/FAIL), so all cached
+    # marksheets and result reports for this year must be rebuilt on next access.
+    try:
+        from app.pdf import pdf_cache, pdf_file_cache
+        pdf_file_cache.invalidate_prefix("marksheet:")
+        pdf_cache.invalidate_prefix("pdf:report:results")
+        pdf_cache.invalidate_prefix("pdf:marksheet:student")
+    except Exception:  # noqa: BLE001
+        pass
+
     return {"locked": locked_count, "academic_year_id": academic_year_id}
 
 

@@ -27,7 +27,6 @@
         .header {
             display: flex;
             align-items: center;
-            gap: 14px;
             border-bottom: 2px solid #1a3a6b;
             padding-bottom: 12px;
             margin-bottom: 14px;
@@ -38,6 +37,7 @@
             border-radius: 50%;
             background: #1a3a6b;
             overflow: hidden;
+            margin-right: 14px;
         }
         .header-logo img { width: 54px; height: 54px; object-fit: contain; }
         .header-text { flex: 1; text-align: center; }
@@ -82,12 +82,6 @@
 
         /* Footer */
         .footer { margin-top: 14px; text-align: center; font-size: 9px; color: #aaa; border-top: 1px solid #eee; padding-top: 8px; }
-
-        @media screen and (max-width: 640px) {
-            .kpi-table, .kpi-table tbody, .kpi-table tr, .kpi-table td { display: block; width: 100%; margin-bottom: 8px; }
-            .header { flex-wrap: wrap; justify-content: center; }
-            .header-spacer { display: none; }
-        }
     </style>
 </head>
 <body>

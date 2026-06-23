@@ -15,7 +15,6 @@
         .header {
             display: flex;
             align-items: center;
-            gap: 14px;
             border-bottom: 2px solid #1a3a6b;
             padding-bottom: 10px;
             margin-bottom: 14px;
@@ -27,6 +26,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            margin-right: 14px;
         }
         .header-logo img {
             width: 56px;
@@ -89,46 +89,6 @@
             margin-top: 12px; text-align: center;
             font-size: 9px; color: #999;
             border-top: 1px solid #eee; padding-top: 8px;
-        }
-
-        /* ── Screen-only responsive layer ── */
-        @media screen {
-            body {
-                max-width: 1400px;
-                margin: 0 auto;
-                padding: 16px;
-                background: #f4f6fa;
-            }
-            .header, .table-wrap, .signatures, .footer {
-                background: #fff;
-                padding: 16px;
-                border-radius: 8px;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-                margin-bottom: 14px;
-            }
-            .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-            table { min-width: 900px; }
-            th, td { white-space: nowrap; }
-            .signatures { background: #fff; padding: 16px 24px; }
-        }
-
-        @media screen and (max-width: 720px) {
-            .school-name { font-size: 16px; }
-            .report-title { font-size: 12px; letter-spacing: 1px; }
-            body { padding: 10px; }
-            .header, .footer { padding: 12px; }
-            .header-logo { width: 44px; height: 44px; }
-            .header-logo img { width: 44px; height: 44px; }
-            .header-spacer { width: 44px; }
-        }
-
-        @media screen and (max-width: 420px) {
-            body { padding: 8px; }
-            .school-name { font-size: 14px; }
-            .report-title { font-size: 11px; }
-            .meta { font-size: 9px; }
-            .header { flex-wrap: wrap; justify-content: center; }
-            .header-spacer { display: none; }
         }
     </style>
 </head>
