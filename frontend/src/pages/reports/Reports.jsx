@@ -39,6 +39,12 @@ const Icons = {
       <path d="M7 10l5 5 5-5M12 15V3" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
+  Spinner: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" style={{ animation: 'spin 0.9s linear infinite' }}>
+      <path d="M21 12a9 9 0 1 1-6.219-8.56" strokeLinecap="round" />
+    </svg>
+  ),
   Info: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <circle cx="12" cy="12" r="10" />
@@ -126,7 +132,7 @@ function ReportCard({ icon, title, description, children, accentColor = 'var(--b
 }
 
 /* ---------- DownloadButton ---------- */
-function DownloadButton({ label, disabled, onClick }) {
+function DownloadButton({ label, disabled, loading, onClick }) {
   const baseStyle = {
     width: '100%',
     justifyContent: 'center',
@@ -137,16 +143,17 @@ function DownloadButton({ label, disabled, onClick }) {
     gap: 8,
     padding: '10px 16px',
   }
+  const isDisabled = disabled || loading
 
-  if (disabled) {
+  if (isDisabled) {
     return (
       <button
         disabled
         className="btn btn-secondary"
         style={{ ...baseStyle, opacity: 0.55, cursor: 'not-allowed' }}
       >
-        {Icons.Download}
-        {label}
+        {loading ? Icons.Spinner : Icons.Download}
+        {loading ? 'Preparing...' : label}
       </button>
     )
   }
@@ -209,6 +216,14 @@ export default function Reports() {
   const [resultClass, setResultClass] = useState('')
   const [msExam, setMsExam] = useState('')
   const [msClass, setMsClass] = useState('')
+
+  // Per-report loading flags so each download button shows a "Preparing..."
+  // spinner and is disabled while its PDF is being generated (prevents
+  // double-clicks spawning multiple concurrent popups).
+  const [defaulterLoading, setDefaulterLoading] = useState(false)
+  const [attendanceLoading, setAttendanceLoading] = useState(false)
+  const [resultLoading, setResultLoading] = useState(false)
+  const [marksheetLoading, setMarksheetLoading] = useState(false)
 
   useEffect(() => {
     setDefYear(selectedYearId || '')
@@ -318,8 +333,13 @@ export default function Reports() {
               href="#"
               onClick={e => {
                 e.preventDefault()
+                if (defaulterLoading) return
+                setDefaulterLoading(true)
                 openSignedPdf('/pdf/token/report/defaulters', '/pdf/report/defaulters', defYear ? { academic_year_id: defYear } : {})
+                  .catch(() => toast.error('Could not prepare defaulter report PDF'))
+                  .finally(() => setDefaulterLoading(false))
               }}
+              loading={defaulterLoading}
               label="Download Report"
             />
           </div>
@@ -364,8 +384,13 @@ export default function Reports() {
               href="#"
               onClick={e => {
                 e.preventDefault()
+                if (attendanceLoading || !attClass) return
+                setAttendanceLoading(true)
                 openSignedPdf('/pdf/token/report/attendance', '/pdf/report/attendance', { class_id: attClass, year: attYear, month: attMonth })
+                  .catch(() => toast.error('Could not prepare attendance report PDF'))
+                  .finally(() => setAttendanceLoading(false))
               }}
+              loading={attendanceLoading}
               label="Download Report"
               disabled={!attClass}
             />
@@ -402,8 +427,13 @@ export default function Reports() {
               href="#"
               onClick={e => {
                 e.preventDefault()
+                if (resultLoading || !resultClass || !resultExam) return
+                setResultLoading(true)
                 openSignedPdf('/pdf/token/report/results', '/pdf/report/results', { exam_id: resultExam, class_id: resultClass })
+                  .catch(() => toast.error('Could not prepare result report PDF'))
+                  .finally(() => setResultLoading(false))
               }}
+              loading={resultLoading}
               label="Download Report"
               disabled={!resultClass || !resultExam}
             />
@@ -442,9 +472,18 @@ export default function Reports() {
               href="#"
               onClick={async e => {
                 e.preventDefault()
-                await openSignedPdfWithPoll(`/pdf/token/marksheet/class/${msClass}`, `/pdf/marksheet/class/${msClass}`, { exam_id: msExam })
-                setTimeout(refreshReportCards, 1200)
+                if (marksheetLoading || !msClass || !msExam) return
+                setMarksheetLoading(true)
+                try {
+                  await openSignedPdfWithPoll(`/pdf/token/marksheet/class/${msClass}`, `/pdf/marksheet/class/${msClass}`, { exam_id: msExam })
+                  setTimeout(refreshReportCards, 1200)
+                } catch (err) {
+                  toast.error(err?.message || 'Could not prepare marksheets PDF')
+                } finally {
+                  setMarksheetLoading(false)
+                }
               }}
+              loading={marksheetLoading}
               label="Download Marksheets"
               disabled={!msClass || !msExam}
             />

@@ -30,6 +30,33 @@ router = APIRouter(prefix="/api/v1/pdf", tags=["PDF"])
 _PDF_TOKEN_TTL = 120  # 2 minutes
 
 
+def _pdf_response(
+    pdf: bytes,
+    filename: str,
+    *,
+    cacheable: bool = False,
+) -> Response:
+    """Build a PDF response with Content-Length and optional browser caching.
+
+    Content-Length lets the browser display a download progress bar and render
+    the PDF progressively instead of buffering the whole response first.
+
+    cacheable=True adds a short Cache-Control: private, max-age=60 so the
+    browser can serve an immediate repeat request (e.g. user clicks "Download"
+    twice quickly) from its own cache without hitting the server again.
+    Use only for reports that are read-only snapshots.
+    """
+    headers = {
+        "Content-Disposition": f"inline; filename={filename}",
+        "Content-Length": str(len(pdf)),
+    }
+    if cacheable:
+        headers["Cache-Control"] = "private, max-age=60"
+    else:
+        headers["Cache-Control"] = "no-store"
+    return Response(content=pdf, media_type="application/pdf", headers=headers)
+
+
 def _require_pdf_token(token: str | None, resource: str) -> None:
     if not token:
         raise HTTPException(status_code=401, detail="PDF download token is required")
@@ -168,11 +195,7 @@ def generate_student_marksheet(
         pdf_path=f"/pdf/marksheet/student/{student_id}?exam_id={exam_id}&class_id={class_id}",
     )
     db.commit()
-    return Response(
-        content=pdf,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"inline; filename=marksheet_{student_id}.pdf"}
-    )
+    return _pdf_response(pdf, f"marksheet_{student_id}.pdf")
 
 
 @router.get("/marksheet/class/{class_id}")
@@ -247,14 +270,7 @@ def class_marksheet_status(class_id: int, job_id: str):
     if job["status"] == "done":
         pdf = job["pdf"]
         job_store.cleanup(job_id)  # free in-process memory once delivered
-        return Response(
-            content=pdf,
-            media_type="application/pdf",
-            headers={
-                "Content-Disposition": f"inline; filename=marksheet_class_{class_id}.pdf",
-                "Cache-Control": "no-store",
-            },
-        )
+        return _pdf_response(pdf, f"marksheet_class_{class_id}.pdf")
 
     if job["status"] == "error":
         job_store.cleanup(job_id)
@@ -281,11 +297,7 @@ def defaulter_report(
         f"report:defaulters:year={academic_year_id or 'all'}:class={class_id or 'all'}",
     )
     pdf = render_defaulter_report(db, academic_year_id, class_id)
-    return Response(
-        content=pdf,
-        media_type="application/pdf",
-        headers={"Content-Disposition": "inline; filename=defaulter_report.pdf"}
-    )
+    return _pdf_response(pdf, "defaulter_report.pdf", cacheable=True)
 
 
 @router.get("/report/attendance")
@@ -298,11 +310,7 @@ def attendance_report(
 ):
     _require_pdf_token(token, f"report:attendance:{class_id}:{year}:{month}")
     pdf = render_attendance_report(db, class_id, year, month)
-    return Response(
-        content=pdf,
-        media_type="application/pdf",
-        headers={"Content-Disposition": "inline; filename=attendance_report.pdf"}
-    )
+    return _pdf_response(pdf, "attendance_report.pdf", cacheable=True)
 
 
 @router.get("/report/results")
@@ -316,11 +324,7 @@ def result_report(
     pdf = render_result_report(db, exam_id, class_id)
     if not pdf:
         raise HTTPException(status_code=404, detail="No marks found for this class")
-    return Response(
-        content=pdf,
-        media_type="application/pdf",
-        headers={"Content-Disposition": "inline; filename=result_report.pdf"}
-    )
+    return _pdf_response(pdf, "result_report.pdf", cacheable=True)
 
 
 @router.get("/receipt/{payment_id}")
@@ -333,8 +337,4 @@ def fee_receipt_pdf(
     pdf = render_fee_receipt_pdf(db, payment_id)
     if not pdf:
         raise HTTPException(status_code=404, detail="Payment receipt not found")
-    return Response(
-        content=pdf,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"inline; filename=receipt_{payment_id}.pdf"},
-    )
+    return _pdf_response(pdf, f"receipt_{payment_id}.pdf")

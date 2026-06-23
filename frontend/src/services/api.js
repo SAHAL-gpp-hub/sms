@@ -8,7 +8,7 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-function createPdfLoadingWindow(title = 'Preparing PDF') {
+function createPdfLoadingWindow(title = 'Preparing PDF', { showElapsed = false } = {}) {
   const popup = window.open('', '_blank')
   if (!popup) return null
   popup.document.write(`
@@ -51,12 +51,36 @@ function createPdfLoadingWindow(title = 'Preparing PDF') {
         <div class="wrap">
           <div class="spinner"></div>
           <div>${title}</div>
-          <div class="sub">This may take a few seconds for larger files.</div>
+          <div class="sub">${showElapsed
+            ? '<span id="elapsed">Elapsed: 0s</span> — generating your PDF, please keep this tab open.'
+            : 'This may take a few seconds for larger files.'}</div>
         </div>
       </body>
     </html>
   `)
   popup.document.close()
+
+  // For long-running jobs (class marksheets), update the elapsed timer every
+  // second so the user can see the process is still alive instead of staring
+  // at a frozen spinner for up to 2 minutes.
+  let elapsedTimer = null
+  if (showElapsed) {
+    const start = Date.now()
+    const el = popup.document.getElementById('elapsed')
+    elapsedTimer = popup.setInterval(() => {
+      if (!el || popup.closed) {
+        popup.clearInterval(elapsedTimer)
+        return
+      }
+      const secs = Math.floor((Date.now() - start) / 1000)
+      el.textContent = `Elapsed: ${secs}s`
+    }, 1000)
+  }
+
+  // Expose a stop hook so callers can clear the timer once the PDF arrives.
+  popup.__stopPdfTimer = () => {
+    if (elapsedTimer) popup.clearInterval(elapsedTimer)
+  }
   return popup
 }
 
@@ -88,7 +112,7 @@ export async function openSignedPdf(tokenPath, pdfPath, params = {}) {
 export async function openSignedPdfWithPoll(tokenPath, pdfPath, params = {}, opts = {}) {
   const pollIntervalMs = opts.pollIntervalMs ?? 1500
   const timeoutMs = opts.timeoutMs ?? 120000
-  const popup = createPdfLoadingWindow()
+  const popup = createPdfLoadingWindow('Preparing marksheets', { showElapsed: true })
   try {
     const { data } = await api.get(tokenPath, { params })
 
@@ -116,8 +140,9 @@ export async function openSignedPdfWithPoll(tokenPath, pdfPath, params = {}, opt
         if (res.status === 200 && res.data?.type?.includes('application/pdf')) {
           const blobUrl = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
           if (popup) {
+            if (popup.__stopPdfTimer) popup.__stopPdfTimer()
             popup.location.replace(blobUrl)
-            setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000)
+            setTimeout(() => window.URL.revokeObjectURL(blobUrl), 120_000)
           } else {
             window.open(blobUrl, '_blank', 'noopener,noreferrer')
           }
@@ -139,8 +164,12 @@ export async function openSignedPdfWithPoll(tokenPath, pdfPath, params = {}, opt
     // Backward-compat: endpoint returned a PDF directly (no job).
     if (started.data?.type?.includes('application/pdf')) {
       const blobUrl = window.URL.createObjectURL(new Blob([started.data], { type: 'application/pdf' }))
-      if (popup) popup.location.replace(blobUrl)
-      else window.open(blobUrl, '_blank', 'noopener,noreferrer')
+      if (popup) {
+        if (popup.__stopPdfTimer) popup.__stopPdfTimer()
+        popup.location.replace(blobUrl)
+      } else {
+        window.open(blobUrl, '_blank', 'noopener,noreferrer')
+      }
     }
   } catch (err) {
     if (popup && !popup.closed) popup.close()

@@ -37,6 +37,10 @@ const PAGE_SIZE_DEFAULT = 20
 function usePagination(items, pageSize = PAGE_SIZE_DEFAULT) {
   const [page, setPage] = useState(1)
 
+  // Reset to page 1 whenever the source list changes (filter/search applied)
+  const itemsKey = items.length
+  useEffect(() => { setPage(1) }, [itemsKey])
+
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize))
   const safePage = Math.min(page, totalPages)
   const pageItems = useMemo(
@@ -53,7 +57,6 @@ function Pagination({ page, totalPages, total, pageSize, setPage, pageSizeOption
   const from = total > 0 ? (page - 1) * pageSize + 1 : 0
   const to   = Math.min(page * pageSize, total)
 
-  // Build page numbers: always show first, last, current ±1, with ellipsis
   const range = []
   const add = (n) => { if (!range.includes(n) && n >= 1 && n <= totalPages) range.push(n) }
   add(1); add(totalPages)
@@ -193,6 +196,291 @@ function PasswordResetModal({ user, onClose, onSuccess }) {
   )
 }
 
+// ── Send Registration Link Modal (v2 NEW) ─────────────────────────────────────
+function SendRegistrationLinkModal({ onClose }) {
+  const { selectedYearId } = useAcademicYear()
+  const [classes, setClasses]         = useState([])
+  const [classesLoading, setClassesLoading] = useState(true)
+  const [selectedClassIds, setSelectedClassIds] = useState([])
+  const [channel, setChannel]         = useState('whatsapp')
+  const [preview, setPreview]         = useState(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [sending, setSending]         = useState(false)
+  const [result, setResult]           = useState(null)
+
+  useEffect(() => {
+    if (!selectedYearId) { setClassesLoading(false); return }
+    setClassesLoading(true)
+    setupAPI.getClasses(selectedYearId)
+      .then(r => setClasses(r.data || []))
+      .catch(() => toast.error('Failed to load classes'))
+      .finally(() => setClassesLoading(false))
+  }, [selectedYearId])
+
+  useEffect(() => {
+    if (selectedClassIds.length === 0) { setPreview(null); return }
+    setPreviewLoading(true)
+    adminAPI.getParentsByClasses(selectedClassIds)
+      .then(r => setPreview(r.data))
+      .catch(() => {})
+      .finally(() => setPreviewLoading(false))
+  }, [selectedClassIds])
+
+  const toggleClass = (id) => {
+    setSelectedClassIds(prev =>
+      prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
+    )
+  }
+
+  const toggleAll = () => {
+    if (selectedClassIds.length === classes.length) setSelectedClassIds([])
+    else setSelectedClassIds(classes.map(c => String(c.id)))
+  }
+
+  const handleSend = async () => {
+    if (selectedClassIds.length === 0) { toast.error('Select at least one class'); return }
+    setSending(true)
+    try {
+      const res = await adminAPI.sendRegistrationLink({
+        class_ids: selectedClassIds.map(Number),
+        channel,
+      })
+      setResult(res.data)
+      toast.success(`Registration links sent — ${res.data.sent} delivered`)
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const CHANNEL_OPTIONS = [
+    { value: 'whatsapp', label: 'WhatsApp', icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+        <path d="M12 0C5.373 0 0 5.373 0 12c0 2.121.554 4.112 1.523 5.845L0 24l6.335-1.493A11.934 11.934 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 01-5.006-1.37l-.36-.214-3.732.879.936-3.638-.234-.374A9.818 9.818 0 1112 21.818z"/>
+      </svg>
+    )},
+    { value: 'sms', label: 'SMS', icon: (
+      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+      </svg>
+    )},
+    { value: 'both', label: 'Both', icon: (
+      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+      </svg>
+    )},
+  ]
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)' }} onClick={result ? onClose : undefined} />
+      <div style={{
+        position: 'relative', background: 'var(--surface-0)', borderRadius: '16px',
+        width: '100%', maxWidth: '520px', maxHeight: '90vh', overflowY: 'auto',
+        border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-xl)',
+      }}>
+        <div style={{ padding: '20px 20px 0', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+          <div>
+            <h3 style={{ fontSize: '16px', fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>Send Registration Link</h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+              Send portal registration links to parents by class
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            style={{ flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: '2px', borderRadius: '6px' }}
+            aria-label="Close"
+          >
+            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        <div style={{ padding: '20px' }}>
+          {result ? (
+            <div style={{ textAlign: 'center', padding: '8px 0 4px' }}>
+              <div style={{
+                width: '56px', height: '56px', borderRadius: '50%', margin: '0 auto 16px',
+                background: 'var(--success-100)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <svg width="26" height="26" fill="none" stroke="var(--success-600)" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div style={{ fontSize: '18px', fontWeight: 900, color: 'var(--text-primary)', marginBottom: '6px' }}>Links Sent!</div>
+              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: 1.6 }}>
+                <span style={{ fontWeight: 700, color: 'var(--success-700)' }}>{result.sent}</span> message{result.sent !== 1 ? 's' : ''} delivered
+                {result.failed > 0 && (
+                  <span> · <span style={{ color: 'var(--danger-600)', fontWeight: 700 }}>{result.failed} failed</span></span>
+                )}
+              </div>
+              {result.failed > 0 && (
+                <div style={{ padding: '10px 14px', background: 'var(--warning-50)', border: '1px solid var(--warning-200)', borderRadius: '8px', fontSize: '12px', color: 'var(--warning-700)', marginBottom: '16px', textAlign: 'left' }}>
+                  {result.failed} parent{result.failed !== 1 ? 's' : ''} could not be reached — they may have missing phone numbers.
+                </div>
+              )}
+              <button className="btn btn-primary" style={{ width: '100%' }} onClick={onClose}>Done</button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-tertiary)', marginBottom: '10px' }}>
+                  1. Select Classes
+                </div>
+                {classesLoading ? (
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {[1,2,3,4].map(i => <div key={i} style={{ width: 72, height: 34, borderRadius: 8, background: 'var(--gray-100)', animation: 'pulse 1.5s ease-in-out infinite' }} />)}
+                  </div>
+                ) : classes.length === 0 ? (
+                  <div style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>No classes found for the current academic year.</div>
+                ) : (
+                  <div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={toggleAll}
+                        style={{
+                          padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 700,
+                          cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                          border: `1px solid ${selectedClassIds.length === classes.length ? 'var(--brand-400)' : 'var(--border-default)'}`,
+                          background: selectedClassIds.length === classes.length ? 'var(--brand-50)' : 'var(--surface-0)',
+                          color: selectedClassIds.length === classes.length ? 'var(--brand-700)' : 'var(--text-secondary)',
+                        }}
+                      >
+                        {selectedClassIds.length === classes.length ? '✓ All' : 'All'}
+                      </button>
+                      {classes.map(cls => {
+                        const selected = selectedClassIds.includes(String(cls.id))
+                        return (
+                          <button
+                            key={cls.id}
+                            type="button"
+                            onClick={() => toggleClass(String(cls.id))}
+                            style={{
+                              padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 700,
+                              cursor: 'pointer', fontFamily: 'var(--font-sans)', transition: 'all .12s',
+                              border: `1px solid ${selected ? 'var(--brand-400)' : 'var(--border-default)'}`,
+                              background: selected ? 'var(--brand-50)' : 'var(--surface-0)',
+                              color: selected ? 'var(--brand-700)' : 'var(--text-secondary)',
+                              boxShadow: selected ? 'var(--shadow-xs)' : 'none',
+                            }}
+                          >
+                            {selected && <span style={{ marginRight: '4px' }}>✓</span>}
+                            {cls.name}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: 'var(--text-tertiary)' }}>
+                      {selectedClassIds.length === 0
+                        ? 'No classes selected'
+                        : `${selectedClassIds.length} class${selectedClassIds.length !== 1 ? 'es' : ''} selected`}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-tertiary)', marginBottom: '10px' }}>
+                  2. Channel
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {CHANNEL_OPTIONS.map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setChannel(opt.value)}
+                      style={{
+                        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                        padding: '9px 10px', borderRadius: '8px', fontSize: '12px', fontWeight: 700,
+                        cursor: 'pointer', fontFamily: 'var(--font-sans)', transition: 'all .12s',
+                        border: `1.5px solid ${channel === opt.value ? 'var(--brand-500)' : 'var(--border-default)'}`,
+                        background: channel === opt.value ? 'var(--brand-50)' : 'var(--surface-0)',
+                        color: channel === opt.value ? 'var(--brand-700)' : 'var(--text-secondary)',
+                        boxShadow: channel === opt.value ? 'var(--shadow-xs)' : 'none',
+                      }}
+                    >
+                      {opt.icon}{opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {selectedClassIds.length > 0 && (
+                <div>
+                  <div style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-tertiary)', marginBottom: '10px' }}>
+                    3. Recipients
+                  </div>
+                  {previewLoading ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-tertiary)', padding: '10px 0' }}>
+                      <span className="spinner" style={{ width: '13px', height: '13px' }} /> Loading recipients…
+                    </div>
+                  ) : preview ? (
+                    <div style={{ border: '1px solid var(--border-subtle)', borderRadius: '10px', overflow: 'hidden' }}>
+                      <div style={{
+                        padding: '10px 14px', background: 'var(--gray-50)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        borderBottom: preview?.parents?.length > 0 ? '1px solid var(--border-subtle)' : 'none',
+                      }}>
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          {preview.count ?? preview?.parents?.length ?? 0} parent{(preview.count ?? preview?.parents?.length ?? 0) !== 1 ? 's' : ''} will receive a link
+                        </span>
+                        {(preview.count ?? 0) === 0 && (
+                          <span style={{ fontSize: '11px', color: 'var(--warning-600)', fontWeight: 700 }}>No parents found</span>
+                        )}
+                      </div>
+                      {preview?.parents?.length > 0 && (
+                        <div style={{ maxHeight: '140px', overflowY: 'auto' }}>
+                          {preview.parents.slice(0, 20).map((p, i) => (
+                            <div key={i} style={{
+                              padding: '8px 14px', fontSize: '12px',
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                              borderBottom: i < preview.parents.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+                            }}>
+                              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.name || p.guardian_name || '—'}</span>
+                              <span style={{ color: 'var(--text-tertiary)' }}>{p.phone || p.guardian_phone || '—'}</span>
+                            </div>
+                          ))}
+                          {preview.parents.length > 20 && (
+                            <div style={{ padding: '8px 14px', fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center' }}>
+                              +{preview.parents.length - 20} more
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '10px', paddingTop: '4px' }}>
+                <button
+                  className="btn btn-primary"
+                  style={{ flex: 1 }}
+                  disabled={sending || selectedClassIds.length === 0}
+                  onClick={handleSend}
+                >
+                  {sending
+                    ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Sending…</>
+                    : <>
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                        </svg>
+                        Send Registration Links
+                      </>
+                  }
+                </button>
+                <button className="btn btn-secondary" onClick={onClose} disabled={sending}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ════════════════════════════════════════════════════════════════════════════════
 // TAB 1 — Users List
 // ════════════════════════════════════════════════════════════════════════════════
@@ -202,7 +490,7 @@ function UsersTab() {
   const [loadError, setLoadError] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
   const [search, setSearch] = useState('')
-  
+
   // Pagination & Server-side state
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
@@ -213,6 +501,7 @@ function UsersTab() {
   const [resetTarget, setResetTarget] = useState(null)
   const [deactivateTarget, setDeactivateTarget] = useState(null)
   const [deactivating, setDeactivating] = useState(false)
+  const [sendRegLinkOpen, setSendRegLinkOpen] = useState(false)
 
   const fetchUsers = useCallback(async () => {
     setLoading(true)
@@ -229,22 +518,18 @@ function UsersTab() {
         setUsers(res.data.items)
         setTotal(res.data.total)
         setTotalPages(res.data.total_pages)
-        
         if (res.data.role_counts) {
-        setRoleCounts(res.data.role_counts)
-      }
-    }
-        else {
+          setRoleCounts(res.data.role_counts)
+        }
+      } else {
         const all = res.data || []
         setUsers(all)
         setTotal(all.length)
         setTotalPages(1)
-
         const nextRoleCounts = all.reduce((acc, user) => {
-              acc[user.role] = (acc[user.role] || 0) + 1
-              return acc
-            }, {})
-
+          acc[user.role] = (acc[user.role] || 0) + 1
+          return acc
+        }, {})
         setRoleCounts(nextRoleCounts)
       }
     } catch (err) {
@@ -260,11 +545,8 @@ function UsersTab() {
     fetchUsers()
   }, [fetchUsers])
 
-  
-  const totalUsersCount = Object.values(roleCounts).reduce(
-  (a, b) => a + b,
-  0
-)
+  const totalUsersCount = Object.values(roleCounts).reduce((a, b) => a + b, 0)
+
   const handleSearchChange = (value) => {
     setSearch(value)
     setPage(1)
@@ -372,6 +654,17 @@ function UsersTab() {
         {(search || roleFilter) && (
           <button className="btn btn-ghost btn-sm" onClick={clearFilters}>Clear</button>
         )}
+        <button
+          type="button"
+          className="btn btn-secondary"
+          style={{ whiteSpace: 'nowrap' }}
+          onClick={() => setSendRegLinkOpen(true)}
+        >
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+          </svg>
+          Send Registration Link
+        </button>
         <Link to="/admin/users/new" className="btn btn-primary" style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}>
           <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
@@ -500,6 +793,7 @@ function UsersTab() {
         onCancel={() => setDeactivateTarget(null)}
         loading={deactivating}
       />
+      {sendRegLinkOpen && <SendRegistrationLinkModal onClose={() => setSendRegLinkOpen(false)} />}
     </div>
   )
 }
@@ -625,7 +919,6 @@ function TeacherAssignmentsTab({ selectedTeacherId = '', onTeacherSelected }) {
     setupAPI.getClasses(selectedYearId).then(r => setClasses(r.data || []))
   }, [selectedYearId])
 
-  // Load subjects when class changes
   useEffect(() => {
     if (form.class_id) {
       marksAPI.getSubjects(form.class_id).then(r => setSubjects(r.data || []))
@@ -634,7 +927,6 @@ function TeacherAssignmentsTab({ selectedTeacherId = '', onTeacherSelected }) {
     }
   }, [form.class_id])
 
-  // Load assignments when teacher changes
   useEffect(() => {
     if (!selectedTeacher) { setAssignments([]); return }
     setLoading(true)
@@ -662,7 +954,6 @@ function TeacherAssignmentsTab({ selectedTeacherId = '', onTeacherSelected }) {
       })
       toast.success('Assignment added')
       setForm(f => ({ ...f, class_id: '', subject_id: '' }))
-      // Reload
       const r = await adminAPI.listTeacherAssignments(selectedTeacher)
       setAssignments(r.data || [])
     } catch (err) {
@@ -694,12 +985,10 @@ function TeacherAssignmentsTab({ selectedTeacherId = '', onTeacherSelected }) {
   const yearOptions    = years.map(y => ({ value: String(y.id), label: y.label + (y.is_current ? ' (Current)' : '') }))
   const subjectOptions = subjects.map(s => ({ value: String(s.id), label: s.name }))
 
-  // ── Pagination for assignments list ──
   const { page, setPage, pageItems: pageAssignments, totalPages } = usePagination(assignments, 15)
 
   return (
     <div>
-      {/* Teacher selector */}
       <div className="card" style={{ marginBottom: '14px' }}>
         <div className="card-header"><div className="card-title">Select Teacher</div></div>
         <div style={{ padding: '16px 18px' }}>
@@ -715,7 +1004,6 @@ function TeacherAssignmentsTab({ selectedTeacherId = '', onTeacherSelected }) {
 
       {selectedTeacher && (
         <>
-          {/* Add assignment form */}
           <div style={{ background: 'var(--brand-50)', border: '1px solid var(--brand-200)', borderRadius: '12px', padding: '16px 20px', marginBottom: '14px' }}>
             <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--brand-700)', marginBottom: '12px' }}>
               Add Class Assignment
@@ -748,7 +1036,6 @@ function TeacherAssignmentsTab({ selectedTeacherId = '', onTeacherSelected }) {
             </button>
           </div>
 
-          {/* Assignments list */}
           <div className="card">
             <div className="card-header">
               <div className="card-title">
@@ -823,7 +1110,9 @@ function TeacherAssignmentsTab({ selectedTeacherId = '', onTeacherSelected }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
-// TAB 3 — Portal Linking (link student/parent user → student record)
+// TAB 3 — Portal Linking
+// Merged: v1 filters (class/section/status) + checkbox selection + targeted invites
+//       + v2 bulk invite via API (openInvitePreview/confirmInviteSend pattern)
 // ════════════════════════════════════════════════════════════════════════════════
 function PortalLinkingTab() {
   const { selectedYearId } = useAcademicYear()
@@ -840,13 +1129,13 @@ function PortalLinkingTab() {
   const [portalPageSize, setPortalPageSize]     = useState(20)
 
   // Activation state
-  const [linkStatus, setLinkStatus]     = useState(null)
+  const [linkStatus, setLinkStatus]       = useState(null)
   const [statusLoading, setStatusLoading] = useState(false)
   const [bulkGenerating, setBulkGenerating] = useState(false)
-  const [bulkResult, setBulkResult]     = useState(null)
+  const [bulkResult, setBulkResult]       = useState(null)
   const [invitePreview, setInvitePreview] = useState(null)
   const [inviteRequest, setInviteRequest] = useState(null)
-  const [inviteBusy, setInviteBusy] = useState(false)
+  const [inviteBusy, setInviteBusy]       = useState(false)
   const [generatingFor, setGeneratingFor] = useState(null)
 
   const fetchAll = useCallback(async () => {
@@ -905,6 +1194,7 @@ function PortalLinkingTab() {
     }
   }
 
+  // ── Targeted invite (preview → confirm) ──────────────────────────────────
   const buildInviteRequest = (target) => {
     const base = {
       target,
@@ -981,15 +1271,9 @@ function PortalLinkingTab() {
 
   const handleGenerateAccount = async (student, accountType) => {
     const hasAccount = accountType === 'student' ? student.has_student_account : student.has_parent_account
-    const hasEmail = accountType === 'student' ? student.has_student_email : student.has_guardian_email
-    if (hasAccount) {
-      toast.success(`${accountType === 'student' ? 'Student' : 'Parent'} account is already linked`)
-      return
-    }
-    if (!hasEmail) {
-      toast.error(`${accountType === 'student' ? 'Student' : 'Guardian'} email is missing`)
-      return
-    }
+    const hasEmail   = accountType === 'student' ? student.has_student_email   : student.has_guardian_email
+    if (hasAccount) { toast.success(`${accountType === 'student' ? 'Student' : 'Parent'} account is already linked`); return }
+    if (!hasEmail)  { toast.error(`${accountType === 'student' ? 'Student' : 'Guardian'} email is missing`); return }
     setGeneratingFor(`${student.id}-${accountType}`)
     try {
       await adminAPI.createActivationInvite(student.id, accountType)
@@ -1003,19 +1287,24 @@ function PortalLinkingTab() {
     }
   }
 
+  // ── Derived data ──────────────────────────────────────────────────────────
   const filteredPortal = search
     ? portalUsers.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()))
     : portalUsers
+
   const unlinkedStudents = linkStatus?.unlinked_students || []
+
   const classById = useMemo(() => {
     const next = {}
     classes.forEach(cls => { next[cls.id] = cls })
     return next
   }, [classes])
+
   const classOptions = useMemo(
     () => Array.from(new Set(classes.map(cls => cls.name).filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true })),
     [classes]
   )
+
   const sectionOptions = useMemo(
     () => Array.from(new Set(
       classes
@@ -1025,6 +1314,7 @@ function PortalLinkingTab() {
     )).sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true })),
     [classes, studentFilters.className]
   )
+
   const statusForStudent = (student) => {
     if (student.has_student_account && student.has_parent_account) return 'linked'
     const statuses = [student.student_activation_status, student.parent_activation_status].filter(Boolean)
@@ -1032,6 +1322,7 @@ function PortalLinkingTab() {
     if (statuses.includes('pending') || statuses.includes('verified')) return 'pending'
     return 'pending'
   }
+
   const filteredUnlinkedStudents = unlinkedStudents.filter(student => {
     const cls = classById[student.class_id]
     if (studentFilters.className && cls?.name !== studentFilters.className) return false
@@ -1039,6 +1330,7 @@ function PortalLinkingTab() {
     if (studentFilters.status !== 'all' && statusForStudent(student) !== studentFilters.status) return false
     return true
   })
+
   const {
     page: unlinkedPage,
     setPage: setUnlinkedPage,
@@ -1046,6 +1338,7 @@ function PortalLinkingTab() {
     totalPages: unlinkedTotalPages,
     total: unlinkedTotal,
   } = usePagination(filteredUnlinkedStudents, unlinkedPageSize)
+
   const {
     page: portalPage,
     setPage: setPortalPage,
@@ -1058,6 +1351,7 @@ function PortalLinkingTab() {
     setSearch(value)
     setPortalPage(1)
   }
+
   const setStudentFilter = (key, value) => {
     setStudentFilters(filters => ({
       ...filters,
@@ -1067,6 +1361,7 @@ function PortalLinkingTab() {
     setUnlinkedPage(1)
     setSelectedStudents(new Set())
   }
+
   const toggleStudentSelection = (studentId) => {
     setSelectedStudents(current => {
       const next = new Set(current)
@@ -1075,13 +1370,14 @@ function PortalLinkingTab() {
       return next
     })
   }
-  const allPageSelected = pageUnlinkedStudents.length > 0 && pageUnlinkedStudents.every(student => selectedStudents.has(student.id))
+
+  const allPageSelected = pageUnlinkedStudents.length > 0 && pageUnlinkedStudents.every(s => selectedStudents.has(s.id))
   const togglePageSelection = () => {
     setSelectedStudents(current => {
       const next = new Set(current)
-      pageUnlinkedStudents.forEach(student => {
-        if (allPageSelected) next.delete(student.id)
-        else next.add(student.id)
+      pageUnlinkedStudents.forEach(s => {
+        if (allPageSelected) next.delete(s.id)
+        else next.add(s.id)
       })
       return next
     })
@@ -1092,6 +1388,10 @@ function PortalLinkingTab() {
     .filter(u => u.role === form.role)
     .map(u => ({ value: String(u.id), label: `${u.name} — ${u.email}` }))
 
+  const unlinkedCount = linkStatus
+    ? linkStatus.students_without_portal_account + linkStatus.students_without_parent_account
+    : 0
+
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '200px', gap: '12px', color: 'var(--text-tertiary)' }}>
@@ -1100,13 +1400,9 @@ function PortalLinkingTab() {
     )
   }
 
-  const unlinkedCount = linkStatus
-    ? linkStatus.students_without_portal_account + linkStatus.students_without_parent_account
-    : 0
-
   return (
     <div>
-      {/* ── Link Status Summary ──────────────────────────────────────────── */}
+      {/* ── Link Status Summary ── */}
       <div className="card" style={{ marginBottom: '16px' }}>
         <div className="card-header">
           <div className="card-title">Account Linking Status</div>
@@ -1125,6 +1421,7 @@ function PortalLinkingTab() {
           </div>
         ) : linkStatus ? (
           <div style={{ padding: '16px 18px' }}>
+            {/* Stats row */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginBottom: '16px' }}>
               {[
                 { label: 'Total Students', value: linkStatus.total_active_students, color: 'var(--brand-600)' },
@@ -1144,50 +1441,48 @@ function PortalLinkingTab() {
               ))}
             </div>
 
-            {/* Targeted activation */}
-            {(
-              <div style={{ marginBottom: '14px', padding: '12px', borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--surface-1)' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10, marginBottom: 10 }}>
-                  <Field label="Class">
-                    <select className="input" value={studentFilters.className} onChange={e => setStudentFilter('className', e.target.value)}>
-                      <option value="">All classes</option>
-                      {classOptions.map(name => <option key={name} value={name}>Class {name}</option>)}
-                    </select>
-                  </Field>
-                  <Field label="Section">
-                    <select className="input" value={studentFilters.section} onChange={e => setStudentFilter('section', e.target.value)} disabled={!studentFilters.className}>
-                      <option value="">All sections</option>
-                      {sectionOptions.map(section => <option key={section} value={section}>Section {section}</option>)}
-                    </select>
-                  </Field>
-                  <Field label="Status">
-                    <select className="input" value={studentFilters.status} onChange={e => setStudentFilter('status', e.target.value)}>
-                      <option value="all">All</option>
-                      <option value="linked">Linked</option>
-                      <option value="pending">Pending</option>
-                      <option value="expired">Expired</option>
-                    </select>
-                  </Field>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  <button className="btn btn-primary" onClick={() => openInvitePreview('selected_students')} disabled={inviteBusy || selectedStudents.size === 0}>
-                    Send to Selected ({selectedStudents.size})
-                  </button>
-                  <button className="btn btn-secondary" onClick={() => openInvitePreview(studentFilters.section ? 'section' : 'class')} disabled={inviteBusy || !studentFilters.className}>
-                    {studentFilters.section ? 'Send to Section' : 'Send to Class'}
-                  </button>
-                  <button className="btn btn-secondary" onClick={() => openInvitePreview('all_pending')} disabled={inviteBusy}>
-                    Send to All Pending
-                  </button>
-                  <button className="btn btn-secondary" onClick={() => openInvitePreview('expired')} disabled={inviteBusy}>
-                    Resend Expired Invites
-                  </button>
-                </div>
-                <div style={{ fontSize: '11.5px', color: 'var(--text-tertiary)', marginTop: '6px', lineHeight: 1.5 }}>
-                  Preview counts before queueing secure invite links for student and parent portal activation.
-                </div>
+            {/* Targeted activation panel with filters + checkboxes */}
+            <div style={{ marginBottom: '14px', padding: '12px', borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--surface-1)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10, marginBottom: 10 }}>
+                <Field label="Class">
+                  <select className="input" value={studentFilters.className} onChange={e => setStudentFilter('className', e.target.value)}>
+                    <option value="">All classes</option>
+                    {classOptions.map(name => <option key={name} value={name}>Class {name}</option>)}
+                  </select>
+                </Field>
+                <Field label="Section">
+                  <select className="input" value={studentFilters.section} onChange={e => setStudentFilter('section', e.target.value)} disabled={!studentFilters.className}>
+                    <option value="">All sections</option>
+                    {sectionOptions.map(section => <option key={section} value={section}>Section {section}</option>)}
+                  </select>
+                </Field>
+                <Field label="Status">
+                  <select className="input" value={studentFilters.status} onChange={e => setStudentFilter('status', e.target.value)}>
+                    <option value="all">All</option>
+                    <option value="linked">Linked</option>
+                    <option value="pending">Pending</option>
+                    <option value="expired">Expired</option>
+                  </select>
+                </Field>
               </div>
-            )}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <button className="btn btn-primary" onClick={() => openInvitePreview('selected_students')} disabled={inviteBusy || selectedStudents.size === 0}>
+                  Send to Selected ({selectedStudents.size})
+                </button>
+                <button className="btn btn-secondary" onClick={() => openInvitePreview(studentFilters.section ? 'section' : 'class')} disabled={inviteBusy || !studentFilters.className}>
+                  {studentFilters.section ? 'Send to Section' : 'Send to Class'}
+                </button>
+                <button className="btn btn-secondary" onClick={() => openInvitePreview('all_pending')} disabled={inviteBusy}>
+                  Send to All Pending
+                </button>
+                <button className="btn btn-secondary" onClick={() => openInvitePreview('expired')} disabled={inviteBusy}>
+                  Resend Expired Invites
+                </button>
+              </div>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-tertiary)', marginTop: '6px', lineHeight: 1.5 }}>
+                Preview counts before queueing secure invite links for student and parent portal activation.
+              </div>
+            </div>
 
             {unlinkedCount === 0 && (
               <div style={{
@@ -1201,16 +1496,14 @@ function PortalLinkingTab() {
               </div>
             )}
 
-            {/* Bulk activation result */}
+            {/* Bulk result */}
             {bulkResult && (
               <div style={{
                 marginTop: '12px', padding: '12px 14px', borderRadius: '8px',
                 background: 'var(--brand-50)', border: '1px solid var(--brand-200)',
                 fontSize: '13px', lineHeight: 1.6,
               }}>
-                <div style={{ fontWeight: 700, color: 'var(--brand-700)', marginBottom: '4px' }}>
-                  Bulk invite complete
-                </div>
+                <div style={{ fontWeight: 700, color: 'var(--brand-700)', marginBottom: '4px' }}>Bulk invite complete</div>
                 <div style={{ color: 'var(--text-secondary)' }}>Invite links queued: <strong>{bulkResult.sent}</strong></div>
                 <div style={{ color: 'var(--text-secondary)' }}>{bulkResult.already_linked_count || 0} already linked account(s) skipped</div>
                 {(bulkResult.skippedNoEmail || 0) > 0 && (
@@ -1229,7 +1522,7 @@ function PortalLinkingTab() {
               </div>
             )}
 
-            {/* Per-student unlinked list */}
+            {/* Per-student list with checkboxes + pagination */}
             {filteredUnlinkedStudents.length > 0 && (
               <div style={{ marginTop: '16px' }}>
                 <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', marginBottom: '8px' }}>
@@ -1267,8 +1560,6 @@ function PortalLinkingTab() {
                               {classById[s.class_id] ? ` · Class ${classById[s.class_id].name}-${classById[s.class_id].division || ''}` : ''}
                             </div>
                           </td>
-
-                          {/* ── FIX: closing </span> was missing in both badge cells ── */}
                           <td>
                             <span style={{
                               fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
@@ -1283,7 +1574,6 @@ function PortalLinkingTab() {
                               }
                             </span>
                           </td>
-
                           <td>
                             <span style={{
                               fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
@@ -1298,7 +1588,6 @@ function PortalLinkingTab() {
                               }
                             </span>
                           </td>
-
                           <td style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                             Student email: <strong>{s.has_student_email ? 'Yes' : 'No'}</strong><br />
                             Guardian email: <strong>{s.has_guardian_email ? 'Yes' : 'No'}</strong>
@@ -1322,10 +1611,7 @@ function PortalLinkingTab() {
                                   fontFamily: 'var(--font-sans)',
                                 }}
                               >
-                                {generatingFor === `${s.id}-student`
-                                  ? <span className="spinner" style={{ width: '11px', height: '11px' }} />
-                                  : 'Student link'
-                                }
+                                {generatingFor === `${s.id}-student` ? <span className="spinner" style={{ width: '11px', height: '11px' }} /> : 'Student link'}
                               </button>
                               <button
                                 onClick={() => handleGenerateAccount(s, 'parent')}
@@ -1339,10 +1625,7 @@ function PortalLinkingTab() {
                                   fontFamily: 'var(--font-sans)',
                                 }}
                               >
-                                {generatingFor === `${s.id}-parent`
-                                  ? <span className="spinner" style={{ width: '11px', height: '11px' }} />
-                                  : 'Parent link'
-                                }
+                                {generatingFor === `${s.id}-parent` ? <span className="spinner" style={{ width: '11px', height: '11px' }} /> : 'Parent link'}
                               </button>
                             </div>
                           </td>
@@ -1371,13 +1654,12 @@ function PortalLinkingTab() {
         <strong>How portal activation works:</strong> Admins send invite links first. The invite opens activation directly, then OTP verifies the inbox before the student or parent creates a password.
       </div>
 
-      {/* Link form */}
+      {/* Manual link form */}
       <div style={{ background: 'var(--brand-50)', border: '1px solid var(--brand-200)', borderRadius: '12px', padding: '16px 20px', marginBottom: '16px' }}>
         <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--brand-700)', marginBottom: '12px' }}>
           Link Portal Account to Student (Manual)
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-          {/* Role toggle */}
           <div>
             <label className="label" style={{ color: 'var(--brand-700)' }}>Account Role</label>
             <div style={{ display: 'flex', gap: '6px' }}>
@@ -1423,7 +1705,7 @@ function PortalLinkingTab() {
         </button>
       </div>
 
-      {/* Portal accounts list */}
+      {/* Portal accounts list with pagination */}
       <div className="card">
         <div className="card-header">
           <div className="card-title">All Portal Accounts</div>
@@ -1477,6 +1759,8 @@ function PortalLinkingTab() {
           </div>
         )}
       </div>
+
+      {/* Confirm invite modal */}
       <ConfirmModal
         open={!!invitePreview}
         title="Confirm Invite Send"
@@ -1532,14 +1816,8 @@ function TeacherRegistrationTab({ onOpenAssignments }) {
 
   const sendInvite = async e => {
     e.preventDefault()
-    if (!form.name.trim()) {
-      toast.error('Teacher name is required')
-      return
-    }
-    if (!form.email.trim()) {
-      toast.error('Teacher email is required')
-      return
-    }
+    if (!form.name.trim()) { toast.error('Teacher name is required'); return }
+    if (!form.email.trim()) { toast.error('Teacher email is required'); return }
     setSaving(true)
     try {
       await adminAPI.createUser({
@@ -1589,12 +1867,7 @@ function TeacherRegistrationTab({ onOpenAssignments }) {
 
   const formatInviteDate = value => {
     if (!value) return 'Not sent yet'
-    return new Date(value).toLocaleString([], {
-      day: '2-digit',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    return new Date(value).toLocaleString([], { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
   }
 
   const activeCount = teachers.filter(t => t.is_active).length
@@ -1623,26 +1896,12 @@ function TeacherRegistrationTab({ onOpenAssignments }) {
               7 day link
             </span>
           </div>
-
           <div style={{ display: 'grid', gap: 14 }}>
             <Field label="Teacher name" required>
-              <input
-                className="input"
-                value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                placeholder="e.g. Fatima Sheikh"
-                autoComplete="name"
-              />
+              <input className="input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Fatima Sheikh" autoComplete="name" />
             </Field>
             <Field label="Teacher email" required>
-              <input
-                className="input"
-                type="email"
-                value={form.email}
-                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                placeholder="teacher@iqraschool.in"
-                autoComplete="email"
-              />
+              <input className="input" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="teacher@iqraschool.in" autoComplete="email" />
             </Field>
             <button className="btn btn-primary btn-lg" disabled={saving}>
               {saving
@@ -1705,10 +1964,7 @@ function TeacherRegistrationTab({ onOpenAssignments }) {
                         <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{teacher.email}</td>
                         <td>
                           <span style={{
-                            fontSize: 11,
-                            fontWeight: 800,
-                            padding: '3px 8px',
-                            borderRadius: 999,
+                            fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 999,
                             background: !teacher.is_active ? 'var(--warning-50)' : needsAssignment ? 'var(--brand-50)' : 'var(--success-100)',
                             color: !teacher.is_active ? 'var(--warning-700)' : needsAssignment ? 'var(--brand-700)' : 'var(--success-700)',
                           }}>
@@ -1783,10 +2039,10 @@ export default function UserManagement() {
 
   const tabs = [
     { value: 'register',    label: 'Teacher Registration', icon: TAB_ICONS.register },
-    { value: 'users',       label: 'Users',              icon: TAB_ICONS.users },
-    { value: 'assignments', label: 'Teacher Assignments', icon: TAB_ICONS.assignments },
-    { value: 'portal',      label: 'Portal Linking',      icon: TAB_ICONS.portal },
-    { value: 'corrections', label: 'Corrections',          icon: TAB_ICONS.portal },
+    { value: 'users',       label: 'Users',                icon: TAB_ICONS.users },
+    { value: 'assignments', label: 'Teacher Assignments',  icon: TAB_ICONS.assignments },
+    { value: 'portal',      label: 'Portal Linking',       icon: TAB_ICONS.portal },
+    { value: 'corrections', label: 'Corrections',           icon: TAB_ICONS.portal },
   ]
 
   return (

@@ -91,3 +91,148 @@ sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:09:05 +0000] "GET /api/v1/atten
 sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:09:05 +0000] "GET /api/v1/analytics/class-performance?academic_year_id=1&exam_name=Unit+Test+1 HTTP/2.0" 200 661 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
 sms_db        | 2026-06-23 07:13:35.579 UTC [26] LOG:  checkpoint starting: time
 sms_db        | 2026-06-23 07:13:35.609 UTC [26] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.011 s, sync=0.002 s, total=0.032 s; sync files=2, longest=0.001 s, average=0.001 s; distance=0 kB, estimate=0 kB
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:40:48 +0000] "GET /api/v1/admin/correction-requests?status=pending HTTP/2.0" 200 2 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:40:48 +0000] "GET /api/v1/admin/notifications/otp-failures?status=failed&limit=5 HTTP/2.0" 200 5095 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:40:48 +0000] "GET /api/v1/analytics/attendance-trends?academic_year_id=1 HTTP/2.0" 200 309 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:40:48 +0000] "GET /api/v1/marks/exam-names?academic_year_id=1 HTTP/2.0" 200 52 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:40:48 +0000] "GET /api/v1/admin/users?page=1&page_size=1 HTTP/2.0" 200 417 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:40:48 +0000] "GET /api/v1/attendance/dashboard-stats?academic_year_id=1 HTTP/2.0" 200 1545 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_frontend  | 192.168.65.1 - - [23/Jun/2026:07:40:48 +0000] "GET /api/v1/analytics/class-performance?academic_year_id=1&exam_name=Unit+Test+1 HTTP/2.0" 200 661 "https://localhost/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36" "-"
+sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/marksheet_pdf.py'. Reloading...
+sms_backend   | INFO:     Started server process [41]
+sms_backend   | INFO:     Waiting for application startup.
+sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/marksheet_pdf.py'. Reloading...
+sms_backend   | INFO:     Started server process [59]
+sms_backend   | INFO:     Waiting for application startup.
+sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/pdf_cache.py'. Reloading...
+sms_backend   | INFO:     Started server process [77]
+sms_backend   | INFO:     Waiting for application startup.
+sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/report_pdf.py'. Reloading...
+sms_backend   | INFO:     Started server process [95]
+sms_backend   | INFO:     Waiting for application startup.
+sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/report_pdf.py'. Reloading...
+sms_backend   | Process SpawnProcess-6:
+sms_backend   | Traceback (most recent call last):
+sms_backend   |   File "/usr/local/lib/python3.11/multiprocessing/process.py", line 314, in _bootstrap
+sms_backend   |     self.run()
+sms_backend   |   File "/usr/local/lib/python3.11/multiprocessing/process.py", line 108, in run
+sms_backend   |     self._target(*self._args, **self._kwargs)
+sms_backend   |   File "/usr/local/lib/python3.11/site-packages/uvicorn/_subprocess.py", line 80, in subprocess_started
+sms_backend   |     target(sockets=sockets)
+sms_backend   |   File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 65, in run
+sms_backend   |     return asyncio.run(self.serve(sockets=sockets))
+sms_backend   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sms_backend   |   File "/usr/local/lib/python3.11/asyncio/runners.py", line 190, in run
+sms_backend   |     return runner.run(main)
+sms_backend   |            ^^^^^^^^^^^^^^^^
+sms_backend   |   File "/usr/local/lib/python3.11/asyncio/runners.py", line 118, in run
+sms_backend   |     return self._loop.run_until_complete(task)
+sms_backend   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sms_backend   |   File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
+sms_backend   |   File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 69, in serve
+sms_backend   |     await self._serve(sockets)
+sms_backend   |   File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 76, in _serve
+sms_backend   |     config.load()
+sms_backend   |   File "/usr/local/lib/python3.11/site-packages/uvicorn/config.py", line 434, in load
+sms_backend   |     self.loaded_app = import_from_string(self.app)
+sms_backend   |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sms_backend   |   File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
+sms_backend   |     module = importlib.import_module(module_str)
+sms_backend   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sms_backend   |   File "/usr/local/lib/python3.11/importlib/__init__.py", line 126, in import_module
+sms_backend   |     return _bootstrap._gcd_import(name[level:], package, level)
+sms_backend   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sms_backend   |   File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
+sms_backend   |   File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
+sms_backend   |   File "<frozen importlib._bootstrap>", line 1147, in _find_and_load_unlocked
+sms_backend   |   File "<frozen importlib._bootstrap>", line 690, in _load_unlocked
+sms_backend   |   File "<frozen importlib._bootstrap_external>", line 940, in exec_module
+sms_backend   |   File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+sms_backend   |   File "/app/app/main.py", line 36, in <module>
+sms_backend   |     from app.routers import (
+sms_backend   |   File "/app/app/routers/pdf.py", line 14, in <module>
+sms_backend   |     from app.pdf.marksheet_pdf import render_marksheet_pdf
+sms_backend   |   File "/app/app/pdf/marksheet_pdf.py", line 13, in <module>
+sms_backend   |     from app.pdf.report_pdf import _logo_b64, _merge_pdfs
+sms_backend   |   File "/app/app/pdf/report_pdf.py", line 148
+sms_backend   |     return pdf(db: Session, class_id: int, year: int, month: int) -> bytes:
+sms_backend   |                  ^
+sms_backend   | SyntaxError: invalid syntax
+sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/report_pdf.py'. Reloading...
+sms_backend   | INFO:     Started server process [115]
+sms_backend   | INFO:     Waiting for application startup.
+sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/report_pdf.py'. Reloading...
+sms_backend   | INFO:     Started server process [133]
+sms_backend   | INFO:     Waiting for application startup.
+sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/report_pdf.py'. Reloading...
+sms_backend   | INFO:     Started server process [151]
+sms_backend   | INFO:     Waiting for application startup.
+sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/report_pdf.py'. Reloading...
+sms_backend   | INFO:     Started server process [169]
+sms_backend   | INFO:     Waiting for application startup.
+sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/report_pdf.py'. Reloading...
+sms_backend   | INFO:     Started server process [187]
+sms_backend   | INFO:     Waiting for application startup.
+sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/marksheet_pdf.py'. Reloading...
+sms_backend   | INFO:     Started server process [205]
+sms_backend   | INFO:     Waiting for application startup.
+sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+sms_backend   | WARNING:  WatchFiles detected changes in 'app/pdf/marksheet_pdf.py'. Reloading...
+sms_backend   | INFO:     Started server process [223]
+sms_backend   | INFO:     Waiting for application startup.
+sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+sms_backend   | WARNING:  WatchFiles detected changes in 'app/routers/pdf.py'. Reloading...
+sms_backend   | INFO:     Started server process [241]
+sms_backend   | INFO:     Waiting for application startup.
+sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+sms_backend   | WARNING:  WatchFiles detected changes in 'app/routers/pdf.py'. Reloading...
+sms_backend   | INFO:     Started server process [259]
+sms_backend   | INFO:     Waiting for application startup.
+sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+sms_backend   | WARNING:  WatchFiles detected changes in 'app/routers/pdf.py'. Reloading...
+sms_backend   | INFO:     Started server process [277]
+sms_backend   | INFO:     Waiting for application startup.
+sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+sms_backend   | WARNING:  WatchFiles detected changes in 'app/routers/pdf.py'. Reloading...
+sms_backend   | INFO:     Started server process [295]
+sms_backend   | INFO:     Waiting for application startup.
+sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+sms_backend   | WARNING:  WatchFiles detected changes in 'app/routers/pdf.py'. Reloading...
+sms_backend   | INFO:     Started server process [313]
+sms_backend   | INFO:     Waiting for application startup.
+sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+sms_backend   | WARNING:  WatchFiles detected changes in 'app/routers/pdf.py'. Reloading...
+sms_backend   | INFO:     Started server process [331]
+sms_backend   | INFO:     Waiting for application startup.
+sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+sms_backend   | WARNING:  WatchFiles detected changes in 'app/routers/pdf.py'. Reloading...
+sms_backend   | INFO:     Started server process [349]
+sms_backend   | INFO:     Waiting for application startup.
+sms_backend   | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+sms_backend   | INFO  [alembic.runtime.migration] Will assume transactional DDL.

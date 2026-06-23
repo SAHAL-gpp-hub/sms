@@ -56,22 +56,30 @@ def render_marksheet_pdf(
     if not results:
         return None
 
-    # Enrich with student details
+    # ── Batch-load all students in a single query (avoids N+1) ────────────────
+    student_ids = {r["student_id"] for r in results}
+    students_by_id = (
+        {s.id: s for s in db.query(Student).filter(Student.id.in_(student_ids)).all()}
+        if student_ids else {}
+    )
+    class_name = cls.name if cls else "—"
+    division = cls.division if cls else "A"
+
     for r in results:
-        student = db.query(Student).filter_by(id=r["student_id"]).first()
+        student = students_by_id.get(r["student_id"])
         r["name_gu"] = student.name_gu if student else "—"
         r["name_en"] = student.name_en if student else "—"
         r["gr_number"] = student.gr_number if student else "—"
         r["dob"] = str(student.dob) if student else "—"
-        r["class_name"] = cls.name if cls else "—"
-        r["division"] = cls.division if cls else "A"
+        r["class_name"] = class_name
+        r["division"] = division
 
     template = _env.get_template("marksheet_template.html")
 
     # Single-student path: render inline, cache the result.
     if student_id:
         cache_key = pdf_cache.marksheet_student_key(student_id, exam_id)
-        cached = pdf_cache.cache_get(cache_key)
+        cached = pdf_cache.cache_get(cache_key, long_ttl=True)
         if cached:
             return cached
 
@@ -84,7 +92,7 @@ def render_marksheet_pdf(
         )
         pdf_bytes = _html_renderer()(string=html_content, base_url=TEMPLATE_DIR).write_pdf()
         if pdf_bytes:
-            pdf_cache.cache_set(cache_key, pdf_bytes)
+            pdf_cache.cache_set(cache_key, pdf_bytes, long_ttl=True)
         return pdf_bytes
 
     # ── Class path: one HTML chunk per student, rendered in parallel ────────

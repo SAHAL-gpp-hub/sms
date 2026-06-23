@@ -90,6 +90,12 @@ def _humanize_class(name: str) -> str:
 def render_defaulter_report(
     db: Session, academic_year_id: int = None, class_id: int = None
 ) -> bytes:
+    # ── Check cache before hitting DB ──────────────────────────────────────
+    cache_key = pdf_cache.defaulter_report_key(academic_year_id, class_id)
+    cached = pdf_cache.cache_get(cache_key)
+    if cached:
+        return cached
+
     # link_legacy=False: the defaulter PDF is a READ path. Self-healing of legacy
     # unlinked fees is a write and should not run on every report download — the
     # interactive defaulters list (admin UI) keeps link_legacy=True.
@@ -136,10 +142,18 @@ def render_defaulter_report(
         generated_date=date.today().strftime("%d %B %Y"),
         logo_src=_logo_b64(),
     )
-    return _render_pdf(html)
+    pdf = _render_pdf(html)
+    if pdf:
+        pdf_cache.cache_set(cache_key, pdf)
+    return pdf
 
 
 def render_attendance_report(db: Session, class_id: int, year: int, month: int) -> bytes:
+    cache_key = pdf_cache.attendance_report_key(class_id, year, month)
+    cached = pdf_cache.cache_get(cache_key)
+    if cached:
+        return cached
+
     cls = db.query(Class).filter_by(id=class_id).first()
     summary = get_monthly_summary(db, class_id, year, month)
 
@@ -152,10 +166,18 @@ def render_attendance_report(db: Session, class_id: int, year: int, month: int) 
         generated_date=date.today().strftime("%d %B %Y"),
         logo_src=_logo_b64(),
     )
-    return _render_pdf(html)
+    pdf = _render_pdf(html)
+    if pdf:
+        pdf_cache.cache_set(cache_key, pdf)
+    return pdf
 
 
 def render_result_report(db: Session, exam_id: int, class_id: int) -> bytes:
+    cache_key = pdf_cache.result_report_key(exam_id, class_id)
+    cached = pdf_cache.cache_get(cache_key)
+    if cached:
+        return cached
+
     cls = db.query(Class).filter_by(id=class_id).first()
     exam = db.query(Exam).filter_by(id=exam_id).first()
     year = db.query(AcademicYear).filter_by(
@@ -178,7 +200,10 @@ def render_result_report(db: Session, exam_id: int, class_id: int) -> bytes:
         generated_date=date.today().strftime("%d %B %Y"),
         logo_src=_logo_b64(),
     )
-    return _render_pdf(html)
+    pdf = _render_pdf(html)
+    if pdf:
+        pdf_cache.cache_set(cache_key, pdf)
+    return pdf
 
 
 def render_tc_pdf(db: Session, student_id: int, reason: str, conduct: str) -> bytes:
@@ -209,7 +234,7 @@ def render_fee_receipt_pdf(db: Session, payment_id: int) -> bytes | None:
     """
     # ── Fix 8: serve from cache before doing any DB work ──────────────────────
     cache_key = pdf_cache.receipt_key(payment_id)
-    cached = pdf_cache.cache_get(cache_key)
+    cached = pdf_cache.cache_get(cache_key, long_ttl=True)
     if cached:
         return cached
 
@@ -347,5 +372,5 @@ def render_fee_receipt_pdf(db: Session, payment_id: int) -> bytes | None:
 
     # ── Fix 8: cache the rendered PDF for repeat downloads ────────────────
     if pdf:
-        pdf_cache.cache_set(cache_key, pdf)
+        pdf_cache.cache_set(cache_key, pdf, long_ttl=True)
     return pdf

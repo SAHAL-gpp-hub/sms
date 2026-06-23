@@ -794,7 +794,7 @@ export default function Attendance() {
                   class_id: selectedClass,
                   year: monthYear.year,
                   month: monthYear.month,
-                })}
+                }).catch(() => toast.error('Could not prepare attendance report PDF'))}
                 className="btn btn-secondary"
                 style={{ textDecoration: 'none', fontSize: '12.5px', whiteSpace: 'nowrap' }}
               >

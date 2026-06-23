@@ -2184,14 +2184,16 @@ export default function MarksEntry() {
             {view === 'results' && selectedExam && (
               <div className="me-action-group">
                 <button
-                  onClick={() => openSignedPdf('/pdf/token/report/results', '/pdf/report/results', { exam_id: selectedExam, class_id: selectedClass })}
+                  onClick={() => openSignedPdf('/pdf/token/report/results', '/pdf/report/results', { exam_id: selectedExam, class_id: selectedClass })
+                    .catch(() => toast.error('Could not prepare result report PDF'))}
                   className="btn btn-secondary"
                   style={{ textDecoration: 'none', fontSize: '12.5px' }}
                 >
                   Class Result PDF
                 </button>
                 <button
-                  onClick={() => openSignedPdfWithPoll(`/pdf/token/marksheet/class/${selectedClass}`, `/pdf/marksheet/class/${selectedClass}`, { exam_id: selectedExam })}
+                  onClick={() => openSignedPdfWithPoll(`/pdf/token/marksheet/class/${selectedClass}`, `/pdf/marksheet/class/${selectedClass}`, { exam_id: selectedExam })
+                    .catch(err => toast.error(err?.message || 'Could not prepare marksheets PDF'))}
                   className="btn btn-secondary"
                   style={{ textDecoration: 'none', fontSize: '12.5px' }}
                 >
@@ -2488,7 +2490,7 @@ export default function MarksEntry() {
                               `/pdf/token/marksheet/student/${r.student_id}`,
                               `/pdf/marksheet/student/${r.student_id}`,
                               { exam_id: selectedExam, class_id: selectedClass },
-                            )}
+                            ).catch(() => toast.error('Could not prepare marksheet PDF'))}
                             style={{ fontSize: '12px', fontWeight: 600, color: 'var(--danger-600)', textDecoration: 'none' }}
                           >
                             PDF
