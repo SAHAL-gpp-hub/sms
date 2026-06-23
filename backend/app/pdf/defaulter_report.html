@@ -5,30 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fee Defaulter Report</title>
     <style>
-        @page { size: A4; margin: 15mm; }
+        @page { size: A4; margin: 14mm; }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body { font-family: Arial, sans-serif; font-size: 11px; color: #1a1a1a; }
 
+        /* ── Header ─────────────────────────────────────────────── */
         .header {
             display: flex;
             align-items: center;
             gap: 14px;
             border-bottom: 2px solid #1a3a6b;
             padding-bottom: 10px;
-            margin-bottom: 16px;
+            margin-bottom: 14px;
         }
-        .header-logo {
-            flex-shrink: 0;
-            width: 56px;
-            height: 56px;
-        }
-        .header-logo img {
-            width: 56px;
-            height: 56px;
-            object-fit: contain;
-        }
+        .header-logo { flex-shrink: 0; width: 56px; height: 56px; }
+        .header-logo img { width: 56px; height: 56px; object-fit: contain; }
         .header-text { flex: 1; text-align: center; }
         .header-spacer { flex-shrink: 0; width: 56px; }
         .school-name { font-size: 20px; font-weight: bold; color: #1a3a6b; }
@@ -37,34 +30,88 @@
             margin-top: 6px; text-transform: uppercase; letter-spacing: 2px;
         }
         .meta { font-size: 10px; color: #666; margin-top: 4px; }
+        .meta .scope { color: #1a3a6b; font-weight: bold; }
 
+        /* ── Summary cards ──────────────────────────────────────── */
         .summary-box {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            margin-bottom: 16px;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 14px;
         }
         .sum-card {
-            border: 1px solid #e0e0e0; border-radius: 4px;
-            padding: 10px; text-align: center;
+            border: 1px solid #e0e0e0; border-radius: 6px;
+            padding: 10px 8px; text-align: center;
         }
-        .sum-value { font-size: 20px; font-weight: bold; color: #c0392b; word-break: break-word; }
-        .sum-label { font-size: 9px; color: #666; text-transform: uppercase; margin-top: 2px; }
+        .sum-value {
+            font-size: 18px; font-weight: bold;
+            color: #c0392b; word-break: break-word; line-height: 1.1;
+        }
+        .sum-value.green { color: #1a7a45; }
+        .sum-value.neutral { color: #1a3a6b; }
+        .sum-label {
+            font-size: 9px; color: #666;
+            text-transform: uppercase; margin-top: 4px; letter-spacing: 0.04em;
+        }
 
+        /* ── Table ──────────────────────────────────────────────── */
         .table-wrap { width: 100%; }
         table { width: 100%; border-collapse: collapse; }
-        th { background: #1a3a6b; color: white; padding: 7px 8px; text-align: left; font-size: 10px; }
-        td { padding: 6px 8px; border-bottom: 1px solid #f0f0f0; font-size: 10px; }
-        tr:nth-child(even) { background: #f9f9f9; }
+
+        /* Class section header (spans the table) */
+        .class-head td {
+            background: #eef2f9;
+            border-top: 2px solid #1a3a6b;
+            border-bottom: 1px solid #d4dcea;
+            padding: 7px 8px;
+            font-size: 11px; font-weight: bold; color: #1a3a6b;
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .class-head .count { float: right; font-weight: 600; color: #7a8699; }
+
+        th {
+            background: #1a3a6b; color: white;
+            padding: 7px 8px; text-align: left; font-size: 10px;
+        }
+        th.num, td.num { text-align: right; white-space: nowrap; }
+        td {
+            padding: 6px 8px; border-bottom: 1px solid #f0f0f0; font-size: 10px;
+        }
+        tbody tr:nth-child(even) td { background: #fafbfc; }
+        tbody tr:hover td { background: #f3f7ff; }
 
         .balance { color: #c0392b; font-weight: bold; }
+        .paid    { color: #1a7a45; font-weight: 600; }
+
+        /* Per-class subtotal row */
+        .subtotal td {
+            background: #f3f6fb !important;
+            border-top: 1px solid #d4dcea;
+            border-bottom: 1px solid #d4dcea;
+            font-weight: bold; color: #1a3a6b; font-size: 10px;
+        }
+
+        /* Grand total row */
+        .grand td {
+            background: #1a3a6b !important; color: #fff !important;
+            font-weight: bold; font-size: 11px;
+            border-top: 2px solid #1a3a6b;
+        }
+        .grand .balance { color: #ffd9d4; }
+
+        .empty {
+            text-align: center; padding: 28px 12px;
+            color: #888; font-size: 12px;
+            border: 1px dashed #d4dcea; border-radius: 6px;
+        }
 
         .footer {
-            margin-top: 20px; text-align: center;
+            margin-top: 18px; text-align: center;
             font-size: 9px; color: #999;
             border-top: 1px solid #eee; padding-top: 8px;
         }
 
+        /* ── Screen preview only (does not affect the PDF) ──────── */
         @media screen {
             body {
                 max-width: 1100px;
@@ -87,11 +134,10 @@
 
         @media screen and (max-width: 720px) {
             .summary-box { grid-template-columns: 1fr 1fr; }
-            .sum-value { font-size: 17px; }
+            .sum-value { font-size: 16px; }
             .school-name { font-size: 17px; }
             .report-title { font-size: 12px; letter-spacing: 1px; }
-            .header-logo { width: 44px; height: 44px; }
-            .header-logo img { width: 44px; height: 44px; }
+            .header-logo, .header-logo img { width: 44px; height: 44px; }
             .header-spacer { width: 44px; }
         }
 
@@ -100,7 +146,7 @@
             body { padding: 8px; }
             .header, .footer { padding: 12px; }
             .school-name { font-size: 15px; }
-            .sum-value { font-size: 18px; }
+            .sum-value { font-size: 17px; }
             .header { flex-wrap: wrap; justify-content: center; }
             .header-spacer { display: none; }
         }
@@ -114,7 +160,11 @@
         <div class="header-text">
             <div class="school-name">IQRA ENGLISH MEDIUM SCHOOL</div>
             <div class="report-title">Fee Defaulter Report</div>
-            <div class="meta">Academic Year: {{ academic_year }} · Generated: {{ generated_date }}</div>
+            <div class="meta">
+                <span class="scope">{{ scope_label }}</span> ·
+                Academic Year: {{ academic_year }} ·
+                Generated: {{ generated_date }}
+            </div>
         </div>
         <div class="header-spacer"></div>
     </div>
@@ -122,46 +172,86 @@
     <div class="summary-box">
         <div class="sum-card">
             <div class="sum-value">{{ defaulters|length }}</div>
-            <div class="sum-label">Total Defaulters</div>
+            <div class="sum-label">Defaulters</div>
         </div>
         <div class="sum-card">
             <div class="sum-value">₹{{ "{:,.0f}".format(total_outstanding) }}</div>
-            <div class="sum-label">Total Outstanding</div>
+            <div class="sum-label">Outstanding</div>
         </div>
         <div class="sum-card">
-            <div class="sum-value">₹{{ "{:,.0f}".format(total_collected) }}</div>
-            <div class="sum-label">Total Collected</div>
+            <div class="sum-value green">₹{{ "{:,.0f}".format(total_collected) }}</div>
+            <div class="sum-label">Collected</div>
+        </div>
+        <div class="sum-card">
+            <div class="sum-value neutral">₹{{ "{:,.0f}".format(total_due) }}</div>
+            <div class="sum-label">Total Billed</div>
         </div>
     </div>
 
+    {% if defaulters|length == 0 %}
+        <div class="empty">
+            🎉 No defaulters found — all fees are cleared for {{ scope_label }}.
+        </div>
+    {% else %}
     <div class="table-wrap">
         <table>
             <thead>
                 <tr>
-                    <th>#</th>
+                    <th style="width: 32px;">#</th>
                     <th>Student Name</th>
-                    <th>Class</th>
                     <th>Contact</th>
-                    <th>Total Due</th>
-                    <th>Paid</th>
-                    <th>Balance</th>
+                    <th class="num">Total Due</th>
+                    <th class="num">Paid</th>
+                    <th class="num">Balance</th>
                 </tr>
             </thead>
             <tbody>
-                {% for d in defaulters %}
+                {% set ns = namespace(seq=0) %}
+                {% for group in grouped %}
+                {% set g_due = namespace(v=0.0) %}
+                {% set g_paid = namespace(v=0.0) %}
+                {% set g_bal = namespace(v=0.0) %}
+
+                <tr class="class-head">
+                    <td colspan="6">
+                        {{ group.class_name }}
+                        <span class="count">{{ group.rows|length }} defaulter{{ 's' if group.rows|length != 1 else '' }}</span>
+                    </td>
+                </tr>
+
+                {% for d in group.rows %}
+                {% set ns.seq = ns.seq + 1 %}
+                {% set g_due.v  = g_due.v  + d.total_due %}
+                {% set g_paid.v = g_paid.v + d.total_paid %}
+                {% set g_bal.v  = g_bal.v  + d.balance %}
                 <tr>
-                    <td>{{ loop.index }}</td>
+                    <td>{{ ns.seq }}</td>
                     <td>{{ d.student_name }}</td>
-                    <td>{{ d.class_name }}</td>
-                    <td>{{ d.contact }}</td>
-                    <td>₹{{ "{:,.0f}".format(d.total_due) }}</td>
-                    <td>₹{{ "{:,.0f}".format(d.total_paid) }}</td>
-                    <td class="balance">₹{{ "{:,.0f}".format(d.balance) }}</td>
+                    <td>{{ d.contact or '—' }}</td>
+                    <td class="num">₹{{ "{:,.0f}".format(d.total_due) }}</td>
+                    <td class="num paid">₹{{ "{:,.0f}".format(d.total_paid) }}</td>
+                    <td class="num balance">₹{{ "{:,.0f}".format(d.balance) }}</td>
                 </tr>
                 {% endfor %}
+
+                <tr class="subtotal">
+                    <td colspan="3">{{ group.class_name }} — Subtotal</td>
+                    <td class="num">₹{{ "{:,.0f}".format(g_due.v) }}</td>
+                    <td class="num paid">₹{{ "{:,.0f}".format(g_paid.v) }}</td>
+                    <td class="num balance">₹{{ "{:,.0f}".format(g_bal.v) }}</td>
+                </tr>
+                {% endfor %}
+
+                <tr class="grand">
+                    <td colspan="3">GRAND TOTAL</td>
+                    <td class="num">₹{{ "{:,.0f}".format(total_due) }}</td>
+                    <td class="num">₹{{ "{:,.0f}".format(total_collected) }}</td>
+                    <td class="num balance">₹{{ "{:,.0f}".format(total_outstanding) }}</td>
+                </tr>
             </tbody>
         </table>
     </div>
+    {% endif %}
 
     <div class="footer">
         Iqra English Medium School · This is a computer-generated report · {{ generated_date }}

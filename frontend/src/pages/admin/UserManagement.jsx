@@ -37,10 +37,6 @@ const PAGE_SIZE_DEFAULT = 20
 function usePagination(items, pageSize = PAGE_SIZE_DEFAULT) {
   const [page, setPage] = useState(1)
 
-  // Reset to page 1 whenever the source list changes (filter/search applied)
-  const itemsKey = items.length
-  useEffect(() => { setPage(1) }, [itemsKey])
-
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize))
   const safePage = Math.min(page, totalPages)
   const pageItems = useMemo(
@@ -197,300 +193,6 @@ function PasswordResetModal({ user, onClose, onSuccess }) {
   )
 }
 
-// ── Send Registration Link Modal ──────────────────────────────────────────────
-function SendRegistrationLinkModal({ onClose }) {
-  const { selectedYearId } = useAcademicYear()
-  const [classes, setClasses]         = useState([])
-  const [classesLoading, setClassesLoading] = useState(true)
-  const [selectedClassIds, setSelectedClassIds] = useState([])
-  const [channel, setChannel]         = useState('whatsapp')
-  const [preview, setPreview]         = useState(null)   // { count, parents }
-  const [previewLoading, setPreviewLoading] = useState(false)
-  const [sending, setSending]         = useState(false)
-  const [result, setResult]           = useState(null)   // { sent, failed }
-
-  // Load classes for the current academic year
-  useEffect(() => {
-    if (!selectedYearId) { setClassesLoading(false); return }
-    setClassesLoading(true)
-    setupAPI.getClasses(selectedYearId)
-      .then(r => setClasses(r.data || []))
-      .catch(() => toast.error('Failed to load classes'))
-      .finally(() => setClassesLoading(false))
-  }, [selectedYearId])
-
-  // Refresh preview whenever class selection changes
-  useEffect(() => {
-    if (selectedClassIds.length === 0) { setPreview(null); return }
-    setPreviewLoading(true)
-    adminAPI.getParentsByClasses(selectedClassIds)
-      .then(r => setPreview(r.data))
-      .catch(() => {})
-      .finally(() => setPreviewLoading(false))
-  }, [selectedClassIds])
-
-  const toggleClass = (id) => {
-    setSelectedClassIds(prev =>
-      prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
-    )
-  }
-
-  const toggleAll = () => {
-    if (selectedClassIds.length === classes.length) setSelectedClassIds([])
-    else setSelectedClassIds(classes.map(c => String(c.id)))
-  }
-
-  const handleSend = async () => {
-    if (selectedClassIds.length === 0) { toast.error('Select at least one class'); return }
-    setSending(true)
-    try {
-      const res = await adminAPI.sendRegistrationLink({
-        class_ids: selectedClassIds.map(Number),
-        channel,
-      })
-      setResult(res.data)
-      toast.success(`Registration links sent — ${res.data.sent} delivered`)
-    } catch (err) {
-      toast.error(extractError(err))
-    } finally {
-      setSending(false)
-    }
-  }
-
-  const CHANNEL_OPTIONS = [
-    { value: 'whatsapp', label: 'WhatsApp', icon: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-        <path d="M12 0C5.373 0 0 5.373 0 12c0 2.121.554 4.112 1.523 5.845L0 24l6.335-1.493A11.934 11.934 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 01-5.006-1.37l-.36-.214-3.732.879.936-3.638-.234-.374A9.818 9.818 0 1112 21.818z"/>
-      </svg>
-    )},
-    { value: 'sms',      label: 'SMS', icon: (
-      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-      </svg>
-    )},
-    { value: 'both',     label: 'Both', icon: (
-      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-      </svg>
-    )},
-  ]
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)' }} onClick={result ? onClose : undefined} />
-      <div style={{
-        position: 'relative', background: 'var(--surface-0)', borderRadius: '16px',
-        width: '100%', maxWidth: '520px', maxHeight: '90vh', overflowY: 'auto',
-        border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-xl)',
-      }}>
-        {/* Header */}
-        <div style={{ padding: '20px 20px 0', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
-          <div>
-            <h3 style={{ fontSize: '16px', fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>Send Registration Link</h3>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '4px 0 0' }}>
-              Send portal registration links to parents by class
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            style={{ flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: '2px', borderRadius: '6px' }}
-            aria-label="Close"
-          >
-            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
-        </div>
-
-        <div style={{ padding: '20px' }}>
-          {result ? (
-            /* ── Result screen ── */
-            <div style={{ textAlign: 'center', padding: '8px 0 4px' }}>
-              <div style={{
-                width: '56px', height: '56px', borderRadius: '50%', margin: '0 auto 16px',
-                background: 'var(--success-100)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <svg width="26" height="26" fill="none" stroke="var(--success-600)" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <div style={{ fontSize: '18px', fontWeight: 900, color: 'var(--text-primary)', marginBottom: '6px' }}>Links Sent!</div>
-              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: 1.6 }}>
-                <span style={{ fontWeight: 700, color: 'var(--success-700)' }}>{result.sent}</span> message{result.sent !== 1 ? 's' : ''} delivered
-                {result.failed > 0 && (
-                  <span> · <span style={{ color: 'var(--danger-600)', fontWeight: 700 }}>{result.failed} failed</span></span>
-                )}
-              </div>
-              {result.failed > 0 && (
-                <div style={{ padding: '10px 14px', background: 'var(--warning-50)', border: '1px solid var(--warning-200)', borderRadius: '8px', fontSize: '12px', color: 'var(--warning-700)', marginBottom: '16px', textAlign: 'left' }}>
-                  {result.failed} parent{result.failed !== 1 ? 's' : ''} could not be reached — they may have missing phone numbers.
-                </div>
-              )}
-              <button className="btn btn-primary" style={{ width: '100%' }} onClick={onClose}>Done</button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {/* ── Step 1: Class selection ── */}
-              <div>
-                <div style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-tertiary)', marginBottom: '10px' }}>
-                  1. Select Classes
-                </div>
-                {classesLoading ? (
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    {[1,2,3,4].map(i => <div key={i} style={{ width: 72, height: 34, borderRadius: 8, background: 'var(--gray-100)', animation: 'pulse 1.5s ease-in-out infinite' }} />)}
-                  </div>
-                ) : classes.length === 0 ? (
-                  <div style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>No classes found for the current academic year.</div>
-                ) : (
-                  <div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
-                      {/* Select All toggle */}
-                      <button
-                        type="button"
-                        onClick={toggleAll}
-                        style={{
-                          padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 700,
-                          cursor: 'pointer', fontFamily: 'var(--font-sans)',
-                          border: `1px solid ${selectedClassIds.length === classes.length ? 'var(--brand-400)' : 'var(--border-default)'}`,
-                          background: selectedClassIds.length === classes.length ? 'var(--brand-50)' : 'var(--surface-0)',
-                          color: selectedClassIds.length === classes.length ? 'var(--brand-700)' : 'var(--text-secondary)',
-                        }}
-                      >
-                        {selectedClassIds.length === classes.length ? '✓ All' : 'All'}
-                      </button>
-                      {classes.map(cls => {
-                        const selected = selectedClassIds.includes(String(cls.id))
-                        return (
-                          <button
-                            key={cls.id}
-                            type="button"
-                            onClick={() => toggleClass(String(cls.id))}
-                            style={{
-                              padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 700,
-                              cursor: 'pointer', fontFamily: 'var(--font-sans)', transition: 'all .12s',
-                              border: `1px solid ${selected ? 'var(--brand-400)' : 'var(--border-default)'}`,
-                              background: selected ? 'var(--brand-50)' : 'var(--surface-0)',
-                              color: selected ? 'var(--brand-700)' : 'var(--text-secondary)',
-                              boxShadow: selected ? 'var(--shadow-xs)' : 'none',
-                            }}
-                          >
-                            {selected && <span style={{ marginRight: '4px' }}>✓</span>}
-                            {cls.name}
-                          </button>
-                        )
-                      })}
-                    </div>
-                    <div style={{ fontSize: '11.5px', color: 'var(--text-tertiary)' }}>
-                      {selectedClassIds.length === 0
-                        ? 'No classes selected'
-                        : `${selectedClassIds.length} class${selectedClassIds.length !== 1 ? 'es' : ''} selected`}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* ── Step 2: Channel ── */}
-              <div>
-                <div style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-tertiary)', marginBottom: '10px' }}>
-                  2. Channel
-                </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {CHANNEL_OPTIONS.map(opt => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setChannel(opt.value)}
-                      style={{
-                        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                        padding: '9px 10px', borderRadius: '8px', fontSize: '12px', fontWeight: 700,
-                        cursor: 'pointer', fontFamily: 'var(--font-sans)', transition: 'all .12s',
-                        border: `1.5px solid ${channel === opt.value ? 'var(--brand-500)' : 'var(--border-default)'}`,
-                        background: channel === opt.value ? 'var(--brand-50)' : 'var(--surface-0)',
-                        color: channel === opt.value ? 'var(--brand-700)' : 'var(--text-secondary)',
-                        boxShadow: channel === opt.value ? 'var(--shadow-xs)' : 'none',
-                      }}
-                    >
-                      {opt.icon}{opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* ── Step 3: Recipient preview ── */}
-              {selectedClassIds.length > 0 && (
-                <div>
-                  <div style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-tertiary)', marginBottom: '10px' }}>
-                    3. Recipients
-                  </div>
-                  {previewLoading ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-tertiary)', padding: '10px 0' }}>
-                      <span className="spinner" style={{ width: '13px', height: '13px' }} /> Loading recipients…
-                    </div>
-                  ) : preview ? (
-                    <div style={{ border: '1px solid var(--border-subtle)', borderRadius: '10px', overflow: 'hidden' }}>
-                      <div style={{
-                        padding: '10px 14px', background: 'var(--gray-50)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        borderBottom: preview?.parents?.length > 0 ? '1px solid var(--border-subtle)' : 'none',
-                      }}>
-                        <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {preview.count ?? preview?.parents?.length ?? 0} parent{(preview.count ?? preview?.parents?.length ?? 0) !== 1 ? 's' : ''} will receive a link
-                        </span>
-                        {(preview.count ?? 0) === 0 && (
-                          <span style={{ fontSize: '11px', color: 'var(--warning-600)', fontWeight: 700 }}>No parents found</span>
-                        )}
-                      </div>
-                      {preview?.parents?.length > 0 && (
-                        <div style={{ maxHeight: '140px', overflowY: 'auto' }}>
-                          {preview.parents.slice(0, 20).map((p, i) => (
-                            <div key={i} style={{
-                              padding: '8px 14px', fontSize: '12px',
-                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                              borderBottom: i < preview.parents.length - 1 ? '1px solid var(--border-subtle)' : 'none',
-                            }}>
-                              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.name || p.guardian_name || '—'}</span>
-                              <span style={{ color: 'var(--text-tertiary)' }}>{p.phone || p.guardian_phone || '—'}</span>
-                            </div>
-                          ))}
-                          {preview.parents.length > 20 && (
-                            <div style={{ padding: '8px 14px', fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center' }}>
-                              +{preview.parents.length - 20} more
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-              )}
-
-              {/* ── Confirm / Send ── */}
-              <div style={{ display: 'flex', gap: '10px', paddingTop: '4px' }}>
-                <button
-                  className="btn btn-primary"
-                  style={{ flex: 1 }}
-                  disabled={sending || selectedClassIds.length === 0}
-                  onClick={handleSend}
-                >
-                  {sending
-                    ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Sending…</>
-                    : <>
-                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                        </svg>
-                        Send Registration Links
-                      </>
-                  }
-                </button>
-                <button className="btn btn-secondary" onClick={onClose} disabled={sending}>Cancel</button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ════════════════════════════════════════════════════════════════════════════════
 // TAB 1 — Users List
 // ════════════════════════════════════════════════════════════════════════════════
@@ -511,7 +213,6 @@ function UsersTab() {
   const [resetTarget, setResetTarget] = useState(null)
   const [deactivateTarget, setDeactivateTarget] = useState(null)
   const [deactivating, setDeactivating] = useState(false)
-  const [sendRegLinkOpen, setSendRegLinkOpen] = useState(false)
 
   const fetchUsers = useCallback(async () => {
     setLoading(true)
@@ -671,17 +372,6 @@ function UsersTab() {
         {(search || roleFilter) && (
           <button className="btn btn-ghost btn-sm" onClick={clearFilters}>Clear</button>
         )}
-        <button
-          type="button"
-          className="btn btn-secondary"
-          style={{ whiteSpace: 'nowrap' }}
-          onClick={() => setSendRegLinkOpen(true)}
-        >
-          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-          </svg>
-          Send Registration Link
-        </button>
         <Link to="/admin/users/new" className="btn btn-primary" style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}>
           <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
@@ -799,7 +489,7 @@ function UsersTab() {
         />
       </div>
 
-      <PasswordResetModal user={resetTarget} onClose={() => setResetTarget(null)} onSuccess={() => { setResetTarget(null); fetchUsers(); fetchCounts(); }} />
+      <PasswordResetModal user={resetTarget} onClose={() => setResetTarget(null)} onSuccess={() => { setResetTarget(null); fetchUsers(); }} />
       <ConfirmModal
         open={!!deactivateTarget}
         title="Deactivate User"
@@ -810,7 +500,6 @@ function UsersTab() {
         onCancel={() => setDeactivateTarget(null)}
         loading={deactivating}
       />
-      {sendRegLinkOpen && <SendRegistrationLinkModal onClose={() => setSendRegLinkOpen(false)} />}
     </div>
   )
 }
@@ -1137,48 +826,59 @@ function TeacherAssignmentsTab({ selectedTeacherId = '', onTeacherSelected }) {
 // TAB 3 — Portal Linking (link student/parent user → student record)
 // ════════════════════════════════════════════════════════════════════════════════
 function PortalLinkingTab() {
+  const { selectedYearId } = useAcademicYear()
   const [portalUsers, setPortalUsers] = useState([])
   const [students, setStudents]       = useState([])
+  const [classes, setClasses]         = useState([])
   const [loading, setLoading]         = useState(true)
   const [form, setForm]               = useState({ user_id: '', student_id: '', role: 'student' })
   const [linking, setLinking]         = useState(false)
   const [search, setSearch]           = useState('')
+  const [studentFilters, setStudentFilters] = useState({ className: '', section: '', status: 'all' })
+  const [selectedStudents, setSelectedStudents] = useState(() => new Set())
+  const [unlinkedPageSize, setUnlinkedPageSize] = useState(10)
+  const [portalPageSize, setPortalPageSize]     = useState(20)
 
   // Activation state
   const [linkStatus, setLinkStatus]     = useState(null)
   const [statusLoading, setStatusLoading] = useState(false)
   const [bulkGenerating, setBulkGenerating] = useState(false)
   const [bulkResult, setBulkResult]     = useState(null)
+  const [invitePreview, setInvitePreview] = useState(null)
+  const [inviteRequest, setInviteRequest] = useState(null)
+  const [inviteBusy, setInviteBusy] = useState(false)
   const [generatingFor, setGeneratingFor] = useState(null)
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
     try {
-      const [portalRes, studRes] = await Promise.all([
+      const [portalRes, studRes, classRes] = await Promise.all([
         adminAPI.listPortalAccounts(),
         studentAPI.list({ limit: 200 }),
+        setupAPI.getClasses(selectedYearId),
       ])
       setPortalUsers(portalRes.data || [])
       const rawStudents = studRes.data || []
       setStudents(Array.isArray(rawStudents) ? rawStudents : (rawStudents.items || []))
+      setClasses(classRes.data || [])
     } catch (err) {
       toast.error(extractError(err))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [selectedYearId])
 
   const fetchLinkStatus = useCallback(async () => {
     setStatusLoading(true)
     try {
-      const res = await adminAPI.getLinkStatus()
+      const res = await adminAPI.getLinkStatus(selectedYearId ? { academic_year_id: selectedYearId } : undefined)
       setLinkStatus(res.data)
     } catch {
       toast.error('Failed to load link status')
     } finally {
       setStatusLoading(false)
     }
-  }, [])
+  }, [selectedYearId])
 
   useEffect(() => {
     fetchAll()
@@ -1205,42 +905,71 @@ function PortalLinkingTab() {
     }
   }
 
-  const handleBulkGenerate = async () => {
-    setBulkGenerating(true)
+  const buildInviteRequest = (target) => {
+    const base = {
+      target,
+      mode: 'preview',
+      account_types: ['student', 'parent'],
+      ...(selectedYearId ? { academic_year_id: selectedYearId } : {}),
+    }
+    if (target === 'selected_students') {
+      return { ...base, student_ids: Array.from(selectedStudents) }
+    }
+    if (target === 'class') {
+      return { ...base, class_name: studentFilters.className }
+    }
+    if (target === 'section') {
+      return { ...base, class_name: studentFilters.className, section: studentFilters.section }
+    }
+    return base
+  }
+
+  const describeInviteTarget = (request) => {
+    if (!request) return ''
+    if (request.target === 'selected_students') return `${request.student_ids?.length || 0} selected student${request.student_ids?.length === 1 ? '' : 's'}`
+    if (request.target === 'class') return `Class ${request.class_name}`
+    if (request.target === 'section') return `Class ${request.class_name} - Section ${request.section}`
+    if (request.target === 'expired') return 'expired invite links'
+    return 'all pending students'
+  }
+
+  const openInvitePreview = async (target) => {
+    const request = buildInviteRequest(target)
+    if (target === 'selected_students' && !request.student_ids.length) {
+      toast.error('Select at least one student')
+      return
+    }
+    if ((target === 'class' || target === 'section') && !request.class_name) {
+      toast.error('Select a class')
+      return
+    }
+    if (target === 'section' && !request.section) {
+      toast.error('Select a section')
+      return
+    }
+    setInviteBusy(true)
     setBulkResult(null)
     try {
-      let sent = 0
-      let skippedAlreadyLinked = 0
-      let skippedNoEmail = 0
-      const errors = []
-      for (const student of linkStatus?.unlinked_students || []) {
-        for (const accountType of ['student', 'parent']) {
-          const alreadyLinked = accountType === 'student' ? student.has_student_account : student.has_parent_account
-          const hasEmail = accountType === 'student' ? student.has_student_email : student.has_guardian_email
-          if (alreadyLinked) {
-            skippedAlreadyLinked += 1
-            continue
-          }
-          if (!hasEmail) {
-            skippedNoEmail += 1
-            continue
-          }
-          try {
-            await adminAPI.createActivationInvite(student.id, accountType)
-            sent += 1
-          } catch (err) {
-            errors.push(`${student.student_id} ${accountType}: ${extractError(err)}`)
-          }
-        }
-      }
-      setBulkResult({
-        sent,
-        skippedAlreadyLinked,
-        skippedNoEmail,
-        errors,
-        failedStudents: errors.map(error => error.split(':')[0]),
-      })
-      toast.success(`Invite links queued: ${sent}`)
+      const res = await adminAPI.bulkInvitePortal(request)
+      setInviteRequest(request)
+      setInvitePreview(res.data)
+    } catch (err) {
+      toast.error(extractError(err))
+    } finally {
+      setInviteBusy(false)
+    }
+  }
+
+  const confirmInviteSend = async () => {
+    if (!inviteRequest) return
+    setBulkGenerating(true)
+    try {
+      const res = await adminAPI.bulkInvitePortal({ ...inviteRequest, mode: 'send' })
+      setBulkResult(res.data)
+      toast.success(`Invite links queued: ${res.data.sent}`)
+      setInvitePreview(null)
+      setInviteRequest(null)
+      setSelectedStudents(new Set())
       fetchAll()
       fetchLinkStatus()
     } catch (err) {
@@ -1277,6 +1006,86 @@ function PortalLinkingTab() {
   const filteredPortal = search
     ? portalUsers.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()))
     : portalUsers
+  const unlinkedStudents = linkStatus?.unlinked_students || []
+  const classById = useMemo(() => {
+    const next = {}
+    classes.forEach(cls => { next[cls.id] = cls })
+    return next
+  }, [classes])
+  const classOptions = useMemo(
+    () => Array.from(new Set(classes.map(cls => cls.name).filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true })),
+    [classes]
+  )
+  const sectionOptions = useMemo(
+    () => Array.from(new Set(
+      classes
+        .filter(cls => !studentFilters.className || cls.name === studentFilters.className)
+        .map(cls => cls.division)
+        .filter(Boolean)
+    )).sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true })),
+    [classes, studentFilters.className]
+  )
+  const statusForStudent = (student) => {
+    if (student.has_student_account && student.has_parent_account) return 'linked'
+    const statuses = [student.student_activation_status, student.parent_activation_status].filter(Boolean)
+    if (statuses.includes('expired')) return 'expired'
+    if (statuses.includes('pending') || statuses.includes('verified')) return 'pending'
+    return 'pending'
+  }
+  const filteredUnlinkedStudents = unlinkedStudents.filter(student => {
+    const cls = classById[student.class_id]
+    if (studentFilters.className && cls?.name !== studentFilters.className) return false
+    if (studentFilters.section && cls?.division !== studentFilters.section) return false
+    if (studentFilters.status !== 'all' && statusForStudent(student) !== studentFilters.status) return false
+    return true
+  })
+  const {
+    page: unlinkedPage,
+    setPage: setUnlinkedPage,
+    pageItems: pageUnlinkedStudents,
+    totalPages: unlinkedTotalPages,
+    total: unlinkedTotal,
+  } = usePagination(filteredUnlinkedStudents, unlinkedPageSize)
+  const {
+    page: portalPage,
+    setPage: setPortalPage,
+    pageItems: pagePortalUsers,
+    totalPages: portalTotalPages,
+    total: portalTotal,
+  } = usePagination(filteredPortal, portalPageSize)
+
+  const handlePortalSearchChange = (value) => {
+    setSearch(value)
+    setPortalPage(1)
+  }
+  const setStudentFilter = (key, value) => {
+    setStudentFilters(filters => ({
+      ...filters,
+      [key]: value,
+      ...(key === 'className' ? { section: '' } : {}),
+    }))
+    setUnlinkedPage(1)
+    setSelectedStudents(new Set())
+  }
+  const toggleStudentSelection = (studentId) => {
+    setSelectedStudents(current => {
+      const next = new Set(current)
+      if (next.has(studentId)) next.delete(studentId)
+      else next.add(studentId)
+      return next
+    })
+  }
+  const allPageSelected = pageUnlinkedStudents.length > 0 && pageUnlinkedStudents.every(student => selectedStudents.has(student.id))
+  const togglePageSelection = () => {
+    setSelectedStudents(current => {
+      const next = new Set(current)
+      pageUnlinkedStudents.forEach(student => {
+        if (allPageSelected) next.delete(student.id)
+        else next.add(student.id)
+      })
+      return next
+    })
+  }
 
   const studentOptions = students.map(s => ({ value: String(s.id), label: `${s.name_en} (${s.student_id})` }))
   const portalOptions  = portalUsers
@@ -1335,22 +1144,47 @@ function PortalLinkingTab() {
               ))}
             </div>
 
-            {/* Bulk activation */}
-            {unlinkedCount > 0 && (
-              <div style={{ marginBottom: '14px' }}>
-                <button
-                  className="btn btn-primary"
-                  onClick={handleBulkGenerate}
-                  disabled={bulkGenerating}
-                  style={{ width: '100%' }}
-                >
-                  {bulkGenerating
-                    ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Queueing invite links…</>
-                    : `Send Invite Links (${linkStatus.unlinked_students.length} students affected)`
-                  }
-                </button>
+            {/* Targeted activation */}
+            {(
+              <div style={{ marginBottom: '14px', padding: '12px', borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--surface-1)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10, marginBottom: 10 }}>
+                  <Field label="Class">
+                    <select className="input" value={studentFilters.className} onChange={e => setStudentFilter('className', e.target.value)}>
+                      <option value="">All classes</option>
+                      {classOptions.map(name => <option key={name} value={name}>Class {name}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Section">
+                    <select className="input" value={studentFilters.section} onChange={e => setStudentFilter('section', e.target.value)} disabled={!studentFilters.className}>
+                      <option value="">All sections</option>
+                      {sectionOptions.map(section => <option key={section} value={section}>Section {section}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Status">
+                    <select className="input" value={studentFilters.status} onChange={e => setStudentFilter('status', e.target.value)}>
+                      <option value="all">All</option>
+                      <option value="linked">Linked</option>
+                      <option value="pending">Pending</option>
+                      <option value="expired">Expired</option>
+                    </select>
+                  </Field>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  <button className="btn btn-primary" onClick={() => openInvitePreview('selected_students')} disabled={inviteBusy || selectedStudents.size === 0}>
+                    Send to Selected ({selectedStudents.size})
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => openInvitePreview(studentFilters.section ? 'section' : 'class')} disabled={inviteBusy || !studentFilters.className}>
+                    {studentFilters.section ? 'Send to Section' : 'Send to Class'}
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => openInvitePreview('all_pending')} disabled={inviteBusy}>
+                    Send to All Pending
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => openInvitePreview('expired')} disabled={inviteBusy}>
+                    Resend Expired Invites
+                  </button>
+                </div>
                 <div style={{ fontSize: '11.5px', color: 'var(--text-tertiary)', marginTop: '6px', lineHeight: 1.5 }}>
-                  Queues secure invite links for activation-ready student and parent contacts. The invite opens the portal, then OTP verifies the email before account creation.
+                  Preview counts before queueing secure invite links for student and parent portal activation.
                 </div>
               </div>
             )}
@@ -1378,7 +1212,7 @@ function PortalLinkingTab() {
                   Bulk invite complete
                 </div>
                 <div style={{ color: 'var(--text-secondary)' }}>Invite links queued: <strong>{bulkResult.sent}</strong></div>
-                <div style={{ color: 'var(--text-secondary)' }}>{bulkResult.skippedAlreadyLinked || 0} already linked account(s) skipped</div>
+                <div style={{ color: 'var(--text-secondary)' }}>{bulkResult.already_linked_count || 0} already linked account(s) skipped</div>
                 {(bulkResult.skippedNoEmail || 0) > 0 && (
                   <div style={{ color: 'var(--warning-600)' }}>
                     {bulkResult.skippedNoEmail} account(s) skipped because email is missing.{' '}
@@ -1396,15 +1230,18 @@ function PortalLinkingTab() {
             )}
 
             {/* Per-student unlinked list */}
-            {linkStatus.unlinked_students.length > 0 && (
+            {filteredUnlinkedStudents.length > 0 && (
               <div style={{ marginTop: '16px' }}>
                 <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', marginBottom: '8px' }}>
-                  Unlinked Students ({linkStatus.unlinked_students.length})
+                  Students ({filteredUnlinkedStudents.length})
                 </div>
                 <div style={{ overflowX: 'auto' }}>
-                  <table className="data-table" style={{ minWidth: '480px' }}>
+                  <table className="data-table" style={{ minWidth: '560px' }}>
                     <thead>
                       <tr>
+                        <th style={{ width: 34 }}>
+                          <input type="checkbox" checked={allPageSelected} onChange={togglePageSelection} aria-label="Select visible students" />
+                        </th>
                         <th>Student</th>
                         <th>Student Account</th>
                         <th>Parent Account</th>
@@ -1413,11 +1250,22 @@ function PortalLinkingTab() {
                       </tr>
                     </thead>
                     <tbody>
-                      {linkStatus.unlinked_students.map(s => (
+                      {pageUnlinkedStudents.map(s => (
                         <tr key={s.id}>
                           <td>
+                            <input
+                              type="checkbox"
+                              checked={selectedStudents.has(s.id)}
+                              onChange={() => toggleStudentSelection(s.id)}
+                              aria-label={`Select ${s.name_en}`}
+                            />
+                          </td>
+                          <td>
                             <div style={{ fontWeight: 600, fontSize: '13px' }}>{s.name_en}</div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{s.student_id}</div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                              {s.student_id}
+                              {classById[s.class_id] ? ` · Class ${classById[s.class_id].name}-${classById[s.class_id].division || ''}` : ''}
+                            </div>
                           </td>
 
                           {/* ── FIX: closing </span> was missing in both badge cells ── */}
@@ -1503,6 +1351,15 @@ function PortalLinkingTab() {
                     </tbody>
                   </table>
                 </div>
+                <Pagination
+                  page={unlinkedPage}
+                  totalPages={unlinkedTotalPages}
+                  total={unlinkedTotal}
+                  pageSize={unlinkedPageSize}
+                  setPage={setUnlinkedPage}
+                  pageSizeOptions={[10, 20, 50]}
+                  onPageSizeChange={setUnlinkedPageSize}
+                />
               </div>
             )}
           </div>
@@ -1570,7 +1427,7 @@ function PortalLinkingTab() {
       <div className="card">
         <div className="card-header">
           <div className="card-title">All Portal Accounts</div>
-          <SearchInput value={search} onChange={setSearch} placeholder="Search…" style={{ width: '200px' }} />
+          <SearchInput value={search} onChange={handlePortalSearchChange} placeholder="Search…" style={{ width: '200px' }} />
         </div>
         {filteredPortal.length === 0 ? (
           <EmptyState
@@ -1590,7 +1447,7 @@ function PortalLinkingTab() {
                 </tr>
               </thead>
               <tbody>
-                {filteredPortal.map(u => (
+                {pagePortalUsers.map(u => (
                   <tr key={u.id}>
                     <td style={{ fontWeight: 600 }}>{u.name}</td>
                     <td style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{u.email}</td>
@@ -1608,9 +1465,32 @@ function PortalLinkingTab() {
                 ))}
               </tbody>
             </table>
+            <Pagination
+              page={portalPage}
+              totalPages={portalTotalPages}
+              total={portalTotal}
+              pageSize={portalPageSize}
+              setPage={setPortalPage}
+              pageSizeOptions={[10, 20, 50]}
+              onPageSizeChange={setPortalPageSize}
+            />
           </div>
         )}
       </div>
+      <ConfirmModal
+        open={!!invitePreview}
+        title="Confirm Invite Send"
+        message={
+          invitePreview
+            ? `Target: ${describeInviteTarget(inviteRequest)}. Total students: ${invitePreview.total_students}. Already linked accounts: ${invitePreview.already_linked_count}. Invitations to be sent: ${invitePreview.invitations_to_send_count}. Missing email accounts skipped: ${invitePreview.skipped_no_email}.`
+            : ''
+        }
+        confirmLabel={bulkGenerating ? 'Sending...' : 'Send Invites'}
+        confirmVariant="primary"
+        loading={bulkGenerating}
+        onConfirm={confirmInviteSend}
+        onCancel={() => { setInvitePreview(null); setInviteRequest(null) }}
+      />
     </div>
   )
 }

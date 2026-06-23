@@ -71,22 +71,68 @@ def _merge_pdfs(pdf_list: list[bytes]) -> bytes:
     return buf.getvalue()
 
 
-def render_defaulter_report(db: Session, academic_year_id: int = None) -> bytes:
+def _humanize_class(name: str) -> str:
+    """'1' → 'Class 1', 'nursery' → 'Nursery', 'lkg' → 'LKG', etc."""
+    if not name:
+        return "—"
+    low = str(name).strip().lower()
+    if low == "nursery":
+        return "Nursery"
+    if low in ("lkg", "ukg"):
+        return low.upper()
+    try:
+        int(low)
+        return f"Class {low}"
+    except ValueError:
+        return name
+
+
+def render_defaulter_report(
+    db: Session, academic_year_id: int = None, class_id: int = None
+) -> bytes:
     # link_legacy=False: the defaulter PDF is a READ path. Self-healing of legacy
     # unlinked fees is a write and should not run on every report download — the
     # interactive defaulters list (admin UI) keeps link_legacy=True.
-    defaulters = get_defaulters(db, academic_year_id=academic_year_id, link_legacy=False)
+    defaulters = get_defaulters(
+        db,
+        class_id=class_id,
+        academic_year_id=academic_year_id,
+        link_legacy=False,
+    )
     year = db.query(AcademicYear).filter_by(is_current=True).first()
+    cls = db.query(Class).filter_by(id=class_id).first() if class_id else None
 
     total_outstanding = sum(d["balance"] for d in defaulters)
-    total_collected = sum(d["total_paid"] for d in defaulters)
+    total_collected   = sum(d["total_paid"] for d in defaulters)
+    total_due         = sum(d["total_due"] for d in defaulters)
+
+    # Group by class for the per-grade sections in the report.
+    grouped: list[dict] = []
+    current_class = None
+    bucket: list[dict] = []
+    for d in defaulters:
+        if d["class_name"] != current_class:
+            if bucket:
+                grouped.append({"class_name": current_class, "rows": bucket})
+            current_class = d["class_name"]
+            bucket = []
+        bucket.append(d)
+    if bucket:
+        grouped.append({"class_name": current_class, "rows": bucket})
+
+    scope_label = "All Classes"
+    if cls:
+        scope_label = _humanize_class(cls.name) + (f" – {cls.division}" if cls.division else "")
 
     template = _env.get_template("defaulter_report.html")
     html = template.render(
         defaulters=defaulters,
+        grouped=grouped,
+        scope_label=scope_label,
         academic_year=year.label if year else "2025-26",
         total_outstanding=total_outstanding,
         total_collected=total_collected,
+        total_due=total_due,
         generated_date=date.today().strftime("%d %B %Y"),
         logo_src=_logo_b64(),
     )

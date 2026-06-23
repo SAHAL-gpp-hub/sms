@@ -89,9 +89,13 @@ def class_marksheet_token(
 @router.get("/token/report/defaulters")
 def defaulter_report_token(
     academic_year_id: Optional[int] = Query(None),
+    class_id: Optional[int] = Query(None),
     current_user: CurrentUser = Depends(require_role("admin")),
 ):
-    return _pdf_token(current_user, f"report:defaulters:{academic_year_id or 'all'}")
+    return _pdf_token(
+        current_user,
+        f"report:defaulters:year={academic_year_id or 'all'}:class={class_id or 'all'}",
+    )
 
 
 @router.get("/token/report/attendance")
@@ -268,11 +272,15 @@ def class_marksheet_status(class_id: int, job_id: str):
 @router.get("/report/defaulters")
 def defaulter_report(
     academic_year_id: Optional[int] = Query(None),
+    class_id: Optional[int] = Query(None),
     token: str | None = Query(None),
     db: Session = Depends(get_db)
 ):
-    _require_pdf_token(token, f"report:defaulters:{academic_year_id or 'all'}")
-    pdf = render_defaulter_report(db, academic_year_id)
+    _require_pdf_token(
+        token,
+        f"report:defaulters:year={academic_year_id or 'all'}:class={class_id or 'all'}",
+    )
+    pdf = render_defaulter_report(db, academic_year_id, class_id)
     return Response(
         content=pdf,
         media_type="application/pdf",

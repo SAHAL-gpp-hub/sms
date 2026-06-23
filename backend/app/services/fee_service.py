@@ -48,6 +48,28 @@ ACTIVE_ENROLLMENT_STATUSES = (
     EnrollmentStatusEnum.provisional,
 )
 
+# Canonical academic ordering for the defaulter report (Nursery → Std 10).
+# Lower index = earlier grade. Unknown names sort last.
+_ACADEMIC_ORDER = ["nursery", "lkg", "ukg"] + [str(i) for i in range(1, 11)]
+
+
+def _class_sort_key(class_name: str):
+    """Sort key that follows the school's grade ladder instead of alphabetical.
+
+    'Nursery' < 'LKG' < 'UKG' < '1' < '2' < ... < '10', and any value not on
+    the ladder (divisions like '7-A'/'7-B' are normalized to '7') sorts after
+    all known grades but still in a stable, readable order.
+    """
+    if not class_name:
+        return (999, "")
+    clean = str(class_name).strip().lower().removeprefix("class ").strip()
+    # Normalise '7-a' / '7-b' → '7' so sections of the same grade stay together.
+    base = clean.split("-", 1)[0].strip()
+    try:
+        return (_ACADEMIC_ORDER.index(base), clean)
+    except ValueError:
+        return (999, clean)
+
 
 PRELOADED_FEE_HEADS = [
     {"name": "Tuition Fee",       "frequency": "Monthly"},
@@ -751,7 +773,27 @@ def get_defaulters(
                 "balance":      float(balance),
             })
 
-    defaulters.sort(key=lambda x: x["balance"], reverse=True)
+    # When no specific year is requested, a promoted student can legitimately
+    # have outstanding rows in more than one year (e.g. carry-over from the
+    # previous year before promotion). Keep only the most relevant row per
+    # student so the report lists each student once. When a year IS specified
+    # the grouping already guarantees one row per student.
+    if academic_year_id is None:
+        seen: dict[int, dict] = {}
+        for d in defaulters:
+            sid = d["student_id"]
+            prev = seen.get(sid)
+            if prev is None or d["balance"] > prev["balance"]:
+                seen[sid] = d
+        defaulters = list(seen.values())
+
+    # Sort by class (academic ladder), then balance desc within a class so the
+    # biggest defaulters surface first in each grade section.
+    defaulters.sort(key=lambda x: (
+        _class_sort_key(x["class_name"]),
+        -x["balance"],
+        (x["student_name"] or "").lower(),
+    ))
     return defaulters
 
 
