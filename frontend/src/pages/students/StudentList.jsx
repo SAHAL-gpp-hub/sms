@@ -86,7 +86,7 @@ function StudentCard({ student, cls, isAdmin, onDelete, onDownloadTC }) {
                 minHeight: 44,
               }}
             >
-              ✏️ Edit
+                Edit
             </Link>
             <Link
               to={`/fees/student/${student.id}`}
@@ -107,7 +107,7 @@ function StudentCard({ student, cls, isAdmin, onDelete, onDownloadTC }) {
                 minHeight: 44,
               }}
             >
-              💰 Fees
+                Fees
             </Link>
             <button
               onClick={() => onDownloadTC(student.id)}
@@ -129,7 +129,7 @@ function StudentCard({ student, cls, isAdmin, onDelete, onDownloadTC }) {
                 minHeight: 44,
               }}
             >
-              📜 TC
+                TC
             </button>
             <button
               onClick={() => onDelete({ id: student.id, name: student.name_en })}
@@ -151,7 +151,7 @@ function StudentCard({ student, cls, isAdmin, onDelete, onDownloadTC }) {
                 minHeight: 44,
               }}
             >
-              ⛔ Withdraw
+                Withdraw
             </button>
           </>
         ) : (
