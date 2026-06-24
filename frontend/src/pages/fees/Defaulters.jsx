@@ -66,51 +66,70 @@ function DefaulterCard({ d, resolveClassName }) {
     ? Math.min(((d.balance / d.total_due) * 100), 100).toFixed(0)
     : 0
   return (
-    <div style={{
+    <div className="defaulter-card" style={{
       background: 'var(--surface-0)',
       border: '1px solid var(--border-default)',
-      borderRadius: 12,
-      padding: '14px 16px',
+      borderRadius: 14,
+      padding: '16px 18px',
       display: 'flex',
       flexDirection: 'column',
-      gap: 10,
+      gap: 12,
     }}>
+      {/* Top row: name + balance */}
       <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:10 }}>
-        <div style={{ minWidth:0 }}>
-          <div style={{ fontWeight:700, color:'var(--text-primary)', fontSize:14, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+        <div style={{ minWidth:0, flex:1 }}>
+          <div style={{ fontWeight:800, color:'var(--text-primary)', fontSize:15, lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
             {d.student_name}
           </div>
-          <div style={{ fontSize:12, color:'var(--text-secondary)', marginTop:2 }}>
+          <div style={{ fontSize:12.5, color:'var(--text-secondary)', marginTop:3 }}>
             {resolveClassName(d.class_id)}
           </div>
         </div>
-        <div style={{ textAlign:'right', flexShrink:0 }}>
-          <div style={{ fontSize:16, fontWeight:800, color:'var(--danger-600)', letterSpacing:'-0.02em' }}>
+        <div style={{
+          textAlign:'right', flexShrink:0,
+          background: 'var(--danger-50)',
+          border: '1px solid var(--danger-100)',
+          borderRadius: 10,
+          padding: '6px 12px',
+        }}>
+          <div style={{ fontSize:17, fontWeight:900, color:'var(--danger-600)', letterSpacing:'-0.03em' }}>
             ₹{(d.balance||0).toLocaleString('en-IN')}
           </div>
-          <div style={{ fontSize:10, color:'var(--danger-500)', fontWeight:600 }}>balance due</div>
+          <div style={{ fontSize:9, color:'var(--danger-500)', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.05em', marginTop:1 }}>due</div>
         </div>
       </div>
 
+      {/* Progress bar */}
       <div>
-        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
-          <span style={{ fontSize:11, color:'var(--text-tertiary)', fontWeight:600 }}>
-            Paid: ₹{(d.total_paid||0).toLocaleString('en-IN')} of ₹{(d.total_due||0).toLocaleString('en-IN')}
+        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
+          <span style={{ fontSize:11.5, color:'var(--text-tertiary)', fontWeight:600 }}>
+            ₹{(d.total_paid||0).toLocaleString('en-IN')} / ₹{(d.total_due||0).toLocaleString('en-IN')} paid
           </span>
-          <span style={{ fontSize:11, color:'var(--danger-500)', fontWeight:700 }}>{balancePct}% unpaid</span>
+          <span style={{ fontSize:11.5, color:'var(--danger-500)', fontWeight:700 }}>{balancePct}% left</span>
         </div>
-        <div style={{ height:5, background:'var(--danger-100)', borderRadius:3, overflow:'hidden' }}>
-          <div style={{ height:'100%', width:`${100-balancePct}%`, background:'var(--success-500)', borderRadius:3 }} />
+        <div style={{ height:6, background:'var(--danger-100)', borderRadius:4, overflow:'hidden' }}>
+          <div style={{ height:'100%', width:`${100-balancePct}%`, background:'var(--success-500)', borderRadius:4, transition:'width 0.3s' }} />
         </div>
       </div>
 
+      {/* Bottom row: contact + action */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', paddingTop:4, borderTop:'1px solid var(--border-subtle)' }}>
-        <span className="mono" style={{ fontSize:12, color:'var(--text-tertiary)' }}>{d.contact}</span>
+        <a href={`tel:${d.contact}`} className="mono" style={{ fontSize:13, color:'var(--brand-600)', textDecoration:'none', fontWeight:600 }}>{d.contact}</a>
         <Link
           to={`/fees/student/${d.student_id}`}
-          style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'6px 12px', borderRadius:7, fontSize:12, fontWeight:600, color:'var(--brand-700)', background:'var(--brand-50)', border:'1px solid var(--brand-200)', textDecoration:'none', touchAction:'manipulation' }}
+          style={{
+            display:'inline-flex', alignItems:'center', gap:5,
+            padding:'8px 14px', borderRadius:9,
+            fontSize:12.5, fontWeight:700,
+            color:'#fff',
+            background: 'var(--brand-600)',
+            border:'none',
+            textDecoration:'none',
+            touchAction:'manipulation',
+            boxShadow: '0 1px 3px rgba(79,70,229,0.25)',
+          }}
         >
-          View Ledger →
+          Ledger →
         </Link>
       </div>
     </div>
@@ -119,7 +138,35 @@ function DefaulterCard({ d, resolveClassName }) {
 
 // ─── chart section (shown when "All Classes" selected) ───────────────────────
 
-function ChartsSection({ defaulters, monthlyData, selectedMonth, onMonthChange, loading, classes, isMobile = false, summary = {} }) {
+function MobileKpiStrip({ kpiDefaulterCount, kpiOutstanding, kpiBilled, kpiCollected }) {
+  const items = [
+    { label: 'Defaulters', value: kpiDefaulterCount, color: 'var(--danger-600)', bg: 'var(--danger-50)', border: 'var(--danger-100)' },
+    { label: 'Outstanding', value: fmtINR(kpiOutstanding), color: 'var(--danger-600)', bg: 'var(--danger-50)', border: 'var(--danger-100)' },
+    { label: 'Billed', value: fmtINR(kpiBilled), color: 'var(--text-primary)', bg: 'var(--surface-1)', border: 'var(--border-default)' },
+    { label: 'Collected', value: fmtINR(kpiCollected), color: 'var(--success-600)', bg: 'var(--success-50)', border: 'var(--success-100)' },
+  ]
+  return (
+    <div className="defaulter-kpi-strip" style={{
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: 8,
+    }}>
+      {items.map(s => (
+        <div key={s.label} style={{
+          background: s.bg,
+          border: `1px solid ${s.border}`,
+          borderRadius: 12,
+          padding: '12px 14px',
+        }}>
+          <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-tertiary)', marginBottom:4 }}>{s.label}</div>
+          <div style={{ fontSize:16, fontWeight:900, color:s.color, letterSpacing:'-0.03em' }}>{s.value}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ChartsSection({ defaulters, monthlyData, selectedMonth, onMonthChange, loading, classes, isMobile = false, summary = {}, kpiDefaulterCount, kpiOutstanding, kpiBilled, kpiCollected }) {
   // --- Group by class ---
   // Use summary.by_class (ALL students) when available, falling back to
   // defaulter-only aggregation for backward compatibility while loading.
@@ -151,15 +198,18 @@ function ChartsSection({ defaulters, monthlyData, selectedMonth, onMonthChange, 
     { name: 'Collected',   value: totalCollected   },
     { name: 'Outstanding', value: totalOutstanding },
   ]
+  const collectionPct = totalCollected + totalOutstanding > 0
+    ? ((totalCollected / (totalCollected + totalOutstanding)) * 100).toFixed(1)
+    : 0
 
   const cardStyle = {
     background: 'var(--surface-0)',
     border: '1px solid var(--border-default)',
-    borderRadius: 12,
-    padding: '16px 18px',
+    borderRadius: 14,
+    padding: isMobile ? '14px 16px' : '16px 18px',
   }
   const titleStyle = {
-    fontSize: 12,
+    fontSize: isMobile ? 11.5 : 12,
     fontWeight: 700,
     textTransform: 'uppercase',
     letterSpacing: '0.06em',
@@ -167,171 +217,236 @@ function ChartsSection({ defaulters, monthlyData, selectedMonth, onMonthChange, 
     marginBottom: 12,
   }
 
-  return (
-    <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+  // Shared month selector
+  const monthSelector = (
+    <select
+      value={selectedMonth}
+      onChange={e => onMonthChange(Number(e.target.value))}
+      style={{
+        fontSize: isMobile ? 13 : 12, fontWeight: 600,
+        border: '1px solid var(--border-default)',
+        borderRadius: isMobile ? 8 : 6, padding: isMobile ? '6px 10px' : '4px 8px',
+        background: 'var(--surface-1)',
+        color: 'var(--text-primary)',
+        cursor: 'pointer',
+        minHeight: isMobile ? 36 : undefined,
+      }}
+    >
+      {MONTHS.map((m, i) => (
+        <option key={i} value={i + 1}>{isMobile ? m.slice(0, 3) : m}</option>
+      ))}
+    </select>
+  )
 
-      {/* Row 1: Monthly Collections (full width) */}
-      <div style={cardStyle}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
-          <div style={titleStyle}>Monthly Fee Collections</div>
-          <select
-            value={selectedMonth}
-            onChange={e => onMonthChange(Number(e.target.value))}
-            style={{
-              fontSize:12, fontWeight:600,
-              border:'1px solid var(--border-default)',
-              borderRadius:6, padding:'4px 8px',
-              background:'var(--surface-1)',
-              color:'var(--text-primary)',
-              cursor:'pointer',
-            }}
-          >
-            {MONTHS.map((m, i) => (
-              <option key={i} value={i + 1}>{m}</option>
-            ))}
-          </select>
+  // Shared monthly area chart
+  const monthlyChart = (
+    loading ? (
+      <div style={{ height: isMobile ? 180 : 200, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text-tertiary)', fontSize:13 }}>
+        Loading…
+      </div>
+    ) : monthlyData.length === 0 ? (
+      <div style={{ height: isMobile ? 180 : 200, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text-tertiary)', fontSize:13 }}>
+        No payment data for {MONTHS[selectedMonth - 1]}
+      </div>
+    ) : (
+      <ResponsiveContainer width="100%" height={isMobile ? 180 : 200}>
+        <AreaChart data={monthlyData} margin={{ top:4, right: isMobile ? 0 : 16, left: isMobile ? -16 : 0, bottom:0 }}>
+          <defs>
+            <linearGradient id="collectGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%"  stopColor={MONTH_LINE_COLOR} stopOpacity={0.18} />
+              <stop offset="95%" stopColor={MONTH_LINE_COLOR} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+          <XAxis
+            dataKey="day"
+            tick={{ fontSize: isMobile ? 10 : 11, fill:'var(--text-tertiary)' }}
+            tickLine={false}
+            axisLine={false}
+            interval={isMobile ? 4 : undefined}
+          />
+          <YAxis
+            tickFormatter={fmtINR}
+            tick={{ fontSize: isMobile ? 10 : 11, fill:'var(--text-tertiary)' }}
+            tickLine={false}
+            axisLine={false}
+            width={isMobile ? 38 : 52}
+          />
+          <Tooltip content={<ChartTooltip />} />
+          <Area
+            type="monotone"
+            dataKey="collected"
+            name="Collected"
+            stroke={MONTH_LINE_COLOR}
+            strokeWidth={isMobile ? 2 : 2.5}
+            fill="url(#collectGrad)"
+            dot={isMobile ? false : { r:3, fill:MONTH_LINE_COLOR }}
+            activeDot={{ r:5 }}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    )
+  )
+
+  // Shared donut chart
+  const donutChart = (
+    <ResponsiveContainer width={isMobile ? '45%' : '100%'} height={isMobile ? 140 : 180}>
+      <PieChart>
+        <Pie
+          data={donutData}
+          cx="50%"
+          cy="50%"
+          innerRadius={isMobile ? 38 : 52}
+          outerRadius={isMobile ? 56 : 72}
+          paddingAngle={3}
+          dataKey="value"
+          startAngle={90}
+          endAngle={-270}
+          minAngle={4}
+          labelLine={false}
+          label={({ cx, cy }) => (
+            totalCollected + totalOutstanding > 0 ? (
+              <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle">
+                <tspan x={cx} dy={isMobile ? -6 : -8} fontSize={isMobile ? 14 : 16} fontWeight="800" fill="var(--success-600)">
+                  {collectionPct}%
+                </tspan>
+                <tspan x={cx} dy={isMobile ? 16 : 20} fontSize={isMobile ? 9 : 10} fontWeight="600" fill="var(--text-tertiary)">
+                  collected
+                </tspan>
+              </text>
+            ) : null
+          )}
+        >
+          {donutData.map((_, i) => (
+            <Cell key={i} fill={DONUT_COLORS[i]} />
+          ))}
+        </Pie>
+        <Tooltip formatter={(v) => fmtINR(v)} />
+      </PieChart>
+    </ResponsiveContainer>
+  )
+
+  // Shared "Outstanding by class" bar chart
+  const barChart = (
+    byClass.length === 0 ? (
+      <div style={{ height:200, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text-tertiary)', fontSize:13 }}>
+        No data
+      </div>
+    ) : (
+      <ResponsiveContainer width="100%" height={Math.max(200, byClass.length * (isMobile ? 38 : 32) + 40)}>
+        <BarChart data={byClass} layout="vertical" margin={{ top:0, right: isMobile ? 0 : 16, left:0, bottom:0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" horizontal={false} />
+          <XAxis
+            type="number"
+            tickFormatter={fmtINR}
+            tick={{ fontSize: isMobile ? 10 : 11, fill:'var(--text-tertiary)' }}
+            tickLine={false}
+            axisLine={false}
+          />
+          <YAxis
+            type="category"
+            dataKey="name"
+            tick={{ fontSize: isMobile ? 10 : 11, fill:'var(--text-primary)', fontWeight:600 }}
+            tickLine={false}
+            axisLine={false}
+            width={isMobile ? 62 : 72}
+          />
+          <Tooltip content={<ChartTooltip />} />
+          {!isMobile && (
+            <Legend
+              iconType="circle"
+              iconSize={8}
+              wrapperStyle={{ fontSize:11, paddingTop:8 }}
+            />
+          )}
+          <Bar dataKey="Collected"   stackId="a" fill={CLASS_BAR_COLLECTED}   radius={[0,0,0,0]} barSize={isMobile ? 14 : 16} />
+          <Bar dataKey="Outstanding" stackId="a" fill={CLASS_BAR_OUTSTANDING} radius={[0,4,4,0]} barSize={isMobile ? 14 : 16} />
+        </BarChart>
+      </ResponsiveContainer>
+    )
+  )
+
+  // ── DESKTOP: monthly on top (full width), then bar + donut side-by-side
+  if (!isMobile) {
+    return (
+      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+        {/* Row 1: Monthly Collections (full width) */}
+        <div style={cardStyle}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
+            <div style={titleStyle}>Monthly Fee Collections</div>
+            {monthSelector}
+          </div>
+          {monthlyChart}
         </div>
 
-        {loading ? (
-          <div style={{ height:200, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text-tertiary)', fontSize:13 }}>
-            Loading…
+        {/* Row 2: bar + donut side-by-side */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:14 }}>
+          {/* Stacked bar */}
+          <div style={cardStyle}>
+            <div style={titleStyle}>Outstanding by Class</div>
+            {barChart}
           </div>
-        ) : monthlyData.length === 0 ? (
-          <div style={{ height:200, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text-tertiary)', fontSize:13 }}>
-            No payment data for {MONTHS[selectedMonth - 1]}
+
+          {/* Donut */}
+          <div style={{ ...cardStyle, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
+            <div style={{ ...titleStyle, textAlign:'center' }}>Collection Ratio</div>
+            {donutChart}
+            <div style={{ display:'flex', gap:16, marginTop:4, justifyContent:'center' }}>
+              {donutData.map((d, i) => (
+                <div key={i} style={{ display:'flex', alignItems:'center', gap:5, fontSize:11 }}>
+                  <div style={{ width:8, height:8, borderRadius:'50%', background:DONUT_COLORS[i], flexShrink:0 }} />
+                  <span style={{ color:'var(--text-secondary)', fontWeight:600 }}>{d.name}</span>
+                </div>
+              ))}
+            </div>
           </div>
-        ) : (
-          <ResponsiveContainer width="100%" height={200}>
-            <AreaChart data={monthlyData} margin={{ top:4, right:16, left:0, bottom:0 }}>
-              <defs>
-                <linearGradient id="collectGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor={MONTH_LINE_COLOR} stopOpacity={0.18} />
-                  <stop offset="95%" stopColor={MONTH_LINE_COLOR} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-              <XAxis
-                dataKey="day"
-                tick={{ fontSize:11, fill:'var(--text-tertiary)' }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                tickFormatter={fmtINR}
-                tick={{ fontSize:11, fill:'var(--text-tertiary)' }}
-                tickLine={false}
-                axisLine={false}
-                width={52}
-              />
-              <Tooltip content={<ChartTooltip />} />
-              <Area
-                type="monotone"
-                dataKey="collected"
-                name="Collected"
-                stroke={MONTH_LINE_COLOR}
-                strokeWidth={2.5}
-                fill="url(#collectGrad)"
-                dot={{ r:3, fill:MONTH_LINE_COLOR }}
-                activeDot={{ r:5 }}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        )}
+        </div>
+      </div>
+    )
+  }
+
+  // ── MOBILE: KPI strip → monthly → donut(+legend) → bar
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+      <MobileKpiStrip
+        kpiDefaulterCount={kpiDefaulterCount}
+        kpiOutstanding={kpiOutstanding}
+        kpiBilled={kpiBilled}
+        kpiCollected={kpiCollected}
+      />
+
+      {/* Monthly Collections */}
+      <div style={cardStyle}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12, flexWrap:'wrap', gap:8 }}>
+          <div style={titleStyle}>Monthly Collections</div>
+          {monthSelector}
+        </div>
+        {monthlyChart}
       </div>
 
-      {/* Row 2: stacked on mobile, side-by-side on desktop */}
-      <div style={{
-        display:'grid',
-        gridTemplateColumns: isMobile ? '1fr' : '1fr 280px',
-        gap:14,
-      }}>
-
-        {/* Stacked bar */}
-        <div style={cardStyle}>
-          <div style={titleStyle}>Outstanding by Class</div>
-          {byClass.length === 0 ? (
-            <div style={{ height:200, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text-tertiary)', fontSize:13 }}>
-              No data
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={Math.max(200, byClass.length * 32 + 40)}>
-              <BarChart data={byClass} layout="vertical" margin={{ top:0, right:16, left:0, bottom:0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" horizontal={false} />
-                <XAxis
-                  type="number"
-                  tickFormatter={fmtINR}
-                  tick={{ fontSize:11, fill:'var(--text-tertiary)' }}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  tick={{ fontSize:11, fill:'var(--text-primary)', fontWeight:600 }}
-                  tickLine={false}
-                  axisLine={false}
-                  width={72}
-                />
-                <Tooltip content={<ChartTooltip />} />
-                <Legend
-                  iconType="circle"
-                  iconSize={8}
-                  wrapperStyle={{ fontSize:11, paddingTop:8 }}
-                />
-                <Bar dataKey="Collected"   stackId="a" fill={CLASS_BAR_COLLECTED}   radius={[0,0,0,0]} barSize={16} />
-                <Bar dataKey="Outstanding" stackId="a" fill={CLASS_BAR_OUTSTANDING} radius={[0,4,4,0]} barSize={16} />
-
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        {/* Donut */}
-        <div style={{ ...cardStyle, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
-          <div style={{ ...titleStyle, textAlign:'center' }}>Collection Ratio</div>
-          <ResponsiveContainer width="100%" height={180}>
-            <PieChart>
-              <Pie
-                data={donutData}
-                cx="50%"
-                cy="50%"
-                innerRadius={52}
-                outerRadius={72}
-                paddingAngle={3}
-                dataKey="value"
-                startAngle={90}
-                endAngle={-270}
-                minAngle={4}
-                labelLine={false}
-                label={({ cx, cy }) => (
-                  totalCollected + totalOutstanding > 0 ? (
-                    <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle">
-                      <tspan x={cx} dy="-8" fontSize="16" fontWeight="800" fill="var(--success-600)">
-                        {((totalCollected / (totalCollected + totalOutstanding)) * 100).toFixed(1)}%
-                      </tspan>
-                      <tspan x={cx} dy="20" fontSize="10" fontWeight="600" fill="var(--text-tertiary)">
-                        collected
-                      </tspan>
-                    </text>
-                  ) : null
-                )}
-              >
-                {donutData.map((_, i) => (
-                  <Cell key={i} fill={DONUT_COLORS[i]} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(v) => fmtINR(v)} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div style={{ display:'flex', gap:16, marginTop:4 }}>
+      {/* Donut + legend side-by-side */}
+      <div style={cardStyle}>
+        <div style={{ ...titleStyle, textAlign:'center' }}>Collection Ratio</div>
+        <div style={{ display:'flex', flexDirection:'row', alignItems:'center', justifyContent:'center', gap:16 }}>
+          {donutChart}
+          <div style={{ display:'flex', flexDirection:'column', gap:10, flex:1 }}>
             {donutData.map((d, i) => (
-              <div key={i} style={{ display:'flex', alignItems:'center', gap:5, fontSize:11 }}>
-                <div style={{ width:8, height:8, borderRadius:'50%', background:DONUT_COLORS[i], flexShrink:0 }} />
-                <span style={{ color:'var(--text-secondary)', fontWeight:600 }}>{d.name}</span>
+              <div key={i} style={{ display:'flex', alignItems:'center', gap:10 }}>
+                <div style={{ width:12, height:12, borderRadius:'50%', background:DONUT_COLORS[i], flexShrink:0 }} />
+                <div>
+                  <div style={{ fontSize:11, color:'var(--text-tertiary)', fontWeight:600 }}>{d.name}</div>
+                  <div style={{ fontSize:15, fontWeight:800, color:'var(--text-primary)', letterSpacing:'-0.02em' }}>{fmtINR(d.value)}</div>
+                </div>
               </div>
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Outstanding by Class */}
+      <div style={cardStyle}>
+        <div style={titleStyle}>Outstanding by Class</div>
+        {barChart}
       </div>
     </div>
   )
@@ -471,24 +586,32 @@ export default function Defaulters() {
       />
 
       <FilterRow>
-        <Select
-          value={classFilter}
-          onChange={e => setClassFilter(e.target.value)}
-          options={classOptions}
-          placeholder="All Classes"
-          style={{ flex:'1 1 140px', minWidth:0 }}
-        />
-        <Select
-          value={yearFilter}
-          onChange={() => {}}
-          options={yearOptions}
-          placeholder="All Years"
-          disabled
-          style={{ flex:'1 1 140px', minWidth:0 }}
-        />
-        {classFilter && (
-          <button className="btn btn-ghost btn-sm" onClick={() => setClassFilter('')}>Clear</button>
-        )}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: 12,
+        }}>
+          <Select
+            value={classFilter}
+            onChange={e => setClassFilter(e.target.value)}
+            options={classOptions}
+            placeholder="All Classes"
+            style={{ flex: 1, minWidth: 0 }}
+          />
+          <Select
+            value={yearFilter}
+            onChange={() => {}}
+            options={yearOptions}
+            placeholder="All Years"
+            disabled
+            style={{ flex: 1, minWidth: 0 }}
+          />
+          {classFilter && (
+            <button className="btn btn-ghost btn-sm" onClick={() => setClassFilter('')}>Clear</button>
+          )}
+        </div>
       </FilterRow>
 
       {/* ── ALL CLASSES: charts view ─────────────────────────────────── */}
@@ -519,6 +642,10 @@ export default function Defaulters() {
             classes={classes}
             isMobile={isMobile}
             summary={summary}
+            kpiDefaulterCount={kpiDefaulterCount}
+            kpiOutstanding={kpiOutstanding}
+            kpiBilled={kpiBilled}
+            kpiCollected={kpiCollected}
           />
         )
       ) : (
@@ -535,11 +662,11 @@ export default function Defaulters() {
                 PDF export will include exactly: {selectedClassLabel || 'All Classes'} · {selectedYearLabel || 'All Years'} · {defaulters.length} defaulter{defaulters.length !== 1 ? 's' : ''}.
               </div>
 
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:10, marginBottom:14 }}>
+              <div className="defaulter-kpi-strip" style={{ display:'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap:10, marginBottom:14 }}>
                 {kpiCards.map(s => (
-                  <div key={s.label} style={{ background:s.bg, border:`1px solid ${s.border}`, borderRadius:12, padding:'12px 14px' }}>
+                  <div key={s.label} style={{ background:s.bg, border:`1px solid ${s.border}`, borderRadius:12, padding: isMobile ? '12px 14px' : '14px 16px' }}>
                     <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-tertiary)', marginBottom:4 }}>{s.label}</div>
-                    <div style={{ fontSize:16, fontWeight:800, color:s.color, letterSpacing:'-0.02em', wordBreak:'break-all' }}>{s.value}</div>
+                    <div style={{ fontSize: isMobile ? 15 : 16, fontWeight:900, color:s.color, letterSpacing:'-0.03em', wordBreak:'break-all' }}>{s.value}</div>
                   </div>
                 ))}
               </div>
@@ -647,6 +774,23 @@ export default function Defaulters() {
           )}
         </>
       )}
+
+      <style>{`
+        @media (max-width: 640px) {
+          .defaulter-kpi-strip {
+            margin-bottom: 12px;
+          }
+          .defaulter-card {
+            padding: 14px 16px !important;
+            border-radius: 12px !important;
+          }
+        }
+        @media (max-width: 380px) {
+          .defaulter-card {
+            padding: 12px 14px !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }

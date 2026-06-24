@@ -57,91 +57,107 @@ function StudentCard({ student, cls, isAdmin, onDelete, onDownloadTC }) {
         </div>
       </div>
 
-      {/* Actions */}
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingTop: '4px', borderTop: '1px solid var(--border-subtle)' }}>
+      {/* Actions — 2×2 grid for better touch targets on mobile */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '8px',
+        paddingTop: '6px',
+        borderTop: '1px solid var(--border-subtle)',
+      }}>
         {isAdmin ? (
           <>
             <Link
               to={`/students/${student.id}/edit`}
               style={{
-                flex: 1,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                padding: '8px',
-                borderRadius: '8px',
-                fontSize: '12.5px',
-                fontWeight: 600,
-                color: 'var(--brand-600)',
+                gap: 5,
+                padding: '10px 8px',
+                borderRadius: '9px',
+                fontSize: '13px',
+                fontWeight: 700,
+                color: 'var(--brand-700)',
                 background: 'var(--brand-50)',
                 border: '1px solid var(--brand-100)',
                 textDecoration: 'none',
                 touchAction: 'manipulation',
+                minHeight: 44,
               }}
             >
-              Edit
+              ✏️ Edit
             </Link>
             <Link
               to={`/fees/student/${student.id}`}
               style={{
-                flex: 1,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                padding: '8px',
-                borderRadius: '8px',
-                fontSize: '12.5px',
-                fontWeight: 600,
+                gap: 5,
+                padding: '10px 8px',
+                borderRadius: '9px',
+                fontSize: '13px',
+                fontWeight: 700,
                 color: 'var(--success-700)',
                 background: 'var(--success-50)',
                 border: '1px solid var(--success-100)',
                 textDecoration: 'none',
                 touchAction: 'manipulation',
+                minHeight: 44,
               }}
             >
-              Fees
+              💰 Fees
             </Link>
             <button
               onClick={() => onDownloadTC(student.id)}
               style={{
-                flex: 1,
-                padding: '8px',
-                borderRadius: '8px',
-                fontSize: '12.5px',
-                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 5,
+                padding: '10px 8px',
+                borderRadius: '9px',
+                fontSize: '13px',
+                fontWeight: 700,
                 color: 'var(--text-secondary)',
                 background: 'var(--gray-100)',
                 border: '1px solid var(--border-default)',
                 cursor: 'pointer',
                 fontFamily: 'var(--font-sans)',
                 touchAction: 'manipulation',
+                minHeight: 44,
               }}
             >
-              TC
+              📜 TC
             </button>
             <button
               onClick={() => onDelete({ id: student.id, name: student.name_en })}
               style={{
-                flex: 1,
-                padding: '8px',
-                borderRadius: '8px',
-                fontSize: '12.5px',
-                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 5,
+                padding: '10px 8px',
+                borderRadius: '9px',
+                fontSize: '13px',
+                fontWeight: 700,
                 color: 'var(--danger-600)',
                 background: 'var(--danger-50)',
                 border: '1px solid var(--danger-100)',
                 cursor: 'pointer',
                 fontFamily: 'var(--font-sans)',
                 touchAction: 'manipulation',
+                minHeight: 44,
               }}
             >
-              Withdraw
+              ⛔ Withdraw
             </button>
           </>
         ) : (
-          <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 700 }}>
-            View-only access. Ask an admin for edits, fees, TC, or status changes.
-          </span>
+          <div style={{ gridColumn: '1 / -1', fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 600, textAlign: 'center', padding: '8px' }}>
+            View-only · Contact admin for changes
+          </div>
         )}
       </div>
     </div>
@@ -352,12 +368,28 @@ export default function StudentList() {
 	                />
               ))}
               {students.length > 0 && (
-                <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center', padding: '8px 0', display: 'grid', gap: 8 }}>
-                  <div>Showing {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, totalStudents)} of {totalStudents}</div>
-                  <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
-                    <button className="btn btn-secondary btn-sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>← Prev</button>
-                    <span style={{ alignSelf: 'center' }}>Page {page} / {totalPages}</span>
-                    <button className="btn btn-secondary btn-sm" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>Next →</button>
+                <div className="mobile-pagination" style={{
+                  fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center',
+                  padding: '12px 0 4px', display: 'flex', flexDirection: 'column', gap: 10,
+                  alignItems: 'center',
+                }}>
+                  <div style={{ fontWeight: 600 }}>
+                    {totalStudents} student{totalStudents !== 1 ? 's' : ''} · {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, totalStudents)}
+                  </div>
+                  <div style={{ display: 'flex', gap: 0, alignItems: 'center' }}>
+                    <button className="btn btn-secondary btn-sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))} style={{ borderRadius: '8px 0 0 8px', minWidth: 64 }}>
+                      ← Prev
+                    </button>
+                    <div style={{
+                      padding: '8px 16px', fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)',
+                      background: 'var(--surface-1)', border: '1px solid var(--border-default)',
+                      borderTop: '1px solid var(--border-default)', borderBottom: '1px solid var(--border-default)',
+                    }}>
+                      {page} / {totalPages}
+                    </div>
+                    <button className="btn btn-secondary btn-sm" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))} style={{ borderRadius: '0 8px 8px 0', minWidth: 64 }}>
+                      Next →
+                    </button>
                   </div>
                 </div>
               )}

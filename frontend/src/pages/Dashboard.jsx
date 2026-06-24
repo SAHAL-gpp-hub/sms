@@ -1044,7 +1044,17 @@ export default function Dashboard() {
 
           <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
             {/* Scrollable container for class list */}
-            <div style={{ maxHeight: '230px', overflowY: 'auto', paddingRight: 4, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div
+                  style={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflowY: 'auto',
+                    paddingRight: 4,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10
+                  }}
+                >
               {classPerfQuery.isLoading ? (
                 [1,2,3,4,5].map(i => <div key={i} style={{ height: 18, background: '#f1f5f9', borderRadius: 4 }} />)
               ) : combinedPerformance.length === 0 ? (
