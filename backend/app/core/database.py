@@ -21,6 +21,7 @@ FIXES:
 """
 
 import logging
+import threading
 import time
 
 from sqlalchemy import create_engine, event, text
@@ -91,15 +92,34 @@ def get_db():
 
 
 # ── Health-check helper ────────────────────────────────────────────────────
+
+# PERF-07 FIX: cache the health-check result for 5 seconds.
+# /health and /health/ready are polled every few seconds by Docker, nginx, and
+# load balancers. Each call previously opened a real connection from the pool.
+# Now we return the last known state and only re-test every 5 seconds.
+_db_healthy: bool = True
+_db_last_check: float = 0.0
+_DB_CHECK_INTERVAL: float = 5.0  # seconds between real DB pings
+_db_lock = threading.Lock()
+
+
 def check_db_connection() -> bool:
     """
     Returns True if the database is reachable, False otherwise.
-    Used by /health endpoint so ops/docker can confirm DB connectivity
-    without needing to inspect the backend logs.
+    Result is cached for _DB_CHECK_INTERVAL seconds to avoid pool churn from
+    frequent health-check polling.
     """
-    try:
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-        return True
-    except Exception:
-        return False
+    global _db_healthy, _db_last_check
+    now = time.monotonic()
+    with _db_lock:
+        if now - _db_last_check < _DB_CHECK_INTERVAL:
+            return _db_healthy
+        # Time to re-check
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            _db_healthy = True
+        except Exception:
+            _db_healthy = False
+        _db_last_check = now
+        return _db_healthy

@@ -24,10 +24,10 @@ logger = logging.getLogger("sms.pdf.router")
 
 router = APIRouter(prefix="/api/v1/pdf", tags=["PDF"])
 
-# How long (seconds) a one-shot PDF download token is valid.
-# Class marksheets can take 10-20 s to render, so the token window must be
-# longer than that to avoid the frontend re-requesting a token mid-poll.
-_PDF_TOKEN_TTL = 120  # 2 minutes
+# SEC-04 FIX: Reduced from 120s to 30s.
+# Class marksheets render in well under 30s; the shorter window limits the
+# replay risk if a signed URL is captured in browser history or proxy logs.
+_PDF_TOKEN_TTL = 30  # seconds
 
 
 def _pdf_response(

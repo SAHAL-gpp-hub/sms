@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.redis_client import redis_client
 from jose import JWTError
 
 from app.core.security import (
@@ -213,9 +214,15 @@ def _as_utc(value: datetime | None) -> datetime | None:
     return value.astimezone(timezone.utc)
 
 
+def _otp_hmac_key() -> bytes:
+    """SEC-07: Return the dedicated OTP HMAC key, falling back to SECRET_KEY."""
+    key = settings.OTP_HMAC_KEY or settings.SECRET_KEY
+    return key.encode("utf-8")
+
+
 def _hash_login_otp(challenge_id: str, otp: str) -> str:
     material = f"{challenge_id}:{otp}".encode("utf-8")
-    return hmac.new(settings.SECRET_KEY.encode("utf-8"), material, hashlib.sha256).hexdigest()
+    return hmac.new(_otp_hmac_key(), material, hashlib.sha256).hexdigest()
 
 
 def _hash_refresh_token(raw_token: str) -> str:
@@ -334,6 +341,76 @@ def _create_admin_2fa_challenge(db: Session, user: User) -> LoginChallengeRespon
 
 
 # ---------------------------------------------------------------------------
+# Redis helpers for blocklist (PERF-04) and CurrentUser cache (PERF-05)
+# ---------------------------------------------------------------------------
+
+_BLOCKLIST_PREFIX = "blocklist:"
+_CURRENT_USER_PREFIX = "cu:"
+
+
+def _blocklist_key(jti: str) -> str:
+    return f"{_BLOCKLIST_PREFIX}{jti}"
+
+
+def _current_user_key(user_id: int) -> str:
+    return f"{_CURRENT_USER_PREFIX}{user_id}"
+
+
+def _cache_current_user(user_id: int, cu: "CurrentUser") -> None:
+    """Serialize and cache CurrentUser in Redis for CURRENT_USER_CACHE_TTL seconds."""
+    import json
+    try:
+        data = {
+            "id": cu.id, "name": cu.name, "email": cu.email,
+            "role": cu.role, "is_active": cu.is_active,
+            "assigned_class_ids": cu.assigned_class_ids,
+            "class_teacher_class_ids": cu.class_teacher_class_ids,
+            "subject_assignments": cu.subject_assignments,
+            "linked_student_id": cu.linked_student_id,
+            "linked_student_ids": cu.linked_student_ids,
+            "two_factor_enabled": cu.two_factor_enabled,
+            "two_factor_channel": cu.two_factor_channel,
+            "two_factor_destination": cu.two_factor_destination,
+        }
+        redis_client.set(
+            _current_user_key(user_id),
+            json.dumps(data),
+            ex=settings.CURRENT_USER_CACHE_TTL,
+        )
+    except Exception:  # noqa: BLE001 — never break auth on cache failure
+        pass
+
+
+def _load_current_user_from_cache(user_id: int) -> "CurrentUser | None":
+    """Return a cached CurrentUser or None on cache miss / error."""
+    import json
+    try:
+        raw = redis_client.get(_current_user_key(user_id))
+        if raw is None:
+            return None
+        data = json.loads(raw)
+        return CurrentUser(
+            id=data["id"], name=data["name"], email=data["email"],
+            role=data["role"], is_active=data["is_active"],
+            assigned_class_ids=data.get("assigned_class_ids", []),
+            class_teacher_class_ids=data.get("class_teacher_class_ids", []),
+            subject_assignments=data.get("subject_assignments", []),
+            linked_student_id=data.get("linked_student_id"),
+            linked_student_ids=data.get("linked_student_ids", []),
+            two_factor_enabled=data.get("two_factor_enabled", False),
+            two_factor_channel=data.get("two_factor_channel"),
+            two_factor_destination=data.get("two_factor_destination"),
+        )
+    except Exception:  # noqa: BLE001 — cache miss is fine
+        return None
+
+
+def invalidate_current_user_cache(user_id: int) -> None:
+    """Call this whenever user role/assignments are updated."""
+    redis_client.delete(_current_user_key(user_id))
+
+
+# ---------------------------------------------------------------------------
 # Dependency: get the current authenticated user from the token
 # ---------------------------------------------------------------------------
 
@@ -355,18 +432,41 @@ def get_current_user(
     except Exception:
         raise credentials_exception
 
-    # STEP 4.7: Reject tokens whose jti has been revoked (logged out).
-    if jti and db.query(TokenBlocklist.id).filter_by(jti=jti).first():
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has been revoked. Please log in again.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    # PERF-04 FIX: Check Redis blocklist first (in-memory fast path).
+    # Only fall back to DB if Redis misses, to avoid a DB round-trip on every request.
+    if jti:
+        redis_hit = redis_client.exists(_blocklist_key(jti))
+        if redis_hit:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked. Please log in again.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        # Redis miss: fall through to DB check (source of truth)
+        if db.query(TokenBlocklist.id).filter_by(jti=jti).first():
+            # Populate Redis so the next request is faster
+            exp = payload.get("exp")
+            if exp:
+                ttl = max(1, int(exp - __import__("time").time()))
+                redis_client.set(_blocklist_key(jti), "1", ex=ttl)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked. Please log in again.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
+    # PERF-05 FIX: Try to load CurrentUser from Redis cache.
+    cached = _load_current_user_from_cache(user_id)
+    if cached is not None and cached.is_active:
+        return cached
+
+    # Cache miss: query DB and populate cache for next request.
     user = db.query(User).filter_by(id=user_id, is_active=True).first()
     if user is None:
         raise credentials_exception
-    return build_current_user(db, user)
+    cu = build_current_user(db, user)
+    _cache_current_user(user_id, cu)
+    return cu
 
 
 def require_role(*allowed_roles: str):
@@ -475,15 +575,34 @@ def login(
     Accepts username (email) + password via standard OAuth2 password form.
     Returns a JWT Bearer token valid for ACCESS_TOKEN_EXPIRE_MINUTES.
     Rate-limited to 10 attempts per minute per IP.
+    Also enforces SEC-06 per-account lockout after LOGIN_MAX_FAILURES failures.
     """
+    # --- SEC-06: per-account lockout check ---
+    # Key is based on the username (email) so rotating IPs can't bypass it.
+    lockout_key = f"login_failures:{form_data.username.lower()}"
+    failure_count_raw = redis_client.get(lockout_key)
+    failure_count = int(failure_count_raw) if failure_count_raw else 0
+    if failure_count >= settings.LOGIN_MAX_FAILURES:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Account temporarily locked due to too many failed login attempts. Try again later.",
+        )
+
     user = db.query(User).filter_by(email=form_data.username, is_active=True).first()
 
     if not user or not verify_password(form_data.password, user.password_hash):
+        # Increment failure counter; reset TTL on each failure
+        new_count = failure_count + 1
+        redis_client.set(lockout_key, str(new_count), ex=settings.LOGIN_LOCKOUT_SECONDS)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Successful authentication: clear failure counter
+    redis_client.delete(lockout_key)
+
     if user.role == "admin" and user.two_factor_enabled:
         challenge = _create_admin_2fa_challenge(db, user)
         return LoginResponse(
@@ -760,6 +879,19 @@ def logout(
 
     if not db.query(TokenBlocklist).filter_by(jti=jti).first():
         db.add(TokenBlocklist(jti=jti, expires_at=expires_at))
+
+    # PERF-04: Also cache in Redis so the next request hits Redis, not DB.
+    ttl = max(1, int((expires_at - datetime.now(timezone.utc)).total_seconds()))
+    redis_client.set(_blocklist_key(jti), "1", ex=ttl)
+
+    # Invalidate CurrentUser cache (PERF-05) so stale data isn't served.
+    try:
+        user_id = int(payload.get("sub", 0))
+        if user_id:
+            invalidate_current_user_cache(user_id)
+    except (TypeError, ValueError):
+        pass
+
     raw_refresh = request.cookies.get(settings.REFRESH_COOKIE_NAME)
     if raw_refresh:
         refresh = db.query(AuthRefreshSession).filter_by(token_hash=_hash_refresh_token(raw_refresh)).first()

@@ -33,6 +33,7 @@ from app.core.config import settings
 from app.models.base_models import *  # noqa — registers all models with Base
 from app.models.base_models import OperationJob, TokenBlocklist, User
 from app.core.security import decode_access_token
+from app.core.redis_client import redis_client
 from app.routers import (
     audit_logs,
     admin_users,
@@ -124,6 +125,10 @@ async def cleanup_expired_token_blocklist(stop_event: asyncio.Event) -> None:
 async def lifespan(app: FastAPI):
     if not settings.SECRET_KEY or "change-this" in settings.SECRET_KEY:
         raise RuntimeError("SECRET_KEY not configured; set a strong random value in .env")
+
+    # Connect Redis (PERF-04/05/06); falls back to in-memory if REDIS_URL absent.
+    redis_client.connect(settings.REDIS_URL)
+
     should_run_db_initialization = app.dependency_overrides.get(get_db) is None
     if should_run_db_initialization:
         try:
@@ -238,11 +243,11 @@ app.add_middleware(
 
 
 def _percentile(values: list[float], pct: float) -> float:
+    """Percentile on a pre-sorted list (pass sorted() result in)."""
     if not values:
         return 0.0
-    # nearest-rank percentile on a sorted bounded window (fast enough for live health metrics)
     idx = min(len(values) - 1, max(0, int(round((pct / 100) * (len(values) - 1)))))
-    return round(sorted(values)[idx], 2)
+    return round(values[idx], 2)
 
 
 @app.middleware("http")
@@ -265,7 +270,10 @@ async def request_context_middleware(request: Request, call_next):
         )
         raise
     elapsed_ms = (time.perf_counter() - started) * 1000
-    route_key = request.url.path
+    # PERF-01 FIX: key by the route *template* (e.g. /api/v1/students/{student_id})
+    # instead of the raw URL, so path-param variants don't create unbounded entries.
+    route = request.scope.get("route")
+    route_key = getattr(route, "path", request.url.path)
     app.state.latency_windows[route_key].append(elapsed_ms)
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Trace-ID"] = request_id
@@ -356,17 +364,20 @@ def latency_metrics(_: object = Depends(require_role("admin"))):
         values = list(samples)
         if not values:
             continue
+        # PERF-02 FIX: sort once and reuse for both p95 and p99
+        sorted_values = sorted(values)
         payload[path] = {
-            "count": len(values),
-            "p95_ms": _percentile(values, 95),
-            "p99_ms": _percentile(values, 99),
-            "avg_ms": round(sum(values) / len(values), 2),
+            "count": len(sorted_values),
+            "p95_ms": _percentile(sorted_values, 95),
+            "p99_ms": _percentile(sorted_values, 99),
+            "avg_ms": round(sum(sorted_values) / len(sorted_values), 2),
         }
     return payload
 
 
 @app.websocket("/ws/jobs/{job_id}")
 async def job_status_socket(websocket: WebSocket, job_id: int, token: str):
+    # ── Token validation ─────────────────────────────────────────────────
     try:
         payload = decode_access_token(token)
         if payload.get("purpose") not in (None, "access"):
@@ -375,17 +386,41 @@ async def job_status_socket(websocket: WebSocket, job_id: int, token: str):
         if subject is None:
             raise ValueError("Missing token subject")
         user_id = int(subject)
+        jti = payload.get("jti")
     except Exception:
         await websocket.close(code=1008)
         return
+
+    # SEC-02 FIX: Reject revoked tokens (check Redis first, then DB).
+    if jti:
+        from app.models.base_models import TokenBlocklist
+        revoked = redis_client.exists(f"blocklist:{jti}")
+        if not revoked:
+            with SessionLocal() as db_check:
+                revoked = db_check.query(TokenBlocklist.id).filter_by(jti=jti).first() is not None
+        if revoked:
+            await websocket.close(code=1008)
+            return
+
+    # SEC-03 FIX: Validate user and fetch once — avoids per-tick user query (PERF-03).
+    with SessionLocal() as db_init:
+        ws_user = db_init.query(User).filter_by(id=user_id, is_active=True).first()
+        if not ws_user:
+            await websocket.close(code=1008)
+            return
+        ws_user_role = ws_user.role
 
     await websocket.accept()
     try:
         while True:
             with SessionLocal() as db:
-                user = db.query(User).filter_by(id=user_id, is_active=True).first()
                 job = db.query(OperationJob).filter_by(id=job_id).first()
-                if not user or not job:
+                # SEC-03 FIX: enforce ownership — non-admin users can only watch their own jobs.
+                if not job or (
+                    job.user_id is not None
+                    and job.user_id != user_id
+                    and ws_user_role != "admin"
+                ):
                     await websocket.send_json({"status": "not_found"})
                     await websocket.close(code=1008)
                     return

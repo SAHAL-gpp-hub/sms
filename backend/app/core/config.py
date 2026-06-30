@@ -40,10 +40,19 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours — one full school day
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     REFRESH_COOKIE_NAME: str = "sms_refresh_token"
-    REFRESH_COOKIE_SECURE: bool = False
+    # SEC-01 FIX: default True so the refresh token cookie is HTTPS-only in
+    # production. Override to False in .env only for local HTTP development.
+    REFRESH_COOKIE_SECURE: bool = True
     LOGIN_2FA_OTP_EXPIRE_MINUTES: int = 10
     LOGIN_2FA_MAX_ATTEMPTS: int = 5
     CORS_ORIGINS: list[str] = []
+    # SEC-07 FIX: dedicated HMAC key for OTP hashing, separate from JWT
+    # SECRET_KEY.  If not set, falls back to SECRET_KEY (backward-compatible).
+    # Generate: python3 -c "import secrets; print(secrets.token_hex(32))"
+    OTP_HMAC_KEY: str | None = None
+    # SEC-06: account-level login lockout (tracked via Redis/in-memory)
+    LOGIN_MAX_FAILURES: int = 10        # max failures before lockout
+    LOGIN_LOCKOUT_SECONDS: int = 900    # 15 minutes lockout window
 
     # ── Registration guard ────────────────────────────────────────────────
     # Set REGISTRATION_ENABLED=true only for first-run setup (creating the
@@ -82,6 +91,12 @@ class Settings(BaseSettings):
     RESPONSE_CACHE_TTL_SECONDS: int = 20
     PERF_LOG_REQUESTS: bool = True
     PERF_SLOW_REQUEST_MS: int = 500
+    # PERF-04/05/06: optional Redis URL for blocklist cache, CurrentUser cache,
+    # and response cache.  Falls back to in-memory if not set or unreachable.
+    # Example: redis://localhost:6379/0
+    REDIS_URL: str | None = None
+    # TTL (seconds) for CurrentUser data cached in Redis (PERF-05)
+    CURRENT_USER_CACHE_TTL: int = 60
 
     # ── Razorpay online fee payments ─────────────────────────────────────
     RAZORPAY_KEY_ID: str | None = None
